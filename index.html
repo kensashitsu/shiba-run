@@ -56,7 +56,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">-- fps</div>
+<div id="fps" class="ui">v3 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <button id="jump" class="ui" type="button">ジャンプ</button>
 <div id="stick" class="ui" hidden><div id="knob"></div></div>
@@ -69,6 +69,7 @@ addEventListener('error', e => { const el = document.getElementById('err'); el.h
 <script type="module">
 import * as THREE from 'three';
 
+const VERSION = 'v3';
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 26000 : 52000;
 const PATCH = 34;              // 草を生やす範囲（犬の周りで巻き戻す）
@@ -77,15 +78,35 @@ const FOG_COLOR = new THREE.Color(0xcdd0bc);
 const SUN_DIR = new THREE.Vector3(-0.55, 0.4, -0.72).normalize();   // 太陽の方向（低め＝影が長い）
 const SHADOW_BOX = 9;
 
-// 地形の高さ（GLSL側と同じ式）
-function H(x, z) {
+const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+
+// 地形・小川・小道・ヒース畑（JS と GLSL で同じ式。どちらかを変えたら両方変える）
+function Hb(x, z) {
   return Math.sin(x * 0.045) * 1.6 + Math.cos(z * 0.038) * 1.4
        + Math.sin((x + z) * 0.09) * 0.5 + Math.sin(x * 0.17 - z * 0.13) * 0.18;
 }
-const H_GLSL = `
-float H(vec2 p){
+const streamX = z => 32 + Math.sin(z * 0.021) * 14 + Math.sin(z * 0.057 + 1.3) * 5;
+const pathX = z => Math.sin(z * 0.03) * 6 + Math.sin(z * 0.071 + 0.5) * 2.5;
+function H(x, z) {   // 小川の近くは谷底の高さにならし、川筋を掘る
+  const sx = streamX(z), ds = Math.abs(x - sx);
+  const w = 1 - smooth(2, 5, ds);
+  return Hb(x, z) * (1 - w) + Hb(sx, z) * w - 0.75 * (1 - smooth(0.9, 2.8, ds));
+}
+const waterY = z => Hb(streamX(z), z) - 0.37;
+const FIELD_GLSL = `
+float Hb(vec2 p){
   return sin(p.x*0.045)*1.6 + cos(p.y*0.038)*1.4
        + sin((p.x+p.y)*0.09)*0.5 + sin(p.x*0.17-p.y*0.13)*0.18;
+}
+float streamX(float z){ return 32.0 + sin(z*0.021)*14.0 + sin(z*0.057+1.3)*5.0; }
+float pathX(float z){ return sin(z*0.03)*6.0 + sin(z*0.071+0.5)*2.5; }
+float H(vec2 p){
+  float sx = streamX(p.y); float ds = abs(p.x - sx);
+  float w = 1.0 - smoothstep(2.0, 5.0, ds);
+  return mix(Hb(p), Hb(vec2(sx, p.y)), w) - 0.75*(1.0 - smoothstep(0.9, 2.8, ds));
+}
+float heather(vec2 p){
+  return smoothstep(0.25, 0.6, sin(p.x*0.071 + sin(p.y*0.05)*2.0) * cos(p.y*0.063 + sin(p.x*0.043)*1.5));
 }`;
 
 // ---------- renderer / scene ----------
@@ -133,49 +154,138 @@ const sky = new THREE.Mesh(
 sky.renderOrder = -1;
 scene.add(sky);
 
-// 遠くの山並み（カメラに追従して、いつまでも遠い）
+// 遠くの山並み：稜線を何層も重ね、遠い層ほど淡く、裾は霞に溶かす（カメラに追従）
 const mountains = new THREE.Group();
-[[250, 0x9ba4ab, 26, 9], [200, 0x8d9b8f, 18, 11]].forEach(([R, col, hMax, n]) => {
-  const mat = new THREE.MeshBasicMaterial({ color: col, fog: false });
-  for (let i = 0; i < n * 2; i++) {
-    const a = (i / (n * 2)) * Math.PI * 2 + R;
-    const h = hMax * (0.55 + 0.45 * Math.abs(Math.sin(i * 2.3 + R)));
-    const m = new THREE.Mesh(new THREE.ConeGeometry(h * 2.6, h, 6), mat);
-    m.position.set(Math.cos(a) * R, h / 2 - 4, Math.sin(a) * R);
-    m.rotation.y = i;
-    mountains.add(m);
+[ // 半径, 稜線の色, 高さ, 位相
+  [340, 0xa9b7c9, 46, 1.0],
+  [270, 0x93a5b5, 32, 2.7],
+  [210, 0x7d9399, 20, 4.1],
+  [170, 0x6f8a78, 11, 5.9],
+].forEach(([R, col, amp, seed]) => {
+  const N = 180, pos = [], colr = [], idx = [];
+  const top = new THREE.Color(col), foot = FOG_COLOR.clone().lerp(top, 0.25);
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const h = amp * (0.55 + 0.25 * Math.sin(a * 3 + seed) + 0.13 * Math.sin(a * 7.3 + seed * 2)
+                     + 0.06 * Math.sin(a * 17.1 + seed * 3) + 0.03 * Math.sin(a * 41 + seed));
+    const x = Math.cos(a) * R, z = Math.sin(a) * R;
+    pos.push(x, h - 6, z, x, -30, z);
+    colr.push(top.r, top.g, top.b, foot.r, foot.g, foot.b);
+    if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+  g.setIndex(idx);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
+  m.frustumCulled = false;
+  mountains.add(m);
 });
 scene.add(mountains);
 
-// ---------- 地面 ----------
-const GROUND = 260, GSEG = 110, GSNAP = 8;
+// ---------- 地面（高さと塗り分けは GPU で計算。メッシュは犬に合わせて格子単位で動かすだけ） ----------
+const GROUND = 300, GSEG = 300, GSNAP = 6;
 const groundGeo = new THREE.PlaneGeometry(GROUND, GROUND, GSEG, GSEG);
 groundGeo.rotateX(-Math.PI / 2);
-const gColors = new Float32Array(groundGeo.attributes.position.count * 3);
-groundGeo.setAttribute('color', new THREE.BufferAttribute(gColors, 3));
-const ground = new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+const groundMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+groundMat.onBeforeCompile = sh => {
+  sh.vertexShader = 'varying vec2 vGW;\n' + FIELD_GLSL + '\n' + sh.vertexShader
+    .replace('#include <beginnormal_vertex>', `
+      vec2 gw = (modelMatrix * vec4(position, 1.0)).xz;
+      float hC = H(gw);
+      const float e = 0.5;
+      vec3 objectNormal = normalize(vec3(H(gw - vec2(e, 0.0)) - H(gw + vec2(e, 0.0)), 2.0*e,
+                                         H(gw - vec2(0.0, e)) - H(gw + vec2(0.0, e))));`)
+    .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, hC - 0.02, position.z); vGW = gw;');
+  sh.fragmentShader = 'varying vec2 vGW;\n' + FIELD_GLSL + `
+    vec3 groundCol(vec2 p){
+      float v = 0.5 + 0.5*sin(p.x*0.31 + cos(p.y*0.27)*2.0);
+      vec3 g = vec3(0.33 + v*0.06, 0.44 + v*0.05, 0.15 + v*0.02);
+      g = mix(g, vec3(0.44, 0.31, 0.47), heather(p) * 0.9);                  // ヒースの株元（遠目にも紫に見せる）
+      float dp = abs(p.x - pathX(p.y)) + sin(p.y*1.7 + p.x)*0.07;
+      g = mix(g, vec3(0.50, 0.40, 0.28), 1.0 - smoothstep(0.55, 1.05, dp)); // 土の小道
+      float ds = abs(p.x - streamX(p.y));
+      float pebble = 0.85 + 0.15*sin(p.x*9.0)*sin(p.y*8.0);
+      g = mix(g, vec3(0.30, 0.28, 0.21) * pebble, 1.0 - smoothstep(1.4, 2.3, ds)); // 川床の濡れた砂利
+      return pow(g, vec3(2.2));
+    }
+    ` + sh.fragmentShader
+    .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb = groundCol(vGW);');
+};
+const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.receiveShadow = true;
+ground.frustumCulled = false;
 scene.add(ground);
-const gBase = groundGeo.attributes.position.array.slice();
-const tmpC = new THREE.Color();
-let gCx = NaN, gCz = NaN;
 function updateGround(px, pz) {
-  const cx = Math.round(px / GSNAP) * GSNAP, cz = Math.round(pz / GSNAP) * GSNAP;
-  if (cx === gCx && cz === gCz) return;
-  gCx = cx; gCz = cz;
-  ground.position.set(cx, 0, cz);
-  const pos = groundGeo.attributes.position.array;
-  for (let i = 0; i < pos.length; i += 3) {
-    const x = gBase[i] + cx, z = gBase[i + 2] + cz;
-    pos[i + 1] = H(x, z) - 0.02;
-    const v = 0.5 + 0.5 * Math.sin(x * 0.31 + Math.cos(z * 0.27) * 2.0);
-    tmpC.setRGB(0.33 + v * 0.06, 0.44 + v * 0.05, 0.15 + v * 0.02, THREE.SRGBColorSpace);
-    gColors[i] = tmpC.r; gColors[i + 1] = tmpC.g; gColors[i + 2] = tmpC.b;
+  ground.position.set(Math.round(px / GSNAP) * GSNAP, 0, Math.round(pz / GSNAP) * GSNAP);
+}
+
+// ---------- 小川の水面（川筋に沿った帯。犬の前後だけ作り直す） ----------
+const W_ROWS = 300, W_STEP = 0.5, W_HALF = 2.1, W_SNAP = 10;
+const waterGeo = new THREE.BufferGeometry();
+const wPos = new Float32Array((W_ROWS + 1) * 3 * 3);
+{
+  const idx = [];
+  for (let r = 0; r < W_ROWS; r++) for (let c = 0; c < 2; c++) {
+    const k = r * 3 + c;
+    idx.push(k, k + 3, k + 1, k + 1, k + 3, k + 4);
   }
-  groundGeo.attributes.position.needsUpdate = true;
-  groundGeo.attributes.color.needsUpdate = true;
-  groundGeo.computeVertexNormals();
+  waterGeo.setIndex(idx);
+  waterGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3));
+}
+const waterU = {
+  uTime: { value: 0 }, uSunDir: { value: SUN_DIR }, uSunCol: { value: new THREE.Color() }, uSkyCol: { value: new THREE.Color() },
+  uFogColor: { value: FOG_COLOR }, uFogNear: { value: FOG_NEAR }, uFogFar: { value: FOG_FAR }
+};
+const water = new THREE.Mesh(waterGeo, new THREE.ShaderMaterial({
+  uniforms: waterU, transparent: true, depthWrite: false,
+  vertexShader: `
+    uniform float uFogNear, uFogFar; varying vec3 vW; varying float vFog;
+    void main(){ vW = position; vec4 mv = viewMatrix * vec4(position, 1.0);
+      gl_Position = projectionMatrix * mv; vFog = smoothstep(uFogNear, uFogFar, -mv.z); }`,
+  fragmentShader: `
+    uniform float uTime; uniform vec3 uSunDir, uSunCol, uSkyCol, uFogColor;
+    varying vec3 vW; varying float vFog;
+    // 水底に映る光の網目（コースティクス）
+    // 2組の波の打ち消し線が交わって網目になる。値は 0〜1、ほとんどの場所で 0
+    float caustic(vec2 p, float t){
+      vec2 q = p + vec2(sin(p.y*1.3 + t)*0.6, cos(p.x*1.1 - t*0.8)*0.6);
+      float a = abs(sin(q.x*2.1 + t*0.7) + sin(q.y*2.3 - t*0.5));
+      float b = abs(sin((q.x + q.y)*1.7 - t*0.6) + sin((q.x - q.y)*1.9 + t*0.4));
+      return 1.0 - smoothstep(0.0, 0.14, min(a, b));
+    }
+    void main(){
+      vec2 p = vW.xz * 2.2 + vec2(0.0, uTime * 0.6);
+      vec3 V = normalize(vW - cameraPosition);
+      float cs = caustic(p, uTime * 0.5) * (1.0 - smoothstep(4.0, 14.0, length(vW - cameraPosition)));
+      vec3 N = normalize(vec3(sin(p.x*2.3 + uTime*1.7)*0.05 + sin(p.y*3.1 - uTime)*0.03, 1.0, cos(p.y*2.7 + uTime*1.3)*0.05));
+      float fres = pow(1.0 - max(dot(-V, N), 0.0), 3.0);
+      vec3 tint = pow(vec3(0.16, 0.25, 0.24), vec3(2.2)) * (uSkyCol * 0.6 + uSunCol * 0.25);
+      vec3 col = tint + uSunCol * vec3(1.0, 0.9, 0.65) * cs * 0.13;
+      col = mix(col, uSkyCol * 0.3, fres * 0.7);
+      vec3 R = reflect(V, N);
+      col += uSunCol * pow(max(dot(R, uSunDir), 0.0), 90.0) * 0.9;
+      float a = mix(0.5, 0.85, fres) + cs * 0.2;
+      gl_FragColor = vec4(mix(col, uFogColor, vFog), clamp(a, 0.0, 1.0));
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`
+}));
+water.frustumCulled = false;
+scene.add(water);
+let wZ = NaN;
+function updateWater(pz) {
+  const z0 = Math.round(pz / W_SNAP) * W_SNAP - (W_ROWS * W_STEP) / 2;
+  if (z0 === wZ) return;
+  wZ = z0;
+  for (let r = 0; r <= W_ROWS; r++) {
+    const z = z0 + r * W_STEP, sx = streamX(z), y = waterY(z);
+    for (let c = 0; c < 3; c++) {
+      const k = (r * 3 + c) * 3;
+      wPos[k] = sx + (c - 1) * W_HALF; wPos[k + 1] = y; wPos[k + 2] = z;
+    }
+  }
+  waterGeo.attributes.position.needsUpdate = true;
 }
 
 // ---------- 草（インスタンス描画。揺れ・押しのけ・影・逆光をシェーダで） ----------
@@ -209,15 +319,20 @@ const grass = new THREE.Mesh(blade, new THREE.ShaderMaterial({
     uniform float uTime, uSize, uFogNear, uFogFar, uDogR; uniform vec2 uCenter; uniform vec3 uDog;
     uniform mat4 uShadowMatrix;
     attribute vec3 aOff;
-    varying float vT, vR, vFog, vWind;
+    varying float vT, vR, vFog, vWind, vHe;
     varying vec3 vWorld; varying vec4 vShadow;
-    ${H_GLSL}
+    ${FIELD_GLSL}
     void main(){
       vec2 base = mod(aOff.xy - uCenter + uSize*0.5, uSize) + uCenter - uSize*0.5;
       float r = aOff.z;
       float t = position.y;
       float edge = 1.0 - smoothstep(0.6, 1.0, length(base - uCenter) / (uSize*0.5));
-      float h = (0.13 + 0.2*fract(r*7.13)) * edge;
+      float he = heather(base);
+      float dp = abs(base.x - pathX(base.y)), ds = abs(base.x - streamX(base.y));
+      float h = (0.13 + 0.2*fract(r*7.13)) * edge
+              * smoothstep(0.45, 1.2, dp) * smoothstep(1.7, 2.5, ds)   // 小道と川には生やさない
+              * (1.0 - 0.25*he);
+      vHe = he;
       float w = 0.028 + 0.02*fract(r*3.71);
       float ang = r * 6.2831;
       vec2 face = vec2(cos(ang), sin(ang));
@@ -242,7 +357,7 @@ const grass = new THREE.Mesh(blade, new THREE.ShaderMaterial({
     #include <packing>
     uniform vec3 uFogColor, uSunDir, uSunCol, uSkyCol;
     uniform sampler2D uShadowMap; uniform vec2 uShadowTexel;
-    varying float vT, vR, vFog, vWind;
+    varying float vT, vR, vFog, vWind, vHe;
     varying vec3 vWorld; varying vec4 vShadow;
     float lit(vec4 sc){
       vec3 c = sc.xyz / sc.w;
@@ -258,7 +373,13 @@ const grass = new THREE.Mesh(blade, new THREE.ShaderMaterial({
     void main(){
       vec3 root = mix(vec3(0.20,0.31,0.10), vec3(0.27,0.38,0.12), fract(vR*5.3));
       vec3 tip = mix(vec3(0.50,0.58,0.25), vec3(0.64,0.62,0.32), fract(vR*9.7));
-      vec3 albedo = toLin(mix(root, tip, smoothstep(0.0, 1.0, vT)));
+      vec3 col = mix(root, tip, smoothstep(0.0, 1.0, vT));
+      float top = smoothstep(0.25, 0.9, vT);
+      float hp = vHe * step(0.2, fract(vR*17.3));                          // ヒースの紫の穂
+      col = mix(col, mix(vec3(0.52,0.28,0.56), vec3(0.70,0.40,0.70), fract(vR*23.1)), hp * top);
+      float fl = step(fract(vR*31.7), 0.035) * (1.0 - vHe);                 // 草むらの小さな花
+      col = mix(col, fract(vR*53.0) < 0.5 ? vec3(0.95,0.82,0.3) : vec3(0.95,0.93,0.86), fl * smoothstep(0.8, 0.95, vT));
+      vec3 albedo = toLin(col);
       float sh = lit(vShadow);
       float wrap = 0.22 + 0.3*vT;                                   // 地面と同じくらいの日の当たり方。根元ほど陰る
       vec3 V = normalize(vWorld - cameraPosition);
@@ -298,7 +419,6 @@ const trees = [];
   }
 }
 const wrap = (v, c, size) => ((((v - c + size / 2) % size) + size) % size) + c - size / 2;
-const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 
 // ---------- 犬の見た目（差し替え可能な部品） ----------
 // 約束：{ object, radius, update(pose, dt, t) } を返す。
@@ -483,6 +603,8 @@ addEventListener('resize', resize); resize();
 // 光の色と強さを草シェーダにも渡す（地面・犬と同じ明るさに揃える）
 grassU.uSunCol.value.copy(sun.color).multiplyScalar(sun.intensity);
 grassU.uSkyCol.value.copy(hemi.color).lerp(hemi.groundColor, 0.35).multiplyScalar(hemi.intensity);
+waterU.uSunCol.value.copy(grassU.uSunCol.value);
+waterU.uSkyCol.value.copy(hemi.color).multiplyScalar(hemi.intensity);
 
 function step(dt, t) {
   // 入力 → 進む向き（カメラ基準）
@@ -498,7 +620,8 @@ function step(dt, t) {
     st.yaw += angDiff(st.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 7);
     if (!hinted) { hinted = true; setTimeout(() => hintEl.classList.add('off'), 2500); }
   } else mag = 0;
-  const target = mag * 6.5;
+  const inWater = Math.abs(st.x - streamX(st.z)) < 1.8;
+  const target = mag * (inWater ? 3.2 : 6.5);           // 川の中は水を分けて進むので遅い
   st.speed += (target - st.speed) * Math.min(1, dt * (target > st.speed ? 2.5 : 4));
   st.x += Math.sin(st.yaw) * st.speed * dt;
   st.z += Math.cos(st.yaw) * st.speed * dt;
@@ -540,19 +663,22 @@ function step(dt, t) {
   grassU.uCenter.value.set(st.x, st.z);
   grassU.uDog.value.set(st.x, gy + st.jumpY, st.z);
   updateGround(st.x, st.z);
+  updateWater(st.z);
+  waterU.uTime.value = t;
   sky.position.copy(camera.position);
   mountains.position.set(camera.position.x, 0, camera.position.z);
   for (const tr of trees) {
     const x = wrap(tr.userData.bx, st.x, TREE_AREA), z = wrap(tr.userData.bz, st.z, TREE_AREA);
     tr.position.set(x, H(x, z) - 0.1, z);
+    tr.visible = Math.abs(x - streamX(z)) > 4 && Math.abs(x - pathX(z)) > 2.5;   // 川と小道には木を立てない
   }
 }
 
-// 最初の一枚：犬の斜め後ろから
-st.yaw = 0.6; camYaw = 0.6;
+// 最初の一枚：小道の上、犬の斜め後ろから
+st.x = pathX(0); st.yaw = 0.6; camYaw = 0.6;
 step(0, 0);
-camera.position.set(st.x - Math.sin(camYaw) * 2.7, H(0, 0) + 1.0, st.z - Math.cos(camYaw) * 2.7);
-camera.lookAt(st.x, H(0, 0) + 0.42, st.z);
+camera.position.set(st.x - Math.sin(camYaw) * 2.7, H(st.x, st.z) + 1.0, st.z - Math.cos(camYaw) * 2.7);
+camera.lookAt(st.x, H(st.x, st.z) + 0.42, st.z);
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
@@ -561,11 +687,11 @@ function frame() {
   if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
   fpsN++;
   const now = performance.now();
-  if (now - fpsT >= 500) { fpsEl.textContent = Math.round(fpsN * 1000 / (now - fpsT)) + ' fps'; fpsN = 0; fpsT = now; }
+  if (now - fpsT >= 500) { fpsEl.textContent = VERSION + ' · ' + Math.round(fpsN * 1000 / (now - fpsT)) + ' fps'; fpsN = 0; fpsT = now; }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__shiba = { st, input, keys, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { st, input, keys, streamX, pathX, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
