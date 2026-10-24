@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v13 · -- fps</div>
+<div id="fps" class="ui">v14 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +86,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v13';
+const VERSION = 'v14';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 40000 : 96000;
@@ -233,7 +233,8 @@ const groundTex = name => {
 };
 const groundTexU = {
   tMeadow: { value: groundTex('meadow') }, tFar: { value: groundTex('meadow_far') },
-  tPath: { value: groundTex('path') }, tBed: { value: groundTex('riverbed') }
+  tPath: { value: groundTex('path') }, tBed: { value: groundTex('riverbed') },
+  uFarGrass: { value: new THREE.Color(0x8a9a3a).convertSRGBToLinear() }
 };
 const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
 groundMat.onBeforeCompile = sh => {
@@ -246,7 +247,7 @@ groundMat.onBeforeCompile = sh => {
       vec3 objectNormal = normalize(vec3(H(gw - vec2(e, 0.0)) - H(gw + vec2(e, 0.0)), 2.0*e,
                                          H(gw - vec2(0.0, e)) - H(gw + vec2(0.0, e))));`)
     .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, hC - 0.02, position.z); vGW = gw;');
-  sh.fragmentShader = 'varying vec2 vGW;\nuniform sampler2D tMeadow, tFar, tPath, tBed;\n' + FIELD_GLSL + `
+  sh.fragmentShader = 'varying vec2 vGW;\nuniform sampler2D tMeadow, tFar, tPath, tBed; uniform vec3 uFarGrass;\n' + FIELD_GLSL + `
     // 写真の質感は線形色で返る（sRGB テクスチャ）。同じ模様の繰り返しが目立たないよう縮尺違いを重ねる
     vec3 groundCol(vec2 p){
       float dist = length(p - cameraPosition.xz);
@@ -254,6 +255,8 @@ groundMat.onBeforeCompile = sh => {
       near = mix(near, dot(near, vec3(0.3, 0.59, 0.11)) * vec3(0.8, 1.35, 0.45), 0.6);  // 枯れ色寄りの写真を緑へ寄せる
       vec3 far = mix(texture2D(tFar, p*0.025).rgb, texture2D(tFar, p*0.0061 + 0.5).rgb, 0.5) * vec3(0.8, 0.95, 0.7);
       vec3 g = mix(near, far, smoothstep(10.0, 45.0, dist));
+      // 草の尽きる先は草むらの色に寄せる（遠景の草の縁が線にならないように）
+      g = mix(g, uFarGrass * (0.7 + 0.6*smoothstep(0.03, 0.2, dot(far, vec3(0.333)))), smoothstep(24.0, 58.0, dist));
       g = mix(g, g*vec3(1.05, 0.72, 1.1) + vec3(0.012, 0.0, 0.016), heather(p) * 0.85); // ヒースの株元
       float dp = abs(p.x - pathX(p.y)) + sin(p.y*1.7 + p.x)*0.07;
       g = mix(g, texture2D(tPath, p*0.5).rgb * vec3(1.35, 1.25, 1.1), 1.0 - smoothstep(0.55, 1.05, dp)); // 土の小道
@@ -1586,8 +1589,10 @@ function step(dt, t) {
 
   // 周りの物を犬に合わせて巻き戻す
   grassU.uTime.value = t;
-  grassU.uCenter.value.set(st.x + Math.sin(camYaw) * PATCH_AHEAD, st.z + Math.cos(camYaw) * PATCH_AHEAD);
-  farU.uCenter.value.set(st.x + Math.sin(camYaw) * FAR_AHEAD, st.z + Math.cos(camYaw) * FAR_AHEAD);
+  // 草の範囲はカメラから測る（ダッシュでカメラが遅れても視野の先に草が残るように）
+  const camF = Math.sin(camYaw), camFz = Math.cos(camYaw);
+  grassU.uCenter.value.set(camera.position.x + camF * (PATCH_AHEAD + 2.7), camera.position.z + camFz * (PATCH_AHEAD + 2.7));
+  farU.uCenter.value.set(camera.position.x + camF * (FAR_AHEAD + 2.7), camera.position.z + camFz * (FAR_AHEAD + 2.7));
   grassU.uDog.value.set(st.x, gy + st.jumpY, st.z);
   updateGround(st.x, st.z);
   updateWater(st.z);
