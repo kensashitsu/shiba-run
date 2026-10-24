@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v16 · -- fps</div>
+<div id="fps" class="ui">v17 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,11 +86,11 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v16';
+const VERSION = 'v17';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
-// 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし
-const AB = (location.search.match(/[?&]([abc])(?=&|$)/g) || []).map(x => x.slice(1)).join('');
+// 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
+const AB = (location.search.match(/[?&]([abcd])(?=&|$)/g) || []).map(x => x.slice(1)).join('');
 const BLADES = low ? 40000 : 96000;
 const PATCH = 28;              // 草を生やす範囲（犬の少し前を中心に巻き戻す）
 const PATCH_AHEAD = 5.5;       // 範囲の中心を視線の先へずらす量（後ろの草は見えないので前へ回す）
@@ -375,7 +375,7 @@ const bladeSet = (count, size, spread) => {
 };
 const grassU = {
   uTime: { value: 0 }, uSize: { value: PATCH }, uCenter: { value: new THREE.Vector2() },
-  uInner: { value: -100 }, uWide: { value: 1 },
+  uInner: { value: -100 }, uWide: { value: 1 }, uDbg: { value: new THREE.Color(AB.includes('d') ? 0xff2020 : 0) },
   uDog: { value: new THREE.Vector3() }, uDogR: { value: 0.5 }, uFogColor: { value: FOG_COLOR },
   uFogNear: { value: FOG_NEAR }, uFogFar: { value: FOG_FAR },
   uSunDir: { value: SUN_DIR }, uSunCol: { value: new THREE.Color() }, uSkyCol: { value: new THREE.Color() },
@@ -428,7 +428,7 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMate
     }`,
   fragmentShader: `
     #include <packing>
-    uniform vec3 uFogColor, uSunDir, uSunCol, uSkyCol;
+    uniform vec3 uFogColor, uSunDir, uSunCol, uSkyCol, uDbg;
     uniform sampler2D uShadowMap; uniform vec2 uShadowTexel;
     varying float vT, vR, vFog, vWind, vHe;
     varying vec3 vWorld; varying vec4 vShadow;
@@ -465,19 +465,20 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMate
       vec3 c = albedo * light * (0.92 + 0.12*vWind) * tone;
       c += uSunCol * vec3(0.12, 0.1, 0.02) * back * sh;
       gl_FragColor = vec4(mix(c, uFogColor, vFog), 1.0);
+      if (uDbg != vec3(0.0)) gl_FragColor.rgb = mix(gl_FragColor.rgb, uDbg, 0.65);   // ?d 層の色分け
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`
 }));
 grass.frustumCulled = false;
 scene.add(grass);
-const farU = { ...grassU, uSize: { value: FAR_PATCH }, uCenter: { value: new THREE.Vector2() }, uInner: { value: 13 }, uWide: { value: 2.6 } };
+const farU = { ...grassU, uSize: { value: FAR_PATCH }, uCenter: { value: new THREE.Vector2() }, uInner: { value: 13 }, uWide: { value: 2.6 }, uDbg: { value: new THREE.Color(AB.includes('d') ? 0x2060ff : 0) } };
 const grassFar = new THREE.Mesh(bladeSet(Math.max(FAR_BLADES, 1), FAR_PATCH, 0.6), new THREE.ShaderMaterial({
   uniforms: farU, side: THREE.DoubleSide, vertexShader: grass.material.vertexShader, fragmentShader: grass.material.fragmentShader
 }));
 grassFar.frustumCulled = false;
 grassFar.visible = FAR_BLADES > 0;
-const far2U = { ...grassU, uSize: { value: FAR2_PATCH }, uCenter: { value: new THREE.Vector2() }, uInner: { value: 44 }, uWide: { value: 7 } };
+const far2U = { ...grassU, uSize: { value: FAR2_PATCH }, uCenter: { value: new THREE.Vector2() }, uInner: { value: 44 }, uWide: { value: 7 }, uDbg: { value: new THREE.Color(AB.includes('d') ? 0xffe020 : 0) } };
 const grassFar2 = new THREE.Mesh(bladeSet(Math.max(FAR2_BLADES, 1), FAR2_PATCH, 1.6), new THREE.ShaderMaterial({
   uniforms: far2U, side: THREE.DoubleSide, vertexShader: grass.material.vertexShader, fragmentShader: grass.material.fragmentShader
 }));
