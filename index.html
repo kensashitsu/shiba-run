@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v15 · -- fps</div>
+<div id="fps" class="ui">v16 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,9 +86,11 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v15';
+const VERSION = 'v16';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
+// 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし
+const AB = (location.search.match(/[?&]([abc])(?=&|$)/g) || []).map(x => x.slice(1)).join('');
 const BLADES = low ? 40000 : 96000;
 const PATCH = 28;              // 草を生やす範囲（犬の少し前を中心に巻き戻す）
 const PATCH_AHEAD = 5.5;       // 範囲の中心を視線の先へずらす量（後ろの草は見えないので前へ回す）
@@ -138,7 +140,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPrefere
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !AB.includes('c');
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(FOG_COLOR, FOG_NEAR, FOG_FAR);
@@ -236,6 +238,7 @@ const groundTex = name => {
 const groundTexU = {
   tMeadow: { value: groundTex('meadow') }, tFar: { value: groundTex('meadow_far') },
   tPath: { value: groundTex('path') }, tBed: { value: groundTex('riverbed') },
+  uBlend: { value: AB.includes('b') ? 0 : 1 },
   uFarGrass: { value: new THREE.Color(0x8a9a3a).convertSRGBToLinear() }
 };
 const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
@@ -249,16 +252,16 @@ groundMat.onBeforeCompile = sh => {
       vec3 objectNormal = normalize(vec3(H(gw - vec2(e, 0.0)) - H(gw + vec2(e, 0.0)), 2.0*e,
                                          H(gw - vec2(0.0, e)) - H(gw + vec2(0.0, e))));`)
     .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, hC - 0.02, position.z); vGW = gw;');
-  sh.fragmentShader = 'varying vec2 vGW;\nuniform sampler2D tMeadow, tFar, tPath, tBed; uniform vec3 uFarGrass;\n' + FIELD_GLSL + `
+  sh.fragmentShader = 'varying vec2 vGW;\nuniform sampler2D tMeadow, tFar, tPath, tBed; uniform vec3 uFarGrass; uniform float uBlend;\n' + FIELD_GLSL + `
     // 写真の質感は線形色で返る（sRGB テクスチャ）。同じ模様の繰り返しが目立たないよう縮尺違いを重ねる
     vec3 groundCol(vec2 p){
       float dist = length(p - cameraPosition.xz);
       vec3 near = mix(texture2D(tMeadow, p*0.33).rgb, texture2D(tMeadow, p*0.083 + 0.37).rgb, 0.4);
       near = mix(near, dot(near, vec3(0.3, 0.59, 0.11)) * vec3(0.8, 1.35, 0.45), 0.6);  // 枯れ色寄りの写真を緑へ寄せる
       vec3 far = mix(texture2D(tFar, p*0.025).rgb, texture2D(tFar, p*0.0061 + 0.5).rgb, 0.5) * vec3(0.8, 0.95, 0.7);
-      vec3 g = mix(near, far, smoothstep(10.0, 45.0, dist));
+      vec3 g = mix(near, far, smoothstep(10.0, 45.0, dist) * uBlend);
       // 草の尽きる先は草むらの色に寄せる（遠景の草の縁が線にならないように）
-      g = mix(g, uFarGrass * (0.7 + 0.6*smoothstep(0.03, 0.2, dot(far, vec3(0.333)))), smoothstep(18.0, 45.0, dist));
+      g = mix(g, uFarGrass * (0.7 + 0.6*smoothstep(0.03, 0.2, dot(far, vec3(0.333)))), smoothstep(18.0, 45.0, dist) * uBlend);
       g = mix(g, g*vec3(1.05, 0.72, 1.1) + vec3(0.012, 0.0, 0.016), heather(p) * 0.85); // ヒースの株元
       float dp = abs(p.x - pathX(p.y)) + sin(p.y*1.7 + p.x)*0.07;
       g = mix(g, texture2D(tPath, p*0.5).rgb * vec3(1.35, 1.25, 1.1), 1.0 - smoothstep(0.55, 1.05, dp)); // 土の小道
@@ -1587,9 +1590,9 @@ function step(dt, t) {
   const run = smooth(2.5, 4.8, st.speed);
   if (st.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, st.yaw) * Math.min(1, dt * 1.6);
   const dash = smooth(5.5, 8.5, st.speed);
-  camera.fov += ((innerWidth < innerHeight ? 62 : 50) + dash * 9 - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
+  camera.fov += ((innerWidth < innerHeight ? 62 : 50) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
   camera.updateProjectionMatrix();
-  const dist = 2.7 + run * 0.5 + dash * 0.4 - Math.min(settled, 1) * 0.4, ch = 1.0 + run * 0.15;
+  const dist = 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4, ch = 1.0 + run * 0.15;
   const cx = st.x - Math.sin(camYaw) * dist, cz = st.z - Math.cos(camYaw) * dist;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
@@ -1631,7 +1634,7 @@ function frame() {
   if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
   fpsN++;
   const now = performance.now();
-  if (now - fpsT >= 500) { fpsEl.textContent = VERSION + ' · ' + Math.round(fpsN * 1000 / (now - fpsT)) + ' fps'; fpsN = 0; fpsT = now; }
+  if (now - fpsT >= 500) { fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + Math.round(fpsN * 1000 / (now - fpsT)) + ' fps'; fpsN = 0; fpsT = now; }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
