@@ -59,7 +59,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v4 · -- fps</div>
+<div id="fps" class="ui">v5 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <button id="jump" class="ui" type="button">ジャンプ</button>
 <div id="stick" class="ui" hidden><div id="knob"></div></div>
@@ -74,7 +74,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 40000 : 96000;
@@ -258,7 +258,7 @@ function updateGround(px, pz) {
 }
 
 // ---------- 小川の水面（川筋に沿った帯。犬の前後だけ作り直す） ----------
-const W_ROWS = 300, W_STEP = 0.5, W_HALF = 2.1, W_SNAP = 10;
+const W_ROWS = 600, W_STEP = 0.5, W_HALF = 2.1, W_SNAP = 10;   // 前後150m＝霞の奥まで作る（手前で切れると端が見える）
 const waterGeo = new THREE.BufferGeometry();
 const wPos = new Float32Array((W_ROWS + 1) * 3 * 3);
 {
@@ -443,7 +443,7 @@ scene.add(grass);
 // ---------- 木（幹と枝をコードで生やし、葉は「葉の束を描いた板」を枝先に付ける） ----------
 const TREE_AREA = 150;
 const trees = [];
-const treeU = { uTime: { value: 0 } };
+const treeU = { uTime: { value: 0 }, uDog: { value: new THREE.Vector2() } };
 {
   const rng = seed => { let s = seed >>> 0; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; };
   const canvasTex = (w, h, draw) => {
@@ -485,16 +485,30 @@ const treeU = { uTime: { value: 0 } };
       x.restore();
     }
   });
+  // 木は犬の周り TREE_AREA 四方で使い回す（後ろに離れた木を前方の端へ移す）。
+  // 移した直後に見えないよう、端に近い木は細かい点々で透かし、近づくにつれて実体にする。
+  const treeShader = (sh, wind) => {
+    sh.uniforms.uTime = treeU.uTime;
+    sh.uniforms.uDog = treeU.uDog;
+    sh.vertexShader = 'uniform float uTime; uniform vec2 uDog; varying float vFadeT;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
+      #include <begin_vertex>
+      vec2 tOff = modelMatrix[3].xz - uDog;
+      vFadeT = 1.0 - smoothstep(${(TREE_AREA * 0.36).toFixed(1)}, ${(TREE_AREA * 0.48).toFixed(1)}, max(abs(tOff.x), abs(tOff.y)));
+      ${wind ? `
+      float ph = modelMatrix[3].x * 0.37 + modelMatrix[3].z * 0.23;          // 葉先が風でそよぐ
+      transformed.x += sin(uTime * 1.9 + position.y * 1.3 + ph) * 0.035 * position.y / 4.0;
+      transformed.z += cos(uTime * 1.6 + position.x * 1.1 + ph) * 0.03 * position.y / 4.0;` : ''}`);
+    sh.fragmentShader = 'varying float vFadeT;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+      if (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > vFadeT) discard;`);
+  };
   const leafMat = tex => {
     const m = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8 });
-    m.onBeforeCompile = sh => {                                      // 葉先が風でそよぐ
-      sh.uniforms.uTime = treeU.uTime;
-      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
-        #include <begin_vertex>
-        float ph = modelMatrix[3].x * 0.37 + modelMatrix[3].z * 0.23;
-        transformed.x += sin(uTime * 1.9 + position.y * 1.3 + ph) * 0.035 * position.y / 4.0;
-        transformed.z += cos(uTime * 1.6 + position.x * 1.1 + ph) * 0.03 * position.y / 4.0;`);
-    };
+    m.onBeforeCompile = sh => treeShader(sh, true);
+    return m;
+  };
+  const woodMat = bark => {
+    const m = new THREE.MeshStandardMaterial({ map: bark, roughness: 0.95 });
+    m.onBeforeCompile = sh => treeShader(sh, false);
     return m;
   };
   const leafDepth = tex => new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5 });
@@ -545,7 +559,7 @@ const treeU = { uTime: { value: 0 } };
       nor.setXYZ(i, v.x, v.y, v.z);
     }
     const g = new THREE.Group();
-    const w = new THREE.Mesh(mergeGeometries(wood), new THREE.MeshStandardMaterial({ map: bark, roughness: 0.95 }));
+    const w = new THREE.Mesh(mergeGeometries(wood), woodMat(bark));
     const l = new THREE.Mesh(leafGeo, leafMat(leaves));
     l.customDepthMaterial = leafDepth(leaves);
     w.castShadow = l.castShadow = true;
@@ -885,6 +899,7 @@ function step(dt, t) {
   updateWater(st.z);
   waterU.uTime.value = t;
   treeU.uTime.value = t;
+  treeU.uDog.value.set(st.x, st.z);
   sky.position.copy(camera.position);
   mountains.position.set(camera.position.x, 0, camera.position.z);
   for (const tr of trees) {
