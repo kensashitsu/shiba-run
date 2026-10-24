@@ -46,8 +46,12 @@
     border: 2px solid var(--glass-edge); background: rgba(30,28,22,.25); pointer-events: none; }
   #knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
     border-radius: 50%; background: rgba(255,250,240,.75); }
+  #err { left: 16px; right: 16px; bottom: 140px; font-size: 12px; color: #ffd0c0; text-shadow: 0 1px 2px #000; }
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
 </head>
 <body>
 
@@ -56,16 +60,22 @@
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <button id="jump" class="ui" type="button">ジャンプ</button>
 <div id="stick" class="ui" hidden><div id="knob"></div></div>
+<div id="err" class="ui" hidden></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-(() => {
-'use strict';
+// モジュールが読めない・落ちた時に画面に出す（実機で原因を見るため）
+addEventListener('error', e => { const el = document.getElementById('err'); el.hidden = false; el.textContent += e.message + ' '; });
+</script>
+<script type="module">
+import * as THREE from 'three';
+
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 26000 : 52000;
 const PATCH = 34;              // 草を生やす範囲（犬の周りで巻き戻す）
-const FOG_NEAR = 14, FOG_FAR = 95;
-const FOG_COLOR = new THREE.Color(0xd6d3c2);
+const FOG_NEAR = 16, FOG_FAR = 150;
+const FOG_COLOR = new THREE.Color(0xcdd0bc);
+const SUN_DIR = new THREE.Vector3(-0.55, 0.4, -0.72).normalize();   // 太陽の方向（低め＝影が長い）
+const SHADOW_BOX = 9;
 
 // 地形の高さ（GLSL側と同じ式）
 function H(x, z) {
@@ -82,30 +92,42 @@ float H(vec2 p){
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(FOG_COLOR, FOG_NEAR, FOG_FAR);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 700);
 
-scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x55602e, 0.8));
-const sun = new THREE.DirectionalLight(0xffdcae, 0.95);
-sun.position.set(-0.6, 0.8, -0.4);
-scene.add(sun);
+const hemi = new THREE.HemisphereLight(0xc9dcff, 0x6b6a3a, 1.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffd29a, 3.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(low ? 1024 : 2048, low ? 1024 : 2048);
+Object.assign(sun.shadow.camera, { left: -SHADOW_BOX, right: SHADOW_BOX, top: SHADOW_BOX, bottom: -SHADOW_BOX, near: 1, far: 70 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.025;
+scene.add(sun, sun.target);
 
 // 空（グラデーションの球、カメラに追従）
 const sky = new THREE.Mesh(
-  new THREE.SphereGeometry(600, 24, 12),
+  new THREE.SphereGeometry(600, 32, 16),
   new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x5f8fd0) }, hor: { value: FOG_COLOR.clone() },
-                sunDir: { value: sun.position.clone().normalize().multiplyScalar(-1).setY(0.12).normalize() } },
+    uniforms: { top: { value: new THREE.Color(0x4f86d6) }, hor: { value: FOG_COLOR },
+                sunDir: { value: SUN_DIR }, sunCol: { value: new THREE.Color(0xffc27a) } },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position);
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: `uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; varying vec3 vDir;
-      void main(){ float h = clamp(vDir.y, 0.0, 1.0);
-        vec3 c = mix(hor, top, pow(h, 0.55));
-        float s = max(dot(normalize(vDir), normalize(-sunDir*vec3(1.0,-1.0,1.0))), 0.0);
-        c += vec3(1.0,0.78,0.5) * pow(s, 24.0) * 0.35;
-        gl_FragColor = vec4(c, 1.0); }`
+    fragmentShader: `uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; uniform vec3 sunCol; varying vec3 vDir;
+      void main(){ vec3 d = normalize(vDir); float h = clamp(d.y, 0.0, 1.0);
+        vec3 c = mix(hor, top, pow(h, 0.5));
+        float s = max(dot(d, sunDir), 0.0);
+        c += sunCol * (pow(s, 10.0) * 0.45 + pow(s, 600.0) * 6.0);
+        gl_FragColor = vec4(c, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`
   })
 );
 sky.renderOrder = -1;
@@ -113,7 +135,7 @@ scene.add(sky);
 
 // 遠くの山並み（カメラに追従して、いつまでも遠い）
 const mountains = new THREE.Group();
-[[250, 0x9aa3a8, 26, 9], [200, 0x8c9a8c, 18, 11]].forEach(([R, col, hMax, n]) => {
+[[250, 0x9ba4ab, 26, 9], [200, 0x8d9b8f, 18, 11]].forEach(([R, col, hMax, n]) => {
   const mat = new THREE.MeshBasicMaterial({ color: col, fog: false });
   for (let i = 0; i < n * 2; i++) {
     const a = (i / (n * 2)) * Math.PI * 2 + R;
@@ -133,8 +155,10 @@ groundGeo.rotateX(-Math.PI / 2);
 const gColors = new Float32Array(groundGeo.attributes.position.count * 3);
 groundGeo.setAttribute('color', new THREE.BufferAttribute(gColors, 3));
 const ground = new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+ground.receiveShadow = true;
 scene.add(ground);
 const gBase = groundGeo.attributes.position.array.slice();
+const tmpC = new THREE.Color();
 let gCx = NaN, gCz = NaN;
 function updateGround(px, pz) {
   const cx = Math.round(px / GSNAP) * GSNAP, cz = Math.round(pz / GSNAP) * GSNAP;
@@ -146,14 +170,15 @@ function updateGround(px, pz) {
     const x = gBase[i] + cx, z = gBase[i + 2] + cz;
     pos[i + 1] = H(x, z) - 0.02;
     const v = 0.5 + 0.5 * Math.sin(x * 0.31 + Math.cos(z * 0.27) * 2.0);
-    gColors[i] = 0.16 + v * 0.07; gColors[i + 1] = 0.27 + v * 0.06; gColors[i + 2] = 0.08 + v * 0.02;
+    tmpC.setRGB(0.33 + v * 0.06, 0.44 + v * 0.05, 0.15 + v * 0.02, THREE.SRGBColorSpace);
+    gColors[i] = tmpC.r; gColors[i + 1] = tmpC.g; gColors[i + 2] = tmpC.b;
   }
   groundGeo.attributes.position.needsUpdate = true;
   groundGeo.attributes.color.needsUpdate = true;
   groundGeo.computeVertexNormals();
 }
 
-// ---------- 草（インスタンス描画、揺れと押しのけはシェーダで） ----------
+// ---------- 草（インスタンス描画。揺れ・押しのけ・影・逆光をシェーダで） ----------
 const blade = new THREE.InstancedBufferGeometry();
 blade.setAttribute('position', new THREE.Float32BufferAttribute([
   -0.5, 0, 0,  0.5, 0, 0,
@@ -172,15 +197,20 @@ blade.setAttribute('aOff', new THREE.InstancedBufferAttribute(offs, 3));
 blade.instanceCount = BLADES;
 const grassU = {
   uTime: { value: 0 }, uSize: { value: PATCH }, uCenter: { value: new THREE.Vector2() },
-  uDog: { value: new THREE.Vector3() }, uFogColor: { value: FOG_COLOR },
-  uFogNear: { value: FOG_NEAR }, uFogFar: { value: FOG_FAR }
+  uDog: { value: new THREE.Vector3() }, uDogR: { value: 0.5 }, uFogColor: { value: FOG_COLOR },
+  uFogNear: { value: FOG_NEAR }, uFogFar: { value: FOG_FAR },
+  uSunDir: { value: SUN_DIR }, uSunCol: { value: new THREE.Color() }, uSkyCol: { value: new THREE.Color() },
+  uShadowMap: { value: null }, uShadowMatrix: { value: sun.shadow.matrix },
+  uShadowTexel: { value: new THREE.Vector2(1 / sun.shadow.mapSize.x, 1 / sun.shadow.mapSize.y) }
 };
 const grass = new THREE.Mesh(blade, new THREE.ShaderMaterial({
   uniforms: grassU, side: THREE.DoubleSide,
   vertexShader: `
-    uniform float uTime, uSize, uFogNear, uFogFar; uniform vec2 uCenter; uniform vec3 uDog;
+    uniform float uTime, uSize, uFogNear, uFogFar, uDogR; uniform vec2 uCenter; uniform vec3 uDog;
+    uniform mat4 uShadowMatrix;
     attribute vec3 aOff;
     varying float vT, vR, vFog, vWind;
+    varying vec3 vWorld; varying vec4 vShadow;
     ${H_GLSL}
     void main(){
       vec2 base = mod(aOff.xy - uCenter + uSize*0.5, uSize) + uCenter - uSize*0.5;
@@ -195,24 +225,50 @@ const grass = new THREE.Mesh(blade, new THREE.ShaderMaterial({
       float wv = sin(uTime*1.6 + base.x*0.21 + base.y*0.13)*0.6 + sin(uTime*2.7 + base.x*0.53 - base.y*0.41)*0.3;
       vec2 bend = vec2(0.85, 0.45) * (wv*0.16 + 0.1) + face * (fract(r*13.1) - 0.5) * 0.35;
       vec2 dd = base - uDog.xz; float dl = length(dd);
-      float push = (1.0 - smoothstep(0.08, 0.55, dl)) * (1.0 - smoothstep(0.1, 0.6, uDog.y - H(uDog.xz)));
+      float push = (1.0 - smoothstep(0.16*uDogR, 1.1*uDogR, dl)) * (1.0 - smoothstep(0.1, 0.6, uDog.y - H(uDog.xz)));
       bend += (dd / max(dl, 0.001)) * push * 1.4;
       float tt = t*t;
       vec2 p = base + side * position.x * w + bend * tt * h;
       float y = H(base) + t*h*(1.0 - 0.45*min(length(bend), 1.2)*tt);
-      vec4 mv = viewMatrix * vec4(p.x, y, p.y, 1.0);
+      vec4 wp = vec4(p.x, y, p.y, 1.0);
+      vWorld = wp.xyz;
+      vShadow = uShadowMatrix * wp;
+      vec4 mv = viewMatrix * wp;
       gl_Position = projectionMatrix * mv;
       vFog = smoothstep(uFogNear, uFogFar, -mv.z);
       vT = t; vR = r; vWind = wv;
     }`,
   fragmentShader: `
-    uniform vec3 uFogColor; varying float vT, vR, vFog, vWind;
+    #include <packing>
+    uniform vec3 uFogColor, uSunDir, uSunCol, uSkyCol;
+    uniform sampler2D uShadowMap; uniform vec2 uShadowTexel;
+    varying float vT, vR, vFog, vWind;
+    varying vec3 vWorld; varying vec4 vShadow;
+    float lit(vec4 sc){
+      vec3 c = sc.xyz / sc.w;
+      if (c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0 || c.z > 1.0) return 1.0;
+      float s = 0.0;
+      s += step(c.z - 0.0015, unpackRGBAToDepth(texture2D(uShadowMap, c.xy + vec2(-0.7,-0.7)*uShadowTexel)));
+      s += step(c.z - 0.0015, unpackRGBAToDepth(texture2D(uShadowMap, c.xy + vec2( 0.7,-0.7)*uShadowTexel)));
+      s += step(c.z - 0.0015, unpackRGBAToDepth(texture2D(uShadowMap, c.xy + vec2(-0.7, 0.7)*uShadowTexel)));
+      s += step(c.z - 0.0015, unpackRGBAToDepth(texture2D(uShadowMap, c.xy + vec2( 0.7, 0.7)*uShadowTexel)));
+      return s * 0.25;
+    }
+    vec3 toLin(vec3 c){ return pow(c, vec3(2.2)); }
     void main(){
-      vec3 root = mix(vec3(0.07,0.16,0.04), vec3(0.13,0.25,0.06), fract(vR*5.3));
-      vec3 tip = mix(vec3(0.46,0.56,0.18), vec3(0.72,0.68,0.32), fract(vR*9.7));
-      vec3 c = mix(root, tip, smoothstep(0.0, 1.0, vT));
-      c *= 0.88 + 0.16*vWind;
+      vec3 root = mix(vec3(0.20,0.31,0.10), vec3(0.27,0.38,0.12), fract(vR*5.3));
+      vec3 tip = mix(vec3(0.50,0.58,0.25), vec3(0.64,0.62,0.32), fract(vR*9.7));
+      vec3 albedo = toLin(mix(root, tip, smoothstep(0.0, 1.0, vT)));
+      float sh = lit(vShadow);
+      float wrap = 0.22 + 0.3*vT;                                   // 地面と同じくらいの日の当たり方。根元ほど陰る
+      vec3 V = normalize(vWorld - cameraPosition);
+      float back = pow(max(dot(V, uSunDir), 0.0), 4.0) * vT * vT;   // 逆光で葉先が透ける
+      vec3 light = uSkyCol * (0.45 + 0.55*vT) + uSunCol * sh * (wrap + back * 0.7);
+      vec3 c = albedo * light * (0.92 + 0.12*vWind);
+      c += uSunCol * vec3(0.12, 0.1, 0.02) * back * sh;
       gl_FragColor = vec4(mix(c, uFogColor, vFog), 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }`
 }));
 grass.frustumCulled = false;
@@ -222,8 +278,8 @@ scene.add(grass);
 const TREE_AREA = 150;
 const trees = [];
 {
-  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5b4632 });
-  const leafMats = [0x3d5a2a, 0x4a6630, 0x55702f].map(c => new THREE.MeshPhongMaterial({ color: c, flatShading: true, shininess: 0 }));
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5b4632, roughness: 1 });
+  const leafMats = [0x3d5a2a, 0x4a6630, 0x55702f].map(c => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.95 }));
   for (let i = 0; i < 34; i++) {
     const g = new THREE.Group();
     const s = 0.8 + Math.random() * 0.9;
@@ -236,101 +292,135 @@ const trees = [];
       leaf.rotation.set(Math.random() * 3, Math.random() * 3, 0);
       g.add(leaf);
     }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     g.userData.bx = Math.random() * TREE_AREA; g.userData.bz = Math.random() * TREE_AREA;
     trees.push(g); scene.add(g);
   }
 }
 const wrap = (v, c, size) => ((((v - c + size / 2) % size) + size) % size) + c - size / 2;
+const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 
-// ---------- 柴犬 ----------
-const RED = 0xc4692e, CREAM = 0xf4e8d2, BLACK = 0x1b1410;
-const mRed = new THREE.MeshLambertMaterial({ color: RED });
-const mCream = new THREE.MeshLambertMaterial({ color: CREAM });
-const mBlack = new THREE.MeshLambertMaterial({ color: BLACK });
-const mEarRed = new THREE.MeshPhongMaterial({ color: RED, flatShading: true, shininess: 0 });
-const mEarIn = new THREE.MeshPhongMaterial({ color: 0xe9c9a8, flatShading: true, shininess: 0 });
-const SPH = new THREE.SphereGeometry(1, 18, 14);
-function blob(mat, sx, sy, sz, x, y, z, parent) {
-  const m = new THREE.Mesh(SPH, mat);
-  m.scale.set(sx, sy, sz); m.position.set(x, y, z); parent.add(m); return m;
+// ---------- 犬の見た目（差し替え可能な部品） ----------
+// 約束：{ object, radius, update(pose, dt, t) } を返す。
+// object は足元が原点・+Z が正面。位置と向きはゲーム側が object に入れる。
+// pose = { speed(m/s), sit(0..1), jumpY(m), vy(m/s) }。脚や尾の動きは部品の中で完結させる。
+// 将来 glTF の柴に替えるときは、同じ約束の createModelDog() を作って差し替える。
+function createPrimitiveDog() {
+  const RED = 0xc4692e, CREAM = 0xf4e8d2, BLACK = 0x1b1410;
+  const mRed = new THREE.MeshStandardMaterial({ color: RED, roughness: 0.85 });
+  const mCream = new THREE.MeshStandardMaterial({ color: CREAM, roughness: 0.9 });
+  const mBlack = new THREE.MeshStandardMaterial({ color: BLACK, roughness: 0.25 });
+  const mEarRed = new THREE.MeshStandardMaterial({ color: RED, roughness: 0.85, flatShading: true });
+  const mEarIn = new THREE.MeshStandardMaterial({ color: 0xe9c9a8, roughness: 0.9, flatShading: true });
+  const SPH = new THREE.SphereGeometry(1, 18, 14);
+  const blob = (mat, sx, sy, sz, x, y, z, parent) => {
+    const m = new THREE.Mesh(SPH, mat);
+    m.scale.set(sx, sy, sz); m.position.set(x, y, z); parent.add(m); return m;
+  };
+  const dog = new THREE.Group();
+  const body = new THREE.Group();           // 胴（座る時に傾ける）
+  body.position.y = 0.37;
+  dog.add(body);
+  blob(mRed, 0.15, 0.15, 0.3, 0, 0, 0, body);
+  blob(mCream, 0.128, 0.11, 0.25, 0, -0.052, 0.01, body);       // 腹（裏白）
+  blob(mCream, 0.112, 0.13, 0.1, 0, -0.02, 0.235, body);        // 胸
+  blob(mRed, 0.1, 0.12, 0.12, 0, 0.08, 0.25, body);             // 首
+  blob(mRed, 0.065, 0.09, 0.085, 0.07, -0.03, -0.19, body);     // 太もも
+  blob(mRed, 0.065, 0.09, 0.085, -0.07, -0.03, -0.19, body);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.17, 0.33);
+  body.add(head);
+  blob(mRed, 0.13, 0.12, 0.13, 0, 0, 0, head);
+  blob(mRed, 0.062, 0.05, 0.09, 0, -0.018, 0.11, head);         // 鼻すじ
+  blob(mCream, 0.06, 0.042, 0.088, 0, -0.048, 0.108, head);     // 口まわり
+  blob(mCream, 0.062, 0.058, 0.06, 0.062, -0.045, 0.06, head);  // 頬
+  blob(mCream, 0.062, 0.058, 0.06, -0.062, -0.045, 0.06, head);
+  blob(mCream, 0.085, 0.05, 0.08, 0, -0.08, 0.02, head);        // あご下
+  blob(mBlack, 0.024, 0.02, 0.02, 0, -0.012, 0.197, head);      // 鼻
+  blob(mBlack, 0.017, 0.019, 0.012, 0.052, 0.028, 0.111, head); // 目
+  blob(mBlack, 0.017, 0.019, 0.012, -0.052, 0.028, 0.111, head);
+  blob(mCream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head);   // 麻呂眉
+  blob(mCream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head);
+  const ears = [];
+  for (const s of [1, -1]) {
+    const ear = new THREE.Group();
+    ear.position.set(0.062 * s, 0.085, -0.015);
+    ear.rotation.set(0.12, 0, -0.28 * s);
+    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.11, 4), mEarRed);
+    outer.position.y = 0.05; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mEarIn);
+    inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4; inner.scale.z = 0.4;
+    ear.add(outer, inner); head.add(ear); ears.push(ear);
+  }
+
+  const tail = new THREE.Group();          // 付け根（振る・横に倒す）
+  tail.position.set(0, 0.1, -0.25);
+  body.add(tail);
+  const tailCurl = new THREE.Group();
+  tailCurl.position.set(0, 0.06, 0.07);
+  tailCurl.rotation.y = Math.PI / 2;
+  tail.add(tailCurl);
+  const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.042, 10, 26, 4.7), mRed);
+  tailRing.rotation.z = -0.35;
+  tailCurl.add(tailRing);
+  const tailIn = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.026, 8, 22, 4.2), mCream);
+  tailIn.rotation.z = -0.15; tailIn.position.z = 0.012;
+  tailCurl.add(tailIn);
+  blob(mRed, 0.04, 0.045, 0.04, 0, 0, 0, tail);
+
+  // 脚（付け根を回す）
+  const legGeoUp = new THREE.CylinderGeometry(0.036, 0.03, 0.2, 8); legGeoUp.translate(0, -0.1, 0);
+  const legGeoLo = new THREE.CylinderGeometry(0.031, 0.029, 0.11, 8); legGeoLo.translate(0, -0.245, 0);
+  const pawGeo = new THREE.SphereGeometry(0.036, 10, 8); pawGeo.scale(1, 0.6, 1.25); pawGeo.translate(0, -0.3, 0.012);
+  const legs = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.19], [-0.08, -0.19]].map(([x, z]) => {
+    const g = new THREE.Group();
+    g.position.set(x, -0.065, z);
+    g.add(new THREE.Mesh(legGeoUp, mRed), new THREE.Mesh(legGeoLo, mCream), new THREE.Mesh(pawGeo, mCream));
+    body.add(g); return g;
+  });
+  dog.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+  const TROT = [0, Math.PI, Math.PI, 0], GALLOP = [0, 0.45, Math.PI, Math.PI + 0.45];
+  let phase = 0;
+  function update(pose, dt, t) {
+    const { speed, sit, jumpY, vy } = pose;
+    const air = smooth(0, 0.15, jumpY);
+    // 脚の運び：遅いと速歩、速いと駆け足
+    const run = smooth(2.5, 4.8, speed);
+    phase += dt * Math.PI * 2 * (1.1 + speed * 0.36);
+    const amp = Math.min(1, speed / 1.5) * (0.55 + 0.25 * run) * (1 - air);
+    legs.forEach((l, i) => {
+      const off = TROT[i] + (GALLOP[i] - TROT[i]) * run;
+      let r = Math.sin(phase + off) * amp;
+      if (i < 2) r += 0.75 * sit - 0.5 * air; else r += -0.65 * sit + 0.6 * air;
+      l.rotation.x = r;
+    });
+    body.rotation.x = Math.sin(phase) * 0.09 * run * (1 - air) - 0.75 * sit - 0.12 * Math.sign(vy) * air;
+    body.position.y = 0.37 + Math.abs(Math.sin(phase)) * 0.035 * amp - 0.1 * sit;
+    body.position.z = -0.06 * sit;
+    head.rotation.x = 0.62 * sit - Math.sin(phase) * 0.06 * run + 0.15 * run;
+    ears.forEach(e => { e.rotation.x = 0.12 - 0.35 * run; });
+    tail.rotation.z = 0.45 + Math.sin(t * (speed < 0.5 ? 9 : 5)) * (speed < 0.5 ? 0.18 : 0.06);
+  }
+  return { object: dog, radius: 0.5, update };
 }
-const dog = new THREE.Group();
-const body = new THREE.Group();           // 胴（座る時に傾ける）
-body.position.y = 0.37;
-dog.add(body);
-blob(mRed, 0.15, 0.15, 0.3, 0, 0, 0, body);
-blob(mCream, 0.128, 0.11, 0.25, 0, -0.052, 0.01, body);       // 腹（裏白）
-blob(mCream, 0.112, 0.13, 0.1, 0, -0.02, 0.235, body);        // 胸
-blob(mRed, 0.1, 0.12, 0.12, 0, 0.08, 0.25, body);             // 首
-blob(mRed, 0.075, 0.1, 0.09, 0.07, -0.02, -0.19, body);       // 太もも
-blob(mRed, 0.075, 0.1, 0.09, -0.07, -0.02, -0.19, body);
+const dogView = createPrimitiveDog();
+scene.add(dogView.object);
+grassU.uDogR.value = dogView.radius;
 
-const head = new THREE.Group();
-head.position.set(0, 0.17, 0.33);
-body.add(head);
-blob(mRed, 0.13, 0.12, 0.13, 0, 0, 0, head);
-blob(mRed, 0.062, 0.05, 0.09, 0, -0.018, 0.11, head);         // 鼻すじ
-blob(mCream, 0.06, 0.042, 0.088, 0, -0.048, 0.108, head);     // 口まわり
-blob(mCream, 0.062, 0.058, 0.06, 0.062, -0.045, 0.06, head);  // 頬
-blob(mCream, 0.062, 0.058, 0.06, -0.062, -0.045, 0.06, head);
-blob(mCream, 0.085, 0.05, 0.08, 0, -0.08, 0.02, head);        // あご下
-blob(mBlack, 0.024, 0.02, 0.02, 0, -0.012, 0.197, head);      // 鼻
-blob(mBlack, 0.017, 0.019, 0.012, 0.052, 0.028, 0.111, head); // 目
-blob(mBlack, 0.017, 0.019, 0.012, -0.052, 0.028, 0.111, head);
-blob(mCream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head);   // 麻呂眉
-blob(mCream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head);
-const ears = [];
-for (const s of [1, -1]) {
-  const ear = new THREE.Group();
-  ear.position.set(0.062 * s, 0.085, -0.015);
-  ear.rotation.set(0.12, 0, -0.28 * s);
-  const outer = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.11, 4), mEarRed);
-  outer.position.y = 0.05; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
-  const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mEarIn);
-  inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4; inner.scale.z = 0.4;
-  ear.add(outer, inner); head.add(ear); ears.push(ear);
-}
-
-// 巻き尾
-const tail = new THREE.Group();          // 付け根（振る・横に倒す）
-tail.position.set(0, 0.1, -0.25);
-body.add(tail);
-const tailCurl = new THREE.Group();
-tailCurl.position.set(0, 0.06, 0.07);
-tailCurl.rotation.y = Math.PI / 2;
-tail.add(tailCurl);
-const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.042, 10, 26, 4.7), mRed);
-tailRing.rotation.z = -0.35;
-tailCurl.add(tailRing);
-const tailIn = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.026, 8, 22, 4.2), mCream);
-tailIn.rotation.z = -0.15; tailIn.position.z = 0.012;
-tailCurl.add(tailIn);
-blob(mRed, 0.04, 0.045, 0.04, 0, 0, 0, tail);
-
-// 脚（付け根を回す）
-const legGeoUp = new THREE.CylinderGeometry(0.036, 0.03, 0.2, 8); legGeoUp.translate(0, -0.1, 0);
-const legGeoLo = new THREE.CylinderGeometry(0.031, 0.029, 0.11, 8); legGeoLo.translate(0, -0.245, 0);
-const pawGeo = new THREE.SphereGeometry(0.036, 10, 8); pawGeo.scale(1, 0.6, 1.25); pawGeo.translate(0, -0.3, 0.012);
-const legs = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.19], [-0.08, -0.19]].map(([x, z]) => {
-  const g = new THREE.Group();
-  g.position.set(x, -0.065, z);
-  g.add(new THREE.Mesh(legGeoUp, mRed), new THREE.Mesh(legGeoLo, mCream), new THREE.Mesh(pawGeo, mCream));
-  body.add(g); return g;
-});
-scene.add(dog);
-
-// 足元の丸い影
+// 足元の接地影（太陽の影とは別に、足元をうっすら暗くする）
 const shadowTex = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const x = c.getContext('2d'); const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  gr.addColorStop(0, 'rgba(0,0,0,0.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
   x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(c);
 })();
-const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
-  new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
-shadow.rotation.x = -Math.PI / 2;
-scene.add(shadow);
+const contact = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.45, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+contact.rotation.x = -Math.PI / 2;
+scene.add(contact);
 
 // ---------- 入力 ----------
 const input = { x: 0, y: 0 };
@@ -340,6 +430,7 @@ const stickEl = document.getElementById('stick'), knobEl = document.getElementBy
 const hintEl = document.getElementById('hint');
 let jumpReq = false;
 const STICK_R = 50;
+const clock = new THREE.Clock();
 
 canvas.addEventListener('pointerdown', e => {
   if (e.clientX < innerWidth * 0.55 && stickId === null) {
@@ -375,14 +466,12 @@ addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') 
 addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ---------- 状態 ----------
-const st = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0, vy: 0, phase: 0, idle: 0, sit: 0 };
+const st = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0, vy: 0, idle: 0, sit: 0 };
 let camYaw = 0;
-const clock = new THREE.Clock();
 const fpsEl = document.getElementById('fps');
 let fpsN = 0, fpsT = 0, hinted = false;
-const TROT = [0, Math.PI, Math.PI, 0], GALLOP = [0, 0.45, Math.PI, Math.PI + 0.45];
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
-const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+const camGoal = new THREE.Vector3();
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -390,6 +479,10 @@ function resize() {
   camera.aspect = w / h; camera.fov = w < h ? 62 : 50; camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
+
+// 光の色と強さを草シェーダにも渡す（地面・犬と同じ明るさに揃える）
+grassU.uSunCol.value.copy(sun.color).multiplyScalar(sun.intensity);
+grassU.uSkyCol.value.copy(hemi.color).lerp(hemi.groundColor, 0.35).multiplyScalar(hemi.intensity);
 
 function step(dt, t) {
   // 入力 → 進む向き（カメラ基準）
@@ -415,44 +508,31 @@ function step(dt, t) {
   jumpReq = false;
   st.vy -= 12 * dt; st.jumpY = Math.max(0, st.jumpY + st.vy * dt);
   if (st.jumpY === 0) st.vy = 0;
-  const air = smooth(0, 0.15, st.jumpY);
 
   // 止まってしばらくすると座る
   st.idle = st.speed < 0.15 && st.jumpY === 0 ? st.idle + dt : 0;
   st.sit += ((st.idle > 2.5 ? 1 : 0) - st.sit) * Math.min(1, dt * 4);
 
-  // 脚の運び：遅いと速歩、速いと駆け足
-  const run = smooth(2.5, 4.8, st.speed);
-  st.phase += dt * Math.PI * 2 * (1.1 + st.speed * 0.36);
-  const amp = Math.min(1, st.speed / 1.5) * (0.55 + 0.25 * run) * (1 - air);
-  const sit = st.sit;
-  legs.forEach((l, i) => {
-    const off = TROT[i] + (GALLOP[i] - TROT[i]) * run;
-    let r = Math.sin(st.phase + off) * amp;
-    if (i < 2) r += 0.75 * sit - 0.5 * air; else r += -0.65 * sit + 0.6 * air;
-    l.rotation.x = r;
-  });
-  body.rotation.x = Math.sin(st.phase) * 0.09 * run * (1 - air) - 0.75 * sit - 0.12 * Math.sign(st.vy) * air;
-  body.position.y = 0.37 + Math.abs(Math.sin(st.phase)) * 0.035 * amp - 0.1 * sit;
-  body.position.z = -0.06 * sit;
-  head.rotation.x = 0.62 * sit -Math.sin(st.phase) * 0.06 * run + 0.15 * run;
-  ears.forEach((e, i) => { e.rotation.x = 0.12 - 0.35 * run; });
-  tail.rotation.z = 0.45 + Math.sin(t * (st.speed < 0.5 ? 9 : 5)) * (st.speed < 0.5 ? 0.22 : 0.08);
-
+  dogView.update(st, dt, t);
   const gy = H(st.x, st.z);
-  dog.position.set(st.x, gy + st.jumpY, st.z);
-  dog.rotation.y = st.yaw;
-  shadow.position.set(st.x, gy + 0.01, st.z);
-  const ss = 0.75 / (1 + st.jumpY * 1.5);
-  shadow.scale.set(ss * 0.7, ss, 1);
-  shadow.rotation.z = st.yaw;
+  dogView.object.position.set(st.x, gy + st.jumpY, st.z);
+  dogView.object.rotation.y = st.yaw;
+  contact.position.set(st.x, gy + 0.01, st.z);
+  const cs = 0.7 / (1 + st.jumpY * 2);
+  contact.scale.set(cs * 0.6, cs, 1);
+  contact.rotation.z = st.yaw;
+
+  // 太陽の影は犬の周りだけ描く（影の範囲を犬に追従させる）
+  sun.target.position.set(st.x, gy, st.z);
+  sun.position.copy(sun.target.position).addScaledVector(SUN_DIR, 35);
 
   // カメラ：後ろから追う（なぞって回した直後は追わない）
+  const run = smooth(2.5, 4.8, st.speed);
   if (st.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, st.yaw) * Math.min(1, dt * 1.6);
-  const dist = 2.7 + run * 0.5 - sit * 0.4, ch = 1.0 + run * 0.15;
+  const dist = 2.7 + run * 0.5 - st.sit * 0.4, ch = 1.0 + run * 0.15;
   const cx = st.x - Math.sin(camYaw) * dist, cz = st.z - Math.cos(camYaw) * dist;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
-  camera.position.lerp(new THREE.Vector3(cx, cy, cz), Math.min(1, dt * 6));
+  camera.position.lerp(camGoal.set(cx, cy, cz), Math.min(1, dt * 6));
   camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
   // 周りの物を犬に合わせて巻き戻す
@@ -478,14 +558,14 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   step(dt, t);
   renderer.render(scene, camera);
+  if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
   fpsN++;
   const now = performance.now();
   if (now - fpsT >= 500) { fpsEl.textContent = Math.round(fpsN * 1000 / (now - fpsT)) + ' fps'; fpsN = 0; fpsT = now; }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__shiba = { st, input, keys };
-})();
+window.__shiba = { st, input, keys, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
