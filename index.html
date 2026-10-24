@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v9 · -- fps</div>
+<div id="fps" class="ui">v10 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +86,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v9';
+const VERSION = 'v10';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 40000 : 96000;
@@ -878,10 +878,11 @@ const dog = (() => {
       if (ph === 'squat' || ph === 'push' || ph === 'rise') {
         const w = ph === 'squat' ? smooth(0, PH_DUR.squat, k) : ph === 'rise' ? 1 - smooth(0, PH_DUR.rise, k) : 1;
         // 背中を丸めて腰を落とし、後脚を前へ寄せ、尾を上げる。力んでいる間は小刻みに震える
-        P.y = -0.09 * w + (ph === 'push' ? 0.003 * Math.sin(t * 45) : 0); P.pitch = 0.3 * w; P.flex = -0.5 * w;
+        // 相撲の四股のように：後脚を左右へ大きく開いて深く腰を落とし、上体を起こす
+        P.y = -0.13 * w + (ph === 'push' ? 0.003 * Math.sin(t * 45) : 0); P.pitch = 0.42 * w; P.flex = -0.4 * w;
         P.tailDown = -0.6 * w; P.earsBack = 0.3 * w; P.eyes = 1 - 0.35 * w; P.neck = -0.1 * w; P.wag = 0;
-        P.legs[0] = V(0.075, 0, 0.2 + 0.05 * w); P.legs[1] = V(-0.075, 0, 0.2 + 0.05 * w);
-        P.legs[2] = V(0.08 + 0.03 * w, 0, -0.2 + 0.14 * w); P.legs[3] = V(-0.08 - 0.03 * w, 0, -0.2 + 0.14 * w);
+        P.legs[0] = V(0.075 + 0.01 * w, 0, 0.2 + 0.04 * w); P.legs[1] = V(-0.075 - 0.01 * w, 0, 0.2 + 0.04 * w);   // 前脚は突っ張る
+        P.legs[2] = V(0.08 + 0.11 * w, 0, -0.2 + 0.12 * w); P.legs[3] = V(-0.08 - 0.11 * w, 0, -0.2 + 0.12 * w);
       }
       if (ph === 'kick') kickPose(P, t);
     } },
