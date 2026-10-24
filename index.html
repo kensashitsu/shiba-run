@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v19 · -- fps</div>
+<div id="fps" class="ui">v20 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,18 +86,16 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v19';
+const VERSION = 'v20';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
 const AB = (location.search.match(/[?&]([abcd])(?=&|$)/g) || []).map(x => x.slice(1)).join('');
-const BLADES = low ? 40000 : 96000;
+const BLADES = low ? 40000 : 80000;
 const PATCH = 28;              // 草を生やす範囲（犬の少し前を中心に巻き戻す）
 const PATCH_AHEAD = 5.5;       // 範囲の中心を視線の先へずらす量（後ろの草は見えないので前へ回す）
 // 遠景の草：まばらで幅広の葉を、手前の草が尽きるあたりから先へ広く生やす（草の切れ目を遠くの霞へ追いやる）
-const FAR_BLADES = low ? 0 : 44000, FAR_PATCH = 84, FAR_AHEAD = 26;
-// さらに遠くの草：ごくまばらで太い葉を霞の奥（150m先）まで。ダッシュでも草の切れ目が霞の中にしか来ない
-const FAR2_BLADES = low ? 0 : 26000, FAR2_PATCH = 250, FAR2_AHEAD = 82;
+const FAR_BLADES = low ? 0 : 30000, FAR_PATCH = 84, FAR_AHEAD = 26;
 const FOG_NEAR = 16, FOG_FAR = 150;
 const FOG_COLOR = new THREE.Color(0xcdd0bc);
 const SUN_DIR = new THREE.Vector3(-0.55, 0.4, -0.72).normalize();   // 太陽の方向（低め＝影が長い）
@@ -404,6 +402,9 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMate
       float keep = uLod > 0.0 ? min(1.0, (uLod*uLod) / (dc*dc)) : 1.0;
       float fKeep = clamp((1.3*keep - fract(r*71.9)) / (0.3*keep), 0.0, 1.0);
       float fade = fOut * fIn * fKeep;
+      // 消えている草と画面の外の草は、重い地形計算の前に打ち切る
+      vec4 vb = viewMatrix * vec4(base.x, cameraPosition.y - 0.8, base.y, 1.0);
+      if (fade <= 0.0 || vb.z > 1.0 || abs(vb.x) * projectionMatrix[0][0] > 1.0 - vb.z) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       float edge = step(0.001, fade) * (1.0 - 0.2*smoothstep(0.7, 1.0, er))
                  * smoothstep(0.35, 1.3, dc);       // カメラの目の前の草は縮める
       float widen = (uLod > 0.0 ? min(1.0 / keep, 3.5) : clamp(dc / 14.0, 1.0, 5.0)) * fade;
@@ -420,7 +421,7 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMate
       float wv = sin(uTime*1.6 + base.x*0.21 + base.y*0.13)*0.6 + sin(uTime*2.7 + base.x*0.53 - base.y*0.41)*0.3;
       vec2 bend = vec2(0.85, 0.45) * (wv*0.16 + 0.1) + face * (fract(r*13.1) - 0.5) * 0.7;
       vec2 dd = base - uDog.xz; float dl = length(dd);
-      float push = (1.0 - smoothstep(0.16*uDogR, 1.1*uDogR, dl)) * (1.0 - smoothstep(0.1, 0.6, uDog.y - H(uDog.xz)));
+      float push = (1.0 - smoothstep(0.16*uDogR, 1.1*uDogR, dl)) * (1.0 - smoothstep(0.1, 0.6, uDog.y));
       bend += (dd / max(dl, 0.001)) * push * 1.4;
       float tt = t*t;
       vec2 p = base + side * position.x * w + bend * tt * h;
@@ -485,13 +486,6 @@ const grassFar = new THREE.Mesh(bladeSet(Math.max(FAR_BLADES, 1), FAR_PATCH, 0.6
 }));
 grassFar.frustumCulled = false;
 grassFar.visible = FAR_BLADES > 0;
-const far2U = { ...grassU, uSize: { value: FAR2_PATCH }, uCenter: { value: new THREE.Vector2() }, uInner: { value: 44 }, uWide: { value: 7 }, uLod: { value: 0 }, uDbg: { value: new THREE.Color(AB.includes('d') ? 0xffe020 : 0) } };
-const grassFar2 = new THREE.Mesh(bladeSet(Math.max(FAR2_BLADES, 1), FAR2_PATCH, 1.6), new THREE.ShaderMaterial({
-  uniforms: far2U, side: THREE.DoubleSide, vertexShader: grass.material.vertexShader, fragmentShader: grass.material.fragmentShader
-}));
-grassFar2.frustumCulled = false;
-grassFar2.visible = FAR2_BLADES > 0;
-scene.add(grassFar2);
 scene.add(grassFar);
 
 // ---------- 木（幹と枝をコードで生やし、葉は「葉の束を描いた板」を枝先に付ける） ----------
@@ -1613,8 +1607,7 @@ function step(dt, t) {
   const camF = Math.sin(camYaw), camFz = Math.cos(camYaw);
   grassU.uCenter.value.set(camera.position.x + camF * (PATCH_AHEAD + 2.7), camera.position.z + camFz * (PATCH_AHEAD + 2.7));
   farU.uCenter.value.set(camera.position.x + camF * (FAR_AHEAD + 2.7), camera.position.z + camFz * (FAR_AHEAD + 2.7));
-  far2U.uCenter.value.set(camera.position.x + camF * FAR2_AHEAD, camera.position.z + camFz * FAR2_AHEAD);
-  grassU.uDog.value.set(st.x, gy + st.jumpY, st.z);
+  grassU.uDog.value.set(st.x, st.jumpY, st.z);   // y は地面からの浮き(ジャンプ中は草を押さない)
   updateGround(st.x, st.z);
   updateWater(st.z);
   waterU.uTime.value = t;
@@ -1647,7 +1640,7 @@ function frame() {
 }
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
-window.__shiba = { trees, camera, grass, grassFar, grassFar2, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
