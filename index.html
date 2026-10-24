@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v18 · -- fps</div>
+<div id="fps" class="ui">v19 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +86,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v18';
+const VERSION = 'v19';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -395,17 +395,18 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMate
       vec2 base = mod(aOff.xy - uCenter + uSize*0.5, uSize) + uCenter - uSize*0.5;
       float r = aOff.z;
       float t = position.y;
-      // 範囲の縁では草を縮めるより間引く（縮めると縁で草が伸びて見え、走るほど草原が広がっていくように見えた）
-      float er = length(base - uCenter) / (uSize*0.5);
-      float edge = step(smoothstep(0.55, 0.97, er), fract(r*97.3)) * (1.0 - 0.35*smoothstep(0.7, 1.0, er))
-                 * step(1.0 - smoothstep(uInner, uInner + max(7.0, uInner*0.5), length(base - cameraPosition.xz)), fract(r*57.9))  // 遠景の草は手前の草が尽きるあたりから
-                 * smoothstep(0.35, 1.3, length(base - cameraPosition.xz));       // カメラの目の前の草は縮める
-      // 遠いほど本数を減らし、減らした分だけ葉を太らせる（草むらの濃さを保ったまま密から疎へ。
-      // 濃さが段で変わると、カメラの周りに円い境目ができ、走るとその円が付いてきて広がって見えた）
+      // 間引く草は消える前に細くしていく（1本ずつパッと出入りすると、その出入りの線が走るほど前へ広がって見えた）
       float dc = length(base - cameraPosition.xz);
+      float er = length(base - uCenter) / (uSize*0.5);
+      float fOut = clamp((fract(r*97.3) + 0.25 - 1.25*smoothstep(0.5, 0.97, er)) * 4.0, 0.0, 1.0);                   // 範囲の縁
+      float fIn = clamp((fract(r*57.9) + 0.25 - 1.25*(1.0 - smoothstep(uInner, uInner + max(7.0, uInner*0.5), dc))) * 4.0, 0.0, 1.0);  // 遠景の草は手前の草が尽きるあたりから
+      // 遠いほど本数を減らし、減らした分だけ葉を太らせる（草むらの濃さを保ったまま密から疎へ）
       float keep = uLod > 0.0 ? min(1.0, (uLod*uLod) / (dc*dc)) : 1.0;
-      edge *= step(fract(r*71.9), keep);
-      float widen = uLod > 0.0 ? min(1.0 / keep, 3.5) : clamp(dc / 14.0, 1.0, 5.0);
+      float fKeep = clamp((1.3*keep - fract(r*71.9)) / (0.3*keep), 0.0, 1.0);
+      float fade = fOut * fIn * fKeep;
+      float edge = step(0.001, fade) * (1.0 - 0.2*smoothstep(0.7, 1.0, er))
+                 * smoothstep(0.35, 1.3, dc);       // カメラの目の前の草は縮める
+      float widen = (uLod > 0.0 ? min(1.0 / keep, 3.5) : clamp(dc / 14.0, 1.0, 5.0)) * fade;
       float he = heather(base);
       float dp = abs(base.x - pathX(base.y)), ds = abs(base.x - streamX(base.y));
       float h = (0.1 + 0.34*pow(fract(r*7.13), 1.6)) * edge
