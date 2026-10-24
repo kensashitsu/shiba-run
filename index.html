@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v10 · -- fps</div>
+<div id="fps" class="ui">v11 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +86,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v10';
+const VERSION = 'v11';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 40000 : 96000;
@@ -456,8 +456,8 @@ scene.add(grass);
 const TREE_AREA = 150;
 const trees = [];
 const treeU = { uTime: { value: 0 }, uDog: { value: new THREE.Vector2() } };
+const rng = seed => { let s = seed >>> 0; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; };   // 再現できる乱数
 {
-  const rng = seed => { let s = seed >>> 0; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; };
   const canvasTex = (w, h, draw) => {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     draw(c.getContext('2d'), w, h);
@@ -922,12 +922,43 @@ const dog = (() => {
     m.position.set(x, H(x, z) + 0.012, z); m.scale.set(size, size * (0.7 + Math.random() * 0.4), 1);
     m.rotation.z = Math.random() * Math.PI; m.userData.age = 0; m.userData.grow = 0; m.visible = true;
   };
-  const poopMat = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.35 });
+  // かりんとうのような形：細長く少し曲がった棒で、表面がでこぼこ。2〜3本が転がる
+  const poopMat = new THREE.MeshStandardMaterial({ color: 0x24130a, roughness: 0.6, envMapIntensity: 0.5 });
+  const karintou = (len, rad, bend, seed) => {
+    const r = rng(seed);
+    const pts = [];
+    for (let i = 0; i <= 6; i++) {
+      const u = i / 6 - 0.5;
+      pts.push(new THREE.Vector3(u * len, Math.sin((u + 0.5) * Math.PI) * 0.004, -u * u * bend + (r() - 0.5) * 0.004));
+    }
+    const SEG = 20, RAD = 10;
+    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), SEG, rad, RAD, false);
+    // 両端を丸くすぼめ、輪ごとの太さむら＋表面の細かい粒（かりんとうの砂糖の凹凸）をつける
+    const ring = Array.from({ length: SEG + 1 }, () => 0.88 + 0.22 * r());
+    const p = geo.attributes.position, c = new THREE.Vector3(), v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      const seg = Math.floor(i / (RAD + 1)), u = seg / SEG;
+      c.copy(geo.parameters.path.getPointAt(u));
+      v.fromBufferAttribute(p, i).sub(c);
+      const cap = Math.sqrt(Math.max(0, 1 - Math.pow(Math.abs(u - 0.5) * 2, 6)));   // 端だけ丸める
+      const k = cap * (ring[seg] * 0.7 + ring[Math.min(SEG, seg + 1)] * 0.3) * (0.94 + 0.12 * r());
+      v.multiplyScalar(Math.max(0.12, k)).add(c);
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    geo.computeVertexNormals();
+    return geo;
+  };
   const poops = [];
   const addPoop = (x, z, yaw) => {
     const g = new THREE.Group();
-    [[0, 0.018, 0, 0.032, 0.02, 0.05], [0.008, 0.04, -0.006, 0.026, 0.019, 0.038], [-0.004, 0.058, 0.004, 0.018, 0.015, 0.026]]
-      .forEach(([px, py, pz, sx, sy, sz]) => blob(poopMat, sx, sy, sz, px, py, pz, g));
+    const n = 2 + (Math.random() < 0.5 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      const m = new THREE.Mesh(karintou(0.075 + Math.random() * 0.025, 0.0085 + Math.random() * 0.002, 0.006 + Math.random() * 0.012, (Math.random() * 1e9) | 0), poopMat);
+      m.position.set((Math.random() - 0.5) * 0.04, 0.008 + k * 0.012, (Math.random() - 0.5) * 0.04);
+      m.rotation.set((Math.random() - 0.5) * 0.3, Math.random() * Math.PI * 2, (Math.random() - 0.5) * 0.3);
+      m.castShadow = true;
+      g.add(m);
+    }
     g.position.set(x, H(x, z) - 0.004, z); g.rotation.y = yaw + (Math.random() - 0.5);
     g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
     extras.add(g); poops.push(g);
@@ -1570,7 +1601,7 @@ function frame() {
 }
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
-window.__shiba = { trees, snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { trees, camera, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
