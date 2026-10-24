@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v7 · -- fps</div>
+<div id="fps" class="ui">v8 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +86,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v7';
+const VERSION = 'v8';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 40000 : 96000;
@@ -706,7 +706,7 @@ const dog = (() => {
   function solveLeg(L, footW) {
     const parent = L.hip.parent;
     parent.worldToLocal(_v.copy(footW)).sub(L.hip.position);
-    L.hip.rotation.z = clamp(Math.atan2(_v.x, -_v.y), -1.3, 1.3);   // 片脚上げでは大きく開く
+    L.hip.rotation.z = clamp(Math.atan2(_v.x, -_v.y), -2.7, 2.7);   // 片脚上げでは真上近くまで開く
     const ty = -Math.hypot(_v.x, _v.y), tz = _v.z;
     parent.getWorldQuaternion(_q).invert();
     _u.set(0, 1, 0).applyQuaternion(_q);                 // 親から見た「真上」
@@ -749,7 +749,7 @@ const dog = (() => {
   // ----- 姿勢と仕草 -----
   // 形は「数値の束」で表し、立ち姿→姿勢→仕草の順に重みで混ぜる
   const basePose = () => ({
-    y: 0, z: 0, pitch: 0, roll: 0, flex: 0, neck: 0, headYaw: 0, headRoll: 0, headPitch: 0,
+    y: 0, z: 0, pitch: 0, roll: 0, rearRoll: 0, flex: 0, neck: 0, headYaw: 0, headRoll: 0, headPitch: 0,
     jaw: 0, tongue: 0, eyes: 1, earsBack: 0, tailDown: 0, wag: 0.05, wagHz: 5, breath: 0, look: 0,
     legs: [null, null, null, null],
   });
@@ -865,9 +865,9 @@ const dog = (() => {
       if (ph === 'sniff') { P.neck = 0.85; P.headPitch = 0.15 + sniffTwitch(t); P.headYaw = d.lookYaw; P.wag = 0.08; }
       if (ph === 'lift' || ph === 'pee' || ph === 'lower') {
         const w = ph === 'lift' ? smooth(0, PH_DUR.lift, k) : ph === 'lower' ? 1 - smooth(0, PH_DUR.lower, k) : 1;
-        P.roll = s * 0.13 * w; P.y = -0.015 * w; P.tailDown = -0.25 * w; P.headYaw = -s * 0.3 * w; P.eyes = 1 - 0.25 * w; P.wag = 0;
-        P.legs[s > 0 ? 2 : 3] = V(s * (0.08 + 0.17 * w), 0.21 * w, -0.2 + 0.02 * w);      // 木の側の後脚を上げる
-        P.legs[s > 0 ? 3 : 2] = V(-s * (0.08 - 0.06 * w), 0, -0.18);                       // 反対の後脚は体の下へ寄せて支える
+        P.roll = s * 0.1 * w; P.rearRoll = s * 0.45 * w; P.y = -0.02 * w; P.tailDown = -0.25 * w; P.headYaw = -s * 0.3 * w; P.eyes = 1 - 0.25 * w; P.wag = 0;
+        P.legs[s > 0 ? 2 : 3] = V(s * (0.08 + 0.14 * w), 0.62 * w, -0.2 + 0.04 * w);       // 木の側の後脚を高く上げる（脚が垂直近くまで立つ）
+        P.legs[s > 0 ? 3 : 2] = V(-s * (0.08 - 0.08 * w), 0, -0.17);                       // 反対の後脚は体の下へ寄せて支える
       }
       if (ph === 'kick') kickPose(P, t);
     } },
@@ -1203,7 +1203,7 @@ const dog = (() => {
     body.position.set(0, STAND_Y + P.y + P.breath * 0.006 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22)), P.z);
     body.rotation.set(-(P.pitch + slope * 0.85), 0, P.roll);
     front.rotation.set(-P.flex * 0.5, clamp(S.yawRate * 0.05, -0.2, 0.2), 0);
-    rear.rotation.set(P.flex * 0.5, clamp(-S.yawRate * 0.05, -0.2, 0.2), 0);
+    rear.rotation.set(P.flex * 0.5, clamp(-S.yawRate * 0.05, -0.2, 0.2), P.rearRoll);
     front.scale.y = 1 + P.breath * 0.025 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22));
     // カメラの方を見る
     root.updateMatrixWorld(true);
