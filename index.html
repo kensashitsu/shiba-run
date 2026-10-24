@@ -33,15 +33,19 @@
     max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
   }
   #hint.off { opacity: 0; }
-  #jump {
-    right: max(18px, calc(env(safe-area-inset-right, 0px) + 18px));
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 36px);
-    width: 78px; height: 78px; border-radius: 50%;
-    background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink);
-    font: 700 15px var(--font-ui); letter-spacing: .05em;
+  #acts {
+    right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
   }
-  #jump:active { background: rgba(240,180,106,.45); }
-  #jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  #acts button {
+    width: 56px; height: 56px; border-radius: 50%; padding: 0;
+    background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink);
+    font: 700 13px var(--font-ui); letter-spacing: .02em;
+  }
+  #acts #jump { width: 76px; height: 76px; font-size: 15px; margin-top: 4px; }
+  #acts button:active { background: rgba(240,180,106,.45); }
+  #acts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   #stick { width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
     border: 2px solid var(--glass-edge); background: rgba(30,28,22,.25); pointer-events: none; }
   #knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
@@ -59,9 +63,15 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v5 · -- fps</div>
+<div id="fps" class="ui">v6 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
-<button id="jump" class="ui" type="button">ジャンプ</button>
+<div id="acts" class="ui">
+  <button type="button" data-cmd="bark">ほえる</button>
+  <button type="button" data-cmd="sit">おすわり</button>
+  <button type="button" data-cmd="down">ふせ</button>
+  <button type="button" data-cmd="paw">お手</button>
+  <button id="jump" type="button">ジャンプ</button>
+</div>
 <div id="stick" class="ui" hidden><div id="knob"></div></div>
 <div id="err" class="ui" hidden></div>
 
@@ -74,7 +84,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 const BLADES = low ? 40000 : 96000;
@@ -588,114 +598,565 @@ const treeU = { uTime: { value: 0 }, uDog: { value: new THREE.Vector2() } };
 }
 const wrap = (v, c, size) => ((((v - c + size / 2) % size) + size) % size) + c - size / 2;
 
-// ---------- 犬の見た目（差し替え可能な部品） ----------
-// 約束：{ object, radius, update(pose, dt, t) } を返す。
-// object は足元が原点・+Z が正面。位置と向きはゲーム側が object に入れる。
-// pose = { speed(m/s), sit(0..1), jumpY(m), vy(m/s) }。脚や尾の動きは部品の中で完結させる。
-// 将来 glTF の柴に替えるときは、同じ約束の createModelDog() を作って差し替える。
-function createPrimitiveDog() {
-  const RED = 0xc4692e, CREAM = 0xf4e8d2, BLACK = 0x1b1410;
-  const mRed = new THREE.MeshStandardMaterial({ color: RED, roughness: 0.85 });
-  const mCream = new THREE.MeshStandardMaterial({ color: CREAM, roughness: 0.9 });
-  const mBlack = new THREE.MeshStandardMaterial({ color: BLACK, roughness: 0.25 });
-  const mEarRed = new THREE.MeshStandardMaterial({ color: RED, roughness: 0.85, flatShading: true });
-  const mEarIn = new THREE.MeshStandardMaterial({ color: 0xe9c9a8, roughness: 0.9, flatShading: true });
+// ---------- 柴犬（骨組み・歩き方・姿勢・仕草） ----------
+// 骨組み：胴は後ろ半身と前半身（背骨をしならせる）。脚は3節（前脚＝上腕・前腕・中手、後脚＝太もも・すね・中足）。
+// 足先の位置を先に決め、関節の角度を逆算する（IK）。歩く時、着地中の足は地面に固定し、浮いている足だけ次の着地点へ運ぶ。
+// 何をするか（姿勢・仕草）は dog.think、形と動きは dog.update が受け持つ。
+const dog = (() => {
+  const mats = {
+    red: new THREE.MeshStandardMaterial({ color: 0xc4692e, roughness: 0.85 }),
+    cream: new THREE.MeshStandardMaterial({ color: 0xf4e8d2, roughness: 0.9 }),
+    black: new THREE.MeshStandardMaterial({ color: 0x1b1410, roughness: 0.25 }),
+    earRed: new THREE.MeshStandardMaterial({ color: 0xc4692e, roughness: 0.85, flatShading: true }),
+    earIn: new THREE.MeshStandardMaterial({ color: 0xe9c9a8, roughness: 0.9, flatShading: true }),
+    pink: new THREE.MeshStandardMaterial({ color: 0xd9707a, roughness: 0.45 }),
+    mouth: new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7 }),
+  };
+  const fur = ['red', 'cream', 'earRed', 'earIn'].map(k => ({ m: mats[k], base: mats[k].color.clone() }));
   const SPH = new THREE.SphereGeometry(1, 18, 14);
   const blob = (mat, sx, sy, sz, x, y, z, parent) => {
     const m = new THREE.Mesh(SPH, mat);
     m.scale.set(sx, sy, sz); m.position.set(x, y, z); parent.add(m); return m;
   };
-  const dog = new THREE.Group();
-  const body = new THREE.Group();           // 胴（座る時に傾ける）
-  body.position.y = 0.37;
-  dog.add(body);
-  blob(mRed, 0.15, 0.15, 0.3, 0, 0, 0, body);
-  blob(mCream, 0.128, 0.11, 0.25, 0, -0.052, 0.01, body);       // 腹（裏白）
-  blob(mCream, 0.112, 0.13, 0.1, 0, -0.02, 0.235, body);        // 胸
-  blob(mRed, 0.1, 0.12, 0.12, 0, 0.08, 0.25, body);             // 首
-  blob(mRed, 0.065, 0.09, 0.085, 0.07, -0.03, -0.19, body);     // 太もも
-  blob(mRed, 0.065, 0.09, 0.085, -0.07, -0.03, -0.19, body);
 
-  const head = new THREE.Group();
-  head.position.set(0, 0.17, 0.33);
-  body.add(head);
-  blob(mRed, 0.13, 0.12, 0.13, 0, 0, 0, head);
-  blob(mRed, 0.062, 0.05, 0.09, 0, -0.018, 0.11, head);         // 鼻すじ
-  blob(mCream, 0.06, 0.042, 0.088, 0, -0.048, 0.108, head);     // 口まわり
-  blob(mCream, 0.062, 0.058, 0.06, 0.062, -0.045, 0.06, head);  // 頬
-  blob(mCream, 0.062, 0.058, 0.06, -0.062, -0.045, 0.06, head);
-  blob(mCream, 0.085, 0.05, 0.08, 0, -0.08, 0.02, head);        // あご下
-  blob(mBlack, 0.024, 0.02, 0.02, 0, -0.012, 0.197, head);      // 鼻
-  blob(mBlack, 0.017, 0.019, 0.012, 0.052, 0.028, 0.111, head); // 目
-  blob(mBlack, 0.017, 0.019, 0.012, -0.052, 0.028, 0.111, head);
-  blob(mCream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head);   // 麻呂眉
-  blob(mCream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head);
-  const ears = [];
-  for (const s of [1, -1]) {
+  // ----- 胴 -----
+  const STAND_Y = 0.335;   // 脚がわずかに曲がって立つ高さ
+  const root = new THREE.Group();            // 足元の中心・向き
+  const body = new THREE.Group();            // 背の真ん中。高さ・前後の傾き・横の傾き
+  const rear = new THREE.Group(), front = new THREE.Group();
+  root.add(body); body.add(rear, front);
+  blob(mats.red, 0.145, 0.145, 0.19, 0, 0, -0.11, rear);
+  blob(mats.cream, 0.122, 0.105, 0.16, 0, -0.05, -0.1, rear);       // 腹（裏白）
+  blob(mats.red, 0.15, 0.15, 0.19, 0, 0.005, 0.1, front);
+  blob(mats.cream, 0.122, 0.105, 0.15, 0, -0.052, 0.1, front);
+  blob(mats.cream, 0.112, 0.13, 0.1, 0, -0.02, 0.235, front);       // 胸
+
+  // ----- 首と頭 -----
+  const neck = new THREE.Group(); neck.position.set(0, 0.06, 0.24); front.add(neck);
+  blob(mats.red, 0.1, 0.12, 0.12, 0, 0.03, 0.02, neck);
+  const head = new THREE.Group(); head.position.set(0, 0.11, 0.09); neck.add(head);
+  blob(mats.red, 0.13, 0.12, 0.13, 0, 0, 0, head);
+  blob(mats.red, 0.062, 0.05, 0.09, 0, -0.018, 0.11, head);         // 鼻すじ
+  blob(mats.cream, 0.056, 0.03, 0.085, 0, -0.042, 0.112, head);     // 上くちびる
+  blob(mats.cream, 0.062, 0.058, 0.06, 0.062, -0.045, 0.06, head);  // 頬
+  blob(mats.cream, 0.062, 0.058, 0.06, -0.062, -0.045, 0.06, head);
+  blob(mats.mouth, 0.045, 0.022, 0.07, 0, -0.058, 0.1, head);       // 口の中（開くと見える）
+  blob(mats.black, 0.024, 0.02, 0.02, 0, -0.012, 0.197, head);      // 鼻
+  const eyes = [1, -1].map(s => blob(mats.black, 0.017, 0.019, 0.012, 0.052 * s, 0.028, 0.111, head));
+  blob(mats.cream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head);   // 麻呂眉
+  blob(mats.cream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head);
+  const jaw = new THREE.Group(); jaw.position.set(0, -0.055, 0.04); head.add(jaw);
+  blob(mats.cream, 0.054, 0.026, 0.08, 0, -0.01, 0.07, jaw);        // 下あご
+  blob(mats.cream, 0.082, 0.045, 0.07, 0, -0.025, -0.015, jaw);     // あご下
+  const tongue = blob(mats.pink, 0.033, 0.01, 0.055, 0, 0.004, 0.07, jaw);
+  const ears = [1, -1].map(s => {
     const ear = new THREE.Group();
     ear.position.set(0.062 * s, 0.085, -0.015);
     ear.rotation.set(0.12, 0, -0.28 * s);
-    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.11, 4), mEarRed);
+    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.11, 4), mats.earRed);
     outer.position.y = 0.05; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mEarIn);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mats.earIn);
     inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4; inner.scale.z = 0.4;
-    ear.add(outer, inner); head.add(ear); ears.push(ear);
-  }
-
-  const tail = new THREE.Group();          // 付け根（振る・横に倒す）
-  tail.position.set(0, 0.1, -0.25);
-  body.add(tail);
-  const tailCurl = new THREE.Group();
-  tailCurl.position.set(0, 0.06, 0.07);
-  tailCurl.rotation.y = Math.PI / 2;
-  tail.add(tailCurl);
-  const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.042, 10, 26, 4.7), mRed);
-  tailRing.rotation.z = -0.35;
-  tailCurl.add(tailRing);
-  const tailIn = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.026, 8, 22, 4.2), mCream);
-  tailIn.rotation.z = -0.15; tailIn.position.z = 0.012;
-  tailCurl.add(tailIn);
-  blob(mRed, 0.04, 0.045, 0.04, 0, 0, 0, tail);
-
-  // 脚（付け根を回す）
-  const legGeoUp = new THREE.CylinderGeometry(0.036, 0.03, 0.2, 8); legGeoUp.translate(0, -0.1, 0);
-  const legGeoLo = new THREE.CylinderGeometry(0.031, 0.029, 0.11, 8); legGeoLo.translate(0, -0.245, 0);
-  const pawGeo = new THREE.SphereGeometry(0.036, 10, 8); pawGeo.scale(1, 0.6, 1.25); pawGeo.translate(0, -0.3, 0.012);
-  const legs = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.19], [-0.08, -0.19]].map(([x, z]) => {
-    const g = new THREE.Group();
-    g.position.set(x, -0.065, z);
-    g.add(new THREE.Mesh(legGeoUp, mRed), new THREE.Mesh(legGeoLo, mCream), new THREE.Mesh(pawGeo, mCream));
-    body.add(g); return g;
+    ear.add(outer, inner); head.add(ear); ear.userData.s = s; return ear;
   });
-  dog.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
-  const TROT = [0, Math.PI, Math.PI, 0], GALLOP = [0, 0.45, Math.PI, Math.PI + 0.45];
-  let phase = 0;
-  function update(pose, dt, t) {
-    const { speed, sit, jumpY, vy } = pose;
-    const air = smooth(0, 0.15, jumpY);
-    // 脚の運び：遅いと速歩、速いと駆け足
-    const run = smooth(2.5, 4.8, speed);
-    phase += dt * Math.PI * 2 * (1.1 + speed * 0.36);
-    const amp = Math.min(1, speed / 1.5) * (0.55 + 0.25 * run) * (1 - air);
-    legs.forEach((l, i) => {
-      const off = TROT[i] + (GALLOP[i] - TROT[i]) * run;
-      let r = Math.sin(phase + off) * amp;
-      if (i < 2) r += 0.75 * sit - 0.5 * air; else r += -0.65 * sit + 0.6 * air;
-      l.rotation.x = r;
-    });
-    body.rotation.x = Math.sin(phase) * 0.09 * run * (1 - air) - 0.75 * sit - 0.12 * Math.sign(vy) * air;
-    body.position.y = 0.37 + Math.abs(Math.sin(phase)) * 0.035 * amp - 0.1 * sit;
-    body.position.z = -0.06 * sit;
-    head.rotation.x = 0.62 * sit - Math.sin(phase) * 0.06 * run + 0.15 * run;
-    ears.forEach(e => { e.rotation.x = 0.12 - 0.35 * run; });
-    tail.rotation.z = 0.45 + Math.sin(t * (speed < 0.5 ? 9 : 5)) * (speed < 0.5 ? 0.18 : 0.06);
+  // ----- 巻き尾 -----
+  const tail = new THREE.Group(); tail.position.set(0, 0.1, -0.25); rear.add(tail);
+  const tailCurl = new THREE.Group(); tailCurl.position.set(0, 0.06, 0.07); tailCurl.rotation.y = Math.PI / 2; tail.add(tailCurl);
+  const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.042, 10, 26, 4.7), mats.red);
+  tailRing.rotation.z = -0.35; tailCurl.add(tailRing);
+  const tailIn = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.026, 8, 22, 4.2), mats.cream);
+  tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn);
+  blob(mats.red, 0.04, 0.045, 0.04, 0, 0, 0, tail);
+
+  // ----- 脚（3節） -----
+  const seg = (parent, len, r0, r1, mat) => {
+    const g = new THREE.CylinderGeometry(r1, r0, len, 8); g.translate(0, -len / 2, 0);
+    parent.add(new THREE.Mesh(g, mat));
+    blob(mat, r1 * 1.02, r1 * 1.02, r1 * 1.02, 0, -len, 0, parent);   // 関節のふくらみ
+  };
+  // side: +1=左(+x) / -1=右。bend: +1=膝が前（後脚）/ -1=肘が後ろ（前脚）
+  const makeLeg = (parent, x, y, z, lens, bend, isFront) => {
+    const hip = new THREE.Group(); hip.position.set(x, y, z); parent.add(hip);
+    const b1 = new THREE.Group(), b2 = new THREE.Group(), b3 = new THREE.Group();
+    hip.add(b1); b2.position.y = -lens[0]; b1.add(b2); b3.position.y = -lens[1]; b2.add(b3);
+    if (isFront) blob(mats.red, 0.05, 0.075, 0.06, 0, -0.04, 0, b1);           // 肩
+    else blob(mats.red, 0.062, 0.085, 0.078, 0, -0.045, 0.012, b1);           // 太もも
+    seg(b1, lens[0], 0.04, 0.032, mats.red);
+    seg(b2, lens[1], 0.031, 0.026, isFront ? mats.red : mats.red);
+    seg(b3, lens[2], 0.026, 0.026, mats.cream);
+    blob(mats.cream, 0.034, 0.022, 0.045, 0, -lens[2], 0.016, b3);           // 足先
+    return { hip, b1, b2, b3, lens, bend, isFront };
+  };
+  const legs = [
+    makeLeg(front, 0.07, -0.02, 0.2, [0.13, 0.14, 0.06], -1, true),    // 0 左前
+    makeLeg(front, -0.07, -0.02, 0.2, [0.13, 0.14, 0.06], -1, true),   // 1 右前
+    makeLeg(rear, 0.075, -0.02, -0.2, [0.13, 0.13, 0.085], 1, false),  // 2 左後
+    makeLeg(rear, -0.075, -0.02, -0.2, [0.13, 0.13, 0.085], 1, false), // 3 右後
+  ];
+  const NEUTRAL = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.2], [-0.08, -0.2]];   // 立った時の足の位置（足元の中心から）
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+  const FOOT_UP = 0.022;   // 足先の厚み（地面から足首の付け根まで）
+  const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+  const _v = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3(), _q = new THREE.Quaternion();
+  // 足先（世界座標）に届くよう3節の角度を決める。最後の節（中手・中足）は地面に対してほぼ立てておく
+  function solveLeg(L, footW) {
+    const parent = L.hip.parent;
+    parent.worldToLocal(_v.copy(footW)).sub(L.hip.position);
+    L.hip.rotation.z = clamp(Math.atan2(_v.x, -_v.y), -0.7, 0.7);
+    const ty = -Math.hypot(_v.x, _v.y), tz = _v.z;
+    parent.getWorldQuaternion(_q).invert();
+    _u.set(0, 1, 0).applyQuaternion(_q);                 // 親から見た「真上」
+    _f.set(0, 0, 1).applyQuaternion(root.quaternion).setY(0).normalize().applyQuaternion(_q);   // 親から見た「前（水平）」
+    const [a, b, c] = L.lens;
+    const back = L.isFront ? 0.012 : -0.035;             // 手首は足先の少し前、かかとは少し後ろ
+    const jy = ty + _u.y * c + _f.y * back, jz = tz + _u.z * c + _f.z * back;
+    L.reach = Math.hypot(jy, jz) / (a + b);              // 1を超えると足が届いていない
+    const D = clamp(Math.hypot(jy, jz), 0.03, a + b - 0.002);
+    const phi = Math.atan2(jz, -jy);
+    const A = Math.acos(clamp((a * a + D * D - b * b) / (2 * a * D), -1, 1));
+    const th1 = phi + L.bend * A;
+    const kz = a * Math.sin(th1), ky = -a * Math.cos(th1);
+    const th2 = Math.atan2(jz - kz, -(jy - ky));
+    const rz = kz + b * Math.sin(th2), ry = ky - b * Math.cos(th2);
+    const th3 = Math.atan2(tz - rz, -(ty - ry));
+    L.b1.rotation.x = -th1; L.b2.rotation.x = -(th2 - th1); L.b3.rotation.x = -(th3 - th2);
   }
-  return { object: dog, radius: 0.5, update };
-}
-const dogView = createPrimitiveDog();
-scene.add(dogView.object);
-grassU.uDogR.value = dogView.radius;
+
+  // ----- 歩き方 -----
+  // off＝各脚が地面を離れるタイミング（1歩の周期に対する割合）[左前, 右前, 左後, 右後]、duty＝接地している時間の割合、
+  // stance＝1回の接地で足が体に対して動ける距離(m)。脚の長さで決まり、これを超える歩幅にすると足が届かず滑って見える。
+  // 脚の回転数は「速さ×接地割合÷stance」以上にする（小型犬は脚が短いぶんピッチが速い）
+  const GAITS = {
+    walk: { off: [0.25, 0.75, 0.0, 0.5], duty: 0.62, base: 1.3, stance: 0.26, lift: 0.045 },    // 常歩：1本ずつ順に
+    trot: { off: [0.0, 0.5, 0.5, 0.0], duty: 0.4, base: 2.2, stance: 0.26, lift: 0.065 },      // 速歩：対角の2本ずつ
+    gallop: { off: [0.55, 0.65, 0.0, 0.1], duty: 0.28, base: 2.8, stance: 0.33, lift: 0.09 },  // 駆け足：後ろ2本→前2本、全部浮く瞬間がある
+  };
+  const gaitFreq = (g, s) => Math.max(g.base, s * g.duty / g.stance);
+  const gw = { walk: 1, trot: 0, gallop: 0 };
+  let phase = 0;
+  const feet = legs.map((L, i) => ({ plant: new THREE.Vector3(), foot: new THREE.Vector3(), lift: new THREE.Vector3(), swing: false, s: 0, init: false }));
+  const neutralW = (i, px, pz, yaw, out) => {
+    const [nx, nz] = NEUTRAL[i], c = Math.cos(yaw), s = Math.sin(yaw);
+    const x = px + nx * c + nz * s, z = pz - nx * s + nz * c;
+    return out.set(x, H(x, z) + FOOT_UP, z);
+  };
+  const ease = s => s * s * (3 - 2 * s);
+
+  // ----- 姿勢と仕草 -----
+  // 形は「数値の束」で表し、立ち姿→姿勢→仕草の順に重みで混ぜる
+  const basePose = () => ({
+    y: 0, z: 0, pitch: 0, roll: 0, flex: 0, neck: 0, headYaw: 0, headRoll: 0, headPitch: 0,
+    jaw: 0, tongue: 0, eyes: 1, earsBack: 0, tailDown: 0, wag: 0.05, wagHz: 5, breath: 0, look: 0,
+    legs: [null, null, null, null],
+  });
+  const lerpPose = (A, B, w) => {
+    if (w <= 0) return;
+    for (const k in B) {
+      if (k === 'legs') {
+        for (let i = 0; i < 4; i++) if (B.legs[i]) {
+          if (!A.legs[i]) A.legs[i] = { v: B.legs[i].clone(), w };
+          else { A.legs[i].v.lerp(B.legs[i], w); A.legs[i].w = Math.max(A.legs[i].w, w); }
+        }
+      } else A[k] += (B[k] - A[k]) * w;
+    }
+  };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const POSTURES = {
+    sit: (P, t) => {
+      Object.assign(P, { y: -0.1, pitch: 0.62, neck: -0.42, wag: 0.16, wagHz: 7 });
+      P.legs = [V(0.072, 0, 0.21), V(-0.072, 0, 0.21), V(0.1, 0, -0.03), V(-0.1, 0, -0.03)];
+    },
+    down: (P, t) => {
+      Object.assign(P, { y: -0.195, pitch: 0.06, neck: -0.25, wag: 0.08, wagHz: 5 });
+      P.legs = [V(0.075, 0, 0.42), V(-0.075, 0, 0.42), V(0.15, 0, -0.06), V(-0.15, 0, -0.06)];
+    },
+    sleep: (P, t) => {
+      Object.assign(P, { y: -0.21, pitch: 0.02, roll: 0.22, neck: 0.35, headYaw: 1.05, headPitch: 0.25, headRoll: 0.3,
+        eyes: 0, earsBack: 0.6, tailDown: 0.6, wag: 0, breath: 0.6 });
+      P.legs = [V(0.06, 0, 0.4), V(-0.05, 0, 0.36), V(0.16, 0, -0.04), V(-0.12, 0, 0.02)];
+    },
+  };
+  const wave = (u, a, b) => smooth(0, a, u) * (1 - smooth(b, 1, u));   // 仕草の入りと抜け
+  const ACTIONS = {
+    look: { dur: 3.6, pose: (P, u, t, A) => {
+      const k = u < 0.34 ? A.a1 : u < 0.67 ? A.a2 : A.a3;
+      A.cur += (k - A.cur) * 0.08;
+      P.headYaw = A.cur; P.look = A.toCam && u > 0.67 ? 1 : 0; P.earsBack = -0.2;
+    } },
+    sniff: { dur: 4.2, pose: (P, u, t) => {
+      P.neck = 0.95; P.headPitch = 0.25 + Math.sin(t * 31) * 0.025 * (Math.sin(t * 3) > 0 ? 1 : 0);
+      P.headYaw = Math.sin(t * 0.9) * 0.35; P.wag = 0.1; P.wagHz = 6;
+    } },
+    scratch: { dur: 2.6, posture: 'sit', pose: (P, u, t) => {
+      P.headRoll = -0.4; P.headYaw = -0.35; P.eyes = 0.35; P.roll = -0.12;
+      P.legs[3] = V(-0.13, 0.19 + Math.sin(t * 2 * Math.PI * 8) * 0.03, 0.17 + Math.cos(t * 2 * Math.PI * 8) * 0.015);
+    } },
+    stretch: { dur: 3.0, pose: (P, u, t) => {
+      Object.assign(P, { y: -0.1, pitch: -0.5, neck: -0.55, eyes: 0.4, tailDown: -0.2, wag: 0.12, wagHz: 6 });
+      P.legs[0] = V(0.075, 0, 0.47); P.legs[1] = V(-0.075, 0, 0.47);
+      P.jaw = Math.max(0, Math.sin(Math.PI * clamp((u - 0.45) / 0.4, 0, 1))) * 0.9;   // 伸びながらあくび
+    } },
+    yawn: { dur: 1.9, head: true, pose: (P, u) => {
+      const k = Math.sin(Math.PI * u);
+      P.jaw = k * 1.0; P.eyes = 1 - k; P.neck -= 0.3 * k; P.earsBack = 0.6 * k; P.tongue = 0.3 * k;
+    } },
+    dig: { dur: 3.2, pose: (P, u, t, A) => {
+      Object.assign(P, { y: -0.07, pitch: -0.32, neck: 0.55, headPitch: 0.15, wag: 0.14, wagHz: 8, earsBack: 0.2 });
+      for (let i = 0; i < 2; i++) {
+        const w = t * 2 * Math.PI * 3.6 + i * Math.PI;
+        P.legs[i] = V(i ? -0.06 : 0.06, 0.05 + 0.05 * Math.max(0, Math.sin(w)), 0.26 + 0.08 * Math.sin(w));
+      }
+      A.emit = 'dirt';
+    } },
+    shake: { dur: 1.35, pose: (P, u, t, A) => {
+      const env = wave(u, 0.12, 0.7), w = t * 2 * Math.PI * 7.5;
+      P.roll = Math.sin(w) * 0.38 * env; P.headYaw = Math.sin(w + 0.9) * 0.5 * env; P.headRoll = Math.sin(w + 0.6) * 0.4 * env;
+      P.earsBack = 0.5 * env; P.eyes = 1 - 0.7 * env;
+      A.emit = env > 0.3 ? 'drops' : null;
+    } },
+    roll: { dur: 5.0, pose: (P, u, t) => {
+      const down = smooth(0, 0.15, u) * (1 - smooth(0.85, 1, u));
+      const over = smooth(0.15, 0.32, u) * (1 - smooth(0.72, 0.88, u));
+      Object.assign(P, { y: -0.225 * down + 0.03 * over, roll: over * (2.5 + Math.sin(t * 5) * 0.25), neck: -0.2, headYaw: over * -0.8,
+        jaw: over * 0.35, tongue: over * 0.7, wag: 0.25, wagHz: 9, eyes: 1 - over * 0.3 });
+      if (down > 0.01) {
+        const kick = i => Math.sin(t * 2 * Math.PI * 2.2 + i * 1.7) * 0.05 * over;
+        const up = 0.33 * over;
+        P.legs = [V(0.075, up + kick(0), 0.4 - over * 0.15), V(-0.075, up + kick(1), 0.4 - over * 0.15),
+                  V(0.15 - over * 0.05, up + kick(2), -0.06), V(-0.15 + over * 0.05, up + kick(3), -0.06)];
+      }
+    } },
+    drink: { dur: 4.5, pose: (P, u, t) => {
+      Object.assign(P, { neck: 1.15, headPitch: 0.35, pitch: -0.1, y: -0.05, earsBack: 0.2 });
+      P.jaw = 0.18 + 0.12 * Math.abs(Math.sin(t * 2 * Math.PI * 2.6)); P.tongue = 0.6;
+    } },
+    paw: { dur: 2.8, posture: 'sit', pose: (P, u, t) => {
+      P.legs[0] = V(0.06, 0.16 + Math.sin(t * 2 * Math.PI * 1.4) * 0.015, 0.34); P.look = 1; P.headRoll = 0.22; P.wag = 0.22; P.wagHz = 9;
+      P.roll = -0.06;
+    } },
+    refuse: { dur: 2.1, pose: (P, u, t, A) => {
+      Object.assign(P, { y: -0.07, z: -0.07, pitch: 0.24, neck: -0.15, headYaw: 0.65 * A.dir, earsBack: 0.85, wag: 0, tailDown: 0.25 });
+      P.legs = [V(0.08, 0, 0.32), V(-0.08, 0, 0.32), V(0.08, 0, -0.22), V(-0.08, 0, -0.22)];
+    } },
+    zoom: { dur: 5.5, pose: (P) => { P.earsBack = 0.9; P.tailDown = 0.2; P.jaw = 0.25; P.tongue = 0.4; } },
+  };
+
+  // ----- 粒（水しぶき・土） -----
+  const NP = 220, pPos = new Float32Array(NP * 3).fill(-999), pCol = new Float32Array(NP * 3), pVel = new Float32Array(NP * 3), pLife = new Float32Array(NP);
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+  const points = new THREE.Points(pGeo, new THREE.PointsMaterial({ size: 0.028, vertexColors: true }));
+  points.frustumCulled = false;
+  let pNext = 0;
+  const emit = (p, v, col) => {
+    const i = pNext; pNext = (pNext + 1) % NP;
+    pPos.set([p.x, p.y, p.z], i * 3); pVel.set([v.x, v.y, v.z], i * 3); pCol.set(col, i * 3); pLife[i] = 0.9 + Math.random() * 0.5;
+  };
+  const DROP = [0.75, 0.84, 0.92], DIRT = [0.3, 0.21, 0.13];
+  function updateParticles(dt) {
+    for (let i = 0; i < NP; i++) {
+      if (pLife[i] <= 0) continue;
+      pLife[i] -= dt;
+      pVel[i * 3 + 1] -= 9.8 * dt;
+      for (let k = 0; k < 3; k++) pPos[i * 3 + k] += pVel[i * 3 + k] * dt;
+      if (pLife[i] <= 0 || pPos[i * 3 + 1] < H(pPos[i * 3], pPos[i * 3 + 2]) - 0.05) { pLife[i] = 0; pPos[i * 3 + 1] = -999; }
+    }
+    pGeo.attributes.position.needsUpdate = true; pGeo.attributes.color.needsUpdate = true;
+  }
+
+  // ----- 鳴き声（合成） -----
+  let actx = null;
+  function barkSound() {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const t0 = actx.currentTime;
+      for (const d of [0, 0.24]) {
+        const t = t0 + d;
+        const o = actx.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(560, t); o.frequency.exponentialRampToValueAtTime(300, t + 0.13);
+        const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 1.2;
+        const g = actx.createGain();
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+        o.connect(f).connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.18);
+      }
+    } catch (e) { /* 音が出せない環境では黙っている */ }
+  }
+
+  // ----- 状態 -----
+  const S = {
+    posture: 'stand', pw: { sit: 0, down: 0, sleep: 0 }, postureT: 0,
+    act: null, actT: 0, actW: 0, actData: {}, lastAct: null, fadeAct: null,
+    bark: -1, blinkT: 2, blink: 0, idleT: 0, nextIdle: 2.5, stillT: 0,
+    wet: 0, fatigue: 0, outOfWaterT: 0, faceYaw: null, auto: null, block: false,
+    prevYaw: 0, yawRate: 0, prevSpeed: 0, accel: 0, air: 0,
+    headYaw: 0, look: 0,
+  };
+  const start = (name, data = {}) => {
+    S.act = name; S.actT = 0; S.actData = data; S.lastAct = name; S.fadeAct = name;
+    const pst = ACTIONS[name].posture;
+    if (pst) S.posture = pst;
+    else if (!ACTIONS[name].head) S.posture = 'stand';
+  };
+  const pick = list => {
+    let sum = 0; for (const [, w] of list) sum += w;
+    let r = Math.random() * sum;
+    for (const [n, w] of list) { if ((r -= w) <= 0) return n; }
+    return list[0][0];
+  };
+
+  // 何をするかを決める（毎フレーム）。user＝プレイヤーが動かしているか
+  function think(user, dt, t, st, camPos) {
+    const inWater = Math.abs(st.x - streamX(st.z)) < 1.8;
+    if (inWater) { S.wet = 1; S.outOfWaterT = 0; if (S.posture !== 'stand') { S.posture = 'stand'; S.postureT = 0; } }   // 川の中では座らない・伏せない
+    else S.outOfWaterT += dt;
+    S.fatigue = clamp(S.fatigue + (st.speed > 4 ? 0.06 : -0.025) * dt, 0, 1);
+    S.block = false; S.auto = null; S.faceYaw = null;
+
+    // 長く座って・伏せていたのに急に動かされると、踏ん張って嫌がる（柴の散歩拒否）
+    if (user && S.posture !== 'stand' && S.postureT > 5 && S.act !== 'refuse' && st.jumpY === 0) {
+      if (Math.random() < 0.35) start('refuse', { dir: Math.random() < 0.5 ? 1 : -1 });
+      else { S.posture = 'stand'; if (S.act && !ACTIONS[S.act].head) S.act = null; }
+    }
+    if (S.act === 'refuse') S.block = true;
+    else if (user) {
+      if (S.act === 'zoom' || (S.act && !ACTIONS[S.act].head)) S.act = null;
+      S.posture = 'stand';
+    }
+
+    // ズーミー：プレイヤーの代わりに大きな円を描いて全力で走る
+    if (S.act === 'zoom' && !user) {
+      const d = S.actData;
+      d.heading = (d.heading ?? st.yaw) + d.turn * (S.actT > 2.7 ? -1 : 1) * 1.7 * dt;
+      S.auto = { mag: 1, yaw: d.heading };
+    }
+
+    const still = st.speed < 0.15 && st.jumpY === 0 && !user;
+    S.stillT = still ? S.stillT + dt : 0;
+    S.postureT = S.posture === 'stand' ? 0 : S.postureT + dt;
+
+    // 濡れたら、川から上がって少しして体をブルブル振る
+    if (S.wet > 0.5 && !inWater && S.outOfWaterT > 0.5 && st.jumpY === 0 && S.act !== 'shake' && S.act !== 'refuse' && !user) {
+      start('shake'); S.wet = 0.99;
+    }
+    // お手は、まずカメラの方へ向き直る
+    if (S.act === 'paw') S.faceYaw = Math.atan2(camPos.x - st.x, camPos.z - st.z);
+
+    if (S.act) {
+      S.actT += dt;
+      if (S.actT >= ACTIONS[S.act].dur) {
+        if (S.act === 'shake') S.wet = 0;
+        S.act = null; S.idleT = 0; S.nextIdle = 1.5 + Math.random() * 3;
+      }
+    } else if (still) {
+      // 何もしていない時に、自分で次の仕草を選ぶ
+      S.idleT += dt;
+      if (S.posture === 'sit' && S.postureT > 14) { S.posture = 'down'; S.postureT = 0.01; }
+      else if (S.posture === 'down' && S.postureT > 22) { S.posture = 'sleep'; S.postureT = 0.01; }
+      if (S.idleT > S.nextIdle && S.posture !== 'sleep') {
+        S.idleT = 0; S.nextIdle = 2.5 + Math.random() * 4;
+        const list = [['look', 3], ['yawn', 0.8]];
+        if (inWater) list.push(['sniff', 1.5], ['drink', 4]);                     // 川の中で掘ったり転がったりはしない
+        else if (S.posture === 'stand') {
+          list.push(['sniff', 3], ['sit', 2.4], ['stretch', 1], ['dig', 0.8], ['roll', 0.5]);
+          if (S.stillT > 8) list.push(['zoom', 0.5], ['down', 0.8]);
+        }
+        if (S.posture === 'sit') list.push(['scratch', 1.2], ['down', 0.6]);
+        const n = pick(list.filter(([k]) => k !== S.lastAct || k === 'look'));
+        if (n === 'sit' || n === 'down') { S.posture = n; S.postureT = 0.01; S.lastAct = n; }
+        else if (n === 'zoom') start('zoom', { turn: Math.random() < 0.5 ? 1 : -1 });
+        else start(n);
+      }
+    } else S.idleT = 0;
+  }
+
+  // ボタンからの指示
+  function command(c) {
+    if (c === 'bark') { S.bark = 0; barkSound(); return; }
+    if (S.act === 'refuse') return;
+    S.act = null; S.idleT = 0; S.nextIdle = 4 + Math.random() * 3;
+    if (c === 'sit' || c === 'down') { S.posture = c; S.postureT = 0.01; }
+    if (c === 'paw') start('paw');
+  }
+
+  // 形と動き（毎フレーム）
+  const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), camL = new THREE.Vector3();
+  function update(dt, t, st, camPos) {
+    // 速さ・曲がり方・加速
+    const yawRate = dt > 0 ? Math.atan2(Math.sin(st.yaw - S.prevYaw), Math.cos(st.yaw - S.prevYaw)) / dt : 0;
+    S.prevYaw = st.yaw;
+    S.yawRate += (yawRate - S.yawRate) * Math.min(1, dt * 8);
+    const accel = dt > 0 ? (st.speed - S.prevSpeed) / dt : 0; S.prevSpeed = st.speed;
+    S.accel += (accel - S.accel) * Math.min(1, dt * 5);
+    S.air += ((st.jumpY > 0.02 ? 1 : 0) - S.air) * Math.min(1, dt * 12);
+
+    root.position.set(st.x, H(st.x, st.z) + st.jumpY, st.z);
+    root.rotation.y = st.yaw;
+
+    // 歩き方の混ぜ具合（速さで決める。境目で行ったり来たりしないよう少しずらす）
+    const sp = st.speed;
+    const want = sp < (gw.trot > 0.5 ? 1.2 : 1.45) ? 'walk' : sp < (gw.gallop > 0.5 ? 3.7 : 4.1) ? 'trot' : 'gallop';
+    for (const k in gw) gw[k] += ((k === want ? 1 : 0) - gw[k]) * Math.min(1, dt * 5);
+    let duty = 0, freq = 0, lift = 0;
+    const off = [0, 0, 0, 0];
+    {
+      const sx = [0, 0, 0, 0], cx = [0, 0, 0, 0];
+      for (const k in GAITS) {
+        const g = GAITS[k], w = gw[k];
+        duty += g.duty * w; freq += gaitFreq(g, sp) * w; lift += g.lift * w;
+        for (let i = 0; i < 4; i++) { sx[i] += Math.sin(g.off[i] * 2 * Math.PI) * w; cx[i] += Math.cos(g.off[i] * 2 * Math.PI) * w; }
+      }
+      for (let i = 0; i < 4; i++) off[i] = (Math.atan2(sx[i], cx[i]) / (2 * Math.PI) + 1) % 1;
+    }
+    const moving = sp > 0.15 && S.air < 0.5;
+    if (moving) phase = (phase + freq * dt) % 1;
+
+    // 姿勢・仕草を数値の束にまとめる
+    const P = basePose();
+    const run = gw.gallop, trot = gw.trot;
+    const amp = clamp(sp / 1.5, 0, 1);
+    P.y = (-0.008 * gw.walk * Math.cos(4 * Math.PI * phase) - 0.012 * trot * Math.cos(4 * Math.PI * phase) + 0.025 * run * Math.sin(2 * Math.PI * phase)) * amp - 0.04 * run * amp;   // 全力で走る時は体を低くする
+    P.pitch = 0.09 * run * Math.sin(2 * Math.PI * phase + 1.2) * amp - clamp(S.accel * 0.025, -0.15, 0.12);
+    P.flex = 0.17 * run * Math.sin(2 * Math.PI * phase) * amp;                   // 全力で走ると背中が伸び縮みする
+    P.roll = clamp(-S.yawRate * sp * 0.045, -0.3, 0.3);                           // 曲がる時は内側に傾く
+    P.neck = -0.1 * run + 0.08 * trot;
+    P.earsBack = 0.55 * run;
+    P.wag = sp < 0.5 ? 0.14 : 0.05; P.wagHz = sp < 0.5 ? 8 : 5;
+    if (S.fatigue > 0.3 && sp < 4.5) { const k = smooth(0.3, 0.6, S.fatigue); P.jaw = 0.42 * k; P.tongue = k; P.breath = k; }   // 走った後はハアハア
+    for (const k in S.pw) {
+      S.pw[k] += ((S.posture === k ? 1 : 0) - S.pw[k]) * Math.min(1, dt * 3);
+      if (S.pw[k] > 0.001) { const Q = basePose(); Object.assign(Q, { jaw: P.jaw, tongue: P.tongue, breath: P.breath }); POSTURES[k](Q, t); lerpPose(P, Q, S.pw[k]); }
+    }
+    S.actW += ((S.act ? 1 : 0) - S.actW) * Math.min(1, dt * 4);
+    if (S.act || S.actW > 0.01) {
+      const name = S.act ?? S.fadeAct, A = ACTIONS[name];
+      if (name === 'look' && S.actT < dt * 1.5) Object.assign(S.actData, { a1: (Math.random() - 0.5) * 1.6, a2: (Math.random() - 0.5) * 1.6, a3: (Math.random() - 0.5) * 0.6, cur: 0, toCam: Math.random() < 0.6 });
+      const Q = JSON.parse(JSON.stringify({ ...P, legs: null })); Q.legs = P.legs.map(l => null);
+      A.pose(Q, clamp(S.actT / A.dur, 0, 1), t, S.actData);
+      lerpPose(P, Q, S.actW);
+    }
+    // ほえる（何をしていても重ねる）
+    if (S.bark >= 0) {
+      S.bark += dt;
+      const u = S.bark / 0.75;
+      if (u >= 1) S.bark = -1;
+      else { const k = Math.max(0, Math.sin(Math.PI * ((u * 2) % 1))) * (u < 1 ? 1 : 0); P.jaw = Math.max(P.jaw, 0.75 * k); P.neck -= 0.12 * k; P.earsBack = Math.min(P.earsBack, -0.2); P.eyes = Math.min(P.eyes, 1 - 0.3 * k); }
+    }
+    // まばたき
+    S.blinkT -= dt;
+    if (S.blinkT < 0) { S.blink = 0.13; S.blinkT = 2 + Math.random() * 4; }
+    if (S.blink > 0) { S.blink -= dt; P.eyes = 0; }
+
+    // ----- 骨組みに当てはめる -----
+    const fwdX = Math.sin(st.yaw), fwdZ = Math.cos(st.yaw);
+    const gRoot = H(st.x, st.z);
+    const slope = Math.atan2(H(st.x + fwdX * 0.2, st.z + fwdZ * 0.2) - H(st.x - fwdX * 0.2, st.z - fwdZ * 0.2), 0.4);
+    body.position.set(0, STAND_Y + P.y + P.breath * 0.006 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22)), P.z);
+    body.rotation.set(-(P.pitch + slope * 0.85), 0, P.roll);
+    front.rotation.set(-P.flex * 0.5, clamp(S.yawRate * 0.05, -0.2, 0.2), 0);
+    rear.rotation.set(P.flex * 0.5, clamp(-S.yawRate * 0.05, -0.2, 0.2), 0);
+    front.scale.y = 1 + P.breath * 0.025 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22));
+    // カメラの方を見る
+    root.updateMatrixWorld(true);
+    root.worldToLocal(camL.copy(camPos));
+    const camYawL = clamp(Math.atan2(camL.x, camL.z), -1.2, 1.2);
+    const hy = P.headYaw + (camYawL - P.headYaw) * P.look;
+    S.headYaw += (hy - S.headYaw) * Math.min(1, dt * 6);
+    neck.rotation.set(P.neck + (P.pitch + slope * 0.85) * 0.75 + P.flex * 0.3, S.headYaw * 0.55, 0);
+    head.rotation.set(P.headPitch, S.headYaw * 0.45, P.headRoll);
+    jaw.rotation.x = P.jaw * 0.55;
+    tongue.position.set(0, 0.004 - P.tongue * 0.012, 0.07 + P.tongue * 0.03);
+    tongue.scale.set(0.033, 0.01, 0.055 + P.tongue * 0.03);
+    eyes.forEach(e => { e.scale.y = 0.019 * Math.max(0.08, P.eyes); });
+    ears.forEach(e => { e.rotation.x = 0.12 - P.earsBack * 0.6 + (S.act === 'shake' ? Math.sin(t * 50) * 0.3 * S.actW : 0); });
+    tail.rotation.set(-P.tailDown * 0.7, 0, 0.45 + Math.sin(t * P.wagHz) * P.wag);
+    // 濡れると毛が暗くなる
+    for (const f of fur) f.m.color.copy(f.base).multiplyScalar(1 - 0.28 * S.wet);
+    root.updateMatrixWorld(true);
+
+    // ----- 足の位置 -----
+    const vx = fwdX * sp, vz = fwdZ * sp;
+    const anySwing = feet.some(f => f.swing);
+    let worst = 0;
+    feet.forEach((F, i) => {
+      if (!F.init) { neutralW(i, st.x, st.z, st.yaw, F.plant); F.foot.copy(F.plant); F.init = true; }
+      if (S.air > 0.5) {                                          // 跳んでいる間：前脚は前へ、後脚は後ろへたたむ
+        F.swing = false;
+        tmp.set(NEUTRAL[i][0], 0.1, NEUTRAL[i][1] + (i < 2 ? 0.08 : -0.1));
+        F.foot.copy(root.localToWorld(tmp));
+        F.plant.set(F.foot.x, H(F.foot.x, F.foot.z) + FOOT_UP, F.foot.z);   // 着地したらその真下に足を置く
+        return;
+      }
+      if (moving) {
+        const p = (phase - off[i] + 1) % 1;                       // この脚の1歩の中での位置
+        const swingNow = p >= duty;
+        if (swingNow) {
+          if (!F.swing) { F.swing = true; F.lift.copy(F.plant); }
+          F.s = (p - duty) / (1 - duty);
+          const lead = (1 - F.s) * (1 - duty) / freq + 0.5 * duty / freq;   // 着地する頃に体がいる位置の、ちょうど真下＋半歩先へ
+          neutralW(i, st.x + vx * lead, st.z + vz * lead, st.yaw + S.yawRate * lead, tmp);
+          F.foot.lerpVectors(F.lift, tmp, ease(F.s));
+          F.foot.y = H(F.foot.x, F.foot.z) + FOOT_UP + Math.sin(Math.PI * F.s) * lift * (0.5 + 0.5 * amp);
+        } else {
+          if (F.swing) { F.swing = false; F.plant.set(F.foot.x, H(F.foot.x, F.foot.z) + FOOT_UP, F.foot.z); }
+          F.foot.copy(F.plant);
+        }
+      } else {
+        // 止まっている時：ずれた足だけ一歩ずつ置き直す（向きを変えた時など）
+        neutralW(i, st.x, st.z, st.yaw, tmp);
+        if (F.swing) {
+          F.s = Math.min(1, F.s + dt / 0.26);
+          F.foot.lerpVectors(F.lift, tmp, ease(F.s));
+          F.foot.y = H(F.foot.x, F.foot.z) + FOOT_UP + Math.sin(Math.PI * F.s) * 0.04;
+          if (F.s >= 1) { F.swing = false; F.plant.copy(tmp); }
+        } else {
+          const err = Math.hypot(F.plant.x - tmp.x, F.plant.z - tmp.z);
+          if (err > worst) worst = err;
+          if (err > 0.07 && !anySwing && !feet.some(g => g.swing)) { F.swing = true; F.s = 0; F.lift.copy(F.plant); }
+          F.foot.copy(F.plant);
+        }
+      }
+    });
+    // 姿勢・仕草で決まった足の位置と混ぜる
+    feet.forEach((F, i) => {
+      const o = P.legs[i];
+      let fw = F.foot;
+      if (o && o.w > 0.001) {
+        tmp2.copy(o.v); tmp2.y += 0;
+        const ow = root.localToWorld(tmp2.clone());
+        ow.y += H(ow.x, ow.z) - gRoot - st.jumpY + FOOT_UP;
+        fw = tmp.copy(F.foot).lerp(ow, o.w);
+        if (o.w > 0.98) { F.plant.set(fw.x, H(fw.x, fw.z) + FOOT_UP, fw.z); F.swing = false; }
+      }
+      solveLeg(legs[i], fw);
+    });
+
+    // 粒
+    if (S.act && S.actData.emit === 'drops' && S.wet > 0) {
+      for (let k = 0; k < 4; k++) {
+        const a = Math.random() * Math.PI * 2;
+        tmp.set(Math.cos(a) * 0.15, 0.32 + Math.random() * 0.15, (Math.random() - 0.5) * 0.4); root.localToWorld(tmp);
+        emit(tmp, { x: Math.cos(a) * 2.2 + (Math.random() - 0.5), y: 1 + Math.random() * 1.5, z: Math.sin(a) * 2.2 + (Math.random() - 0.5) }, DROP);
+      }
+    }
+    if (S.act === 'dig' && S.actW > 0.6 && Math.random() < 0.6) {
+      tmp.set((Math.random() - 0.5) * 0.1, 0.03, 0.2); root.localToWorld(tmp);
+      emit(tmp, { x: -fwdX * (1.2 + Math.random()) + (Math.random() - 0.5) * 0.6, y: 1.2 + Math.random() * 1.2, z: -fwdZ * (1.2 + Math.random()) + (Math.random() - 0.5) * 0.6 }, DIRT);
+    }
+    if (S.act) S.actData.emit = null;
+    if (sp > 1 && Math.abs(st.x - streamX(st.z)) < 1.6 && Math.random() < sp * 0.08) {   // 川を走ると水しぶき
+      tmp.set((Math.random() - 0.5) * 0.2, 0, 0.2); root.localToWorld(tmp); tmp.y = waterY(st.z);
+      emit(tmp, { x: (Math.random() - 0.5) * 1.5 + fwdX, y: 1 + Math.random() * 1.4, z: (Math.random() - 0.5) * 1.5 + fwdZ }, DROP);
+    }
+    updateParticles(dt);
+  }
+
+  return { object: root, points, radius: 0.5, think, command, update, state: S, __start: start, __feet: feet, __legs: legs };
+})();
+scene.add(dog.object, dog.points);
+grassU.uDogR.value = dog.radius;
 
 // 足元の接地影（太陽の影とは別に、足元をうっすら暗くする）
 const shadowTex = (() => {
@@ -750,11 +1211,18 @@ canvas.addEventListener('pointercancel', endPointer);
 const jumpBtn = document.getElementById('jump');
 jumpBtn.addEventListener('pointerdown', e => { e.preventDefault(); jumpReq = true; });
 jumpBtn.addEventListener('click', e => { if (e.detail === 0) jumpReq = true; });
+document.querySelectorAll('#acts [data-cmd]').forEach(b => {
+  const run = () => dog.command(b.dataset.cmd);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); run(); });
+  b.addEventListener('click', e => { if (e.detail === 0) run(); });   // キーボード操作
+});
 addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') { jumpReq = true; e.preventDefault(); } });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ---------- 状態 ----------
-const st = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0, vy: 0, idle: 0, sit: 0 };
+const st = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0, vy: 0 };
+const TEST = /[?&]test/.test(location.search);
+let camSnap = false, simT = 0;
 let camYaw = 0;
 const fpsEl = document.getElementById('fps');
 let fpsN = 0, fpsT = 0, hinted = false;
@@ -848,31 +1316,34 @@ function step(dt, t) {
   if (keys.KeyS || keys.ArrowDown) iy -= 1;
   let mag = Math.min(Math.hypot(ix, iy), 1);
   const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
-  const dx = fx * iy - fz * ix, dz = fz * iy + fx * ix;
-  if (mag > 0.08) {
-    st.yaw += angDiff(st.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 7);
-    if (!hinted) { hinted = true; setTimeout(() => hintEl.classList.add('off'), 2500); }
-  } else mag = 0;
+  let dx = fx * iy - fz * ix, dz = fz * iy + fx * ix;
+  const user = mag > 0.08;
+  if (user && !hinted) { hinted = true; setTimeout(() => hintEl.classList.add('off'), 2500); }
+
+  // 犬が何をするか決める（嫌がって踏ん張る・ズーミーで勝手に走る・お手でこちらを向く）
+  dog.think(user, dt, t, st, camera.position);
+  const S = dog.state;
+  let turnRate = 7;
+  if (!user) mag = 0;
+  if (S.block) mag = 0;
+  if (S.auto) { mag = S.auto.mag; dx = Math.sin(S.auto.yaw); dz = Math.cos(S.auto.yaw); turnRate = 5; }
+  if (mag > 0) st.yaw += angDiff(st.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * turnRate);
+  else if (S.faceYaw !== null) st.yaw += angDiff(st.yaw, S.faceYaw) * Math.min(1, dt * 2.5);
   const inWater = Math.abs(st.x - streamX(st.z)) < 1.8;
-  const target = mag * (inWater ? 3.2 : 6.5);           // 川の中は水を分けて進むので遅い
-  st.speed += (target - st.speed) * Math.min(1, dt * (target > st.speed ? 2.5 : 4));
+  const target = mag * (inWater ? 3.0 : 5.8);           // 川の中は水を分けて進むので遅い
+  st.speed += (target - st.speed) * Math.min(1, dt * (target > st.speed ? 2.2 : 3.5));
   st.x += Math.sin(st.yaw) * st.speed * dt;
   st.z += Math.cos(st.yaw) * st.speed * dt;
 
   // ジャンプ
-  if (jumpReq && st.jumpY <= 0.001) { st.vy = 3.6; st.sit = Math.min(st.sit, 0.3); st.idle = 0; }
+  if (jumpReq && st.jumpY <= 0.001 && !S.block) { st.vy = 3.6; S.posture = 'stand'; if (S.act && S.act !== 'zoom') S.act = null; }
   jumpReq = false;
   st.vy -= 12 * dt; st.jumpY = Math.max(0, st.jumpY + st.vy * dt);
   if (st.jumpY === 0) st.vy = 0;
 
-  // 止まってしばらくすると座る
-  st.idle = st.speed < 0.15 && st.jumpY === 0 ? st.idle + dt : 0;
-  st.sit += ((st.idle > 2.5 ? 1 : 0) - st.sit) * Math.min(1, dt * 4);
-
-  dogView.update(st, dt, t);
+  dog.update(dt, t, st, camera.position);
   const gy = H(st.x, st.z);
-  dogView.object.position.set(st.x, gy + st.jumpY, st.z);
-  dogView.object.rotation.y = st.yaw;
+  const settled = S.pw.sit + S.pw.down + S.pw.sleep;   // 座る・伏せる時はカメラを少し寄せる
   contact.position.set(st.x, gy + 0.01, st.z);
   const cs = 0.7 / (1 + st.jumpY * 2);
   contact.scale.set(cs * 0.6, cs, 1);
@@ -885,10 +1356,11 @@ function step(dt, t) {
   // カメラ：後ろから追う（なぞって回した直後は追わない）
   const run = smooth(2.5, 4.8, st.speed);
   if (st.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, st.yaw) * Math.min(1, dt * 1.6);
-  const dist = 2.7 + run * 0.5 - st.sit * 0.4, ch = 1.0 + run * 0.15;
+  const dist = 2.7 + run * 0.5 - Math.min(settled, 1) * 0.4, ch = 1.0 + run * 0.15;
   const cx = st.x - Math.sin(camYaw) * dist, cz = st.z - Math.cos(camYaw) * dist;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
-  camera.position.lerp(camGoal.set(cx, cy, cz), Math.min(1, dt * 6));
+  camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
+  camSnap = false;
   camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
   // 周りの物を犬に合わせて巻き戻す
@@ -917,7 +1389,7 @@ camera.lookAt(st.x, H(st.x, st.z) + 0.42, st.z);
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
-  step(dt, t);
+  if (!TEST) step(dt, t);   // 確認用（?test）は時間を手で進める
   renderer.render(scene, camera);
   if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
   fpsN++;
@@ -926,7 +1398,8 @@ function frame() {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__shiba = { st, input, keys, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__step = d => { simT += d; step(d, simT); };
+window.__shiba = { snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
