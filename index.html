@@ -26,6 +26,7 @@
     top: calc(env(safe-area-inset-top, 0px) + 10px); left: max(12px, env(safe-area-inset-left, 0px));
     font-size: 13px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0,0,0,.5); opacity: .85;
   }
+  #credit { position: fixed; right: 8px; bottom: 4px; font-size: 9px; color: rgba(255,255,255,.75); text-shadow: 0 0 3px rgba(0,0,0,.6); }
   #hint {
     top: calc(env(safe-area-inset-top, 0px) + 44px); left: 50%; transform: translateX(-50%);
     background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 999px;
@@ -63,7 +64,8 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v22 · -- fps</div>
+<div id="fps" class="ui">v23 · -- fps</div>
+<div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +88,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v22';
+const VERSION = 'v23';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -103,20 +105,43 @@ const SHADOW_BOX = 9;
 
 const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 
+// 町（?town）：実在の住宅地の起伏・建物・道路・池。assets/town.json は中心からの距離(m)だけで、地名や緯度経度は持たない
+// 元データ：国土地理院（標高タイル・ベクトルタイル）、© OpenStreetMap contributors（林）
+const TOWN = /[?&]town/.test(location.search) ? await (await fetch('assets/town.json')).json() : null;
+let townH = null;
+if (TOWN) {
+  const raw = Uint8Array.from(atob(TOWN.height), c => c.charCodeAt(0));
+  townH = Float32Array.from(new Int16Array(raw.buffer), v => v * TOWN.hScale);
+}
+function townHeight(x, z) {   // 標高の格子を双線形で読む（範囲の外は端の値）
+  const n = TOWN.n, fx = Math.min(Math.max((x + TOWN.half) / TOWN.step, 0), n - 1.001), fz = Math.min(Math.max((z + TOWN.half) / TOWN.step, 0), n - 1.001);
+  const i = Math.floor(fx), j = Math.floor(fz), ax = fx - i, az = fz - j, k = j * n + i;
+  return (townH[k] * (1 - ax) + townH[k + 1] * ax) * (1 - az) + (townH[k + n] * (1 - ax) + townH[k + n + 1] * ax) * az;
+}
+
 // 地形・小川・小道・ヒース畑（JS と GLSL で同じ式。どちらかを変えたら両方変える）
 function Hb(x, z) {
   return Math.sin(x * 0.045) * 1.6 + Math.cos(z * 0.038) * 1.4
        + Math.sin((x + z) * 0.09) * 0.5 + Math.sin(x * 0.17 - z * 0.13) * 0.18;
 }
-const streamX = z => 32 + Math.sin(z * 0.021) * 14 + Math.sin(z * 0.057 + 1.3) * 5;
-const pathX = z => Math.sin(z * 0.03) * 6 + Math.sin(z * 0.071 + 0.5) * 2.5;
+const streamX = TOWN ? () => 1e5 : z => 32 + Math.sin(z * 0.021) * 14 + Math.sin(z * 0.057 + 1.3) * 5;   // 町には小川と小道がない
+const pathX = TOWN ? () => 1e5 : z => Math.sin(z * 0.03) * 6 + Math.sin(z * 0.071 + 0.5) * 2.5;
 function H(x, z) {   // 小川の近くは谷底の高さにならし、川筋を掘る
+  if (TOWN) return townHeight(x, z);
   const sx = streamX(z), ds = Math.abs(x - sx);
   const w = 1 - smooth(2, 5, ds);
   return Hb(x, z) * (1 - w) + Hb(sx, z) * w - 0.75 * (1 - smooth(0.9, 2.8, ds));
 }
 const waterY = z => Hb(streamX(z), z) - 0.37;
-const FIELD_GLSL = `
+const FIELD_GLSL = TOWN ? `
+uniform sampler2D uTownH, uTownMask; uniform vec3 uTownXf;   // x=標高格子の半幅 y=格子の点数 z=塗り分けの半幅
+float H(vec2 p){ return texture2D(uTownH, ((p + uTownXf.x) / (2.0*uTownXf.x) * (uTownXf.y - 1.0) + 0.5) / uTownXf.y).r; }
+float streamX(float z){ return 1e5; }
+float pathX(float z){ return 1e5; }
+float heather(vec2 p){ return 0.0; }
+vec4 townMask(vec2 p){ return texture2D(uTownMask, (p + uTownXf.z) / (2.0*uTownXf.z)); }   // r=道路 g=家の周り b=水
+` : `
+vec4 townMask(vec2 p){ return vec4(0.0); }
 float Hb(vec2 p){
   return sin(p.x*0.045)*1.6 + cos(p.y*0.038)*1.4
        + sin((p.x+p.y)*0.09)*0.5 + sin(p.x*0.17-p.y*0.13)*0.18;
@@ -131,6 +156,57 @@ float H(vec2 p){
 float heather(vec2 p){
   return smoothstep(0.25, 0.6, sin(p.x*0.071 + sin(p.y*0.05)*2.0) * cos(p.y*0.063 + sin(p.x*0.043)*1.5));
 }`;
+
+// 町の標高と塗り分けをテクスチャにして GPU へ渡す。塗り分けは 0.5m 刻み：r=道路 g=家の周り b=水。
+// 同じ大きさで「入れない所」（建物・水・範囲外）の表も作り、犬とカメラがめり込まないようにする
+const TOWN_PX = 0.5;
+const townU = { uTownH: { value: null }, uTownMask: { value: null }, uTownXf: { value: new THREE.Vector3() } };
+let townOcc = null, townMaskData = null, townMaskN = 0;
+const ringOf = flat => { const r = []; for (let i = 0; i < flat.length; i += 2) r.push([flat[i], flat[i + 1]]); return r; };
+if (TOWN) {
+  const n = TOWN.n, hh = new Uint16Array(n * n);
+  for (let k = 0; k < n * n; k++) hh[k] = THREE.DataUtils.toHalfFloat(townH[k]);
+  const ht = new THREE.DataTexture(hh, n, n, THREE.RedFormat, THREE.HalfFloatType);
+  ht.magFilter = ht.minFilter = THREE.LinearFilter; ht.needsUpdate = true;
+  townU.uTownH.value = ht;
+  const MH = TOWN.half, N = townMaskN = Math.round(2 * MH / TOWN_PX);
+  const toPx = ([x, z]) => [(x + MH) / TOWN_PX, (z + MH) / TOWN_PX];
+  const cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#000'; c.fillRect(0, 0, N, N);
+  c.globalCompositeOperation = 'lighter'; c.lineCap = c.lineJoin = 'round';
+  const path = (pts, close) => { c.beginPath(); pts.forEach((p, i) => { const [u, v] = toPx(p); i ? c.lineTo(u, v) : c.moveTo(u, v); }); if (close) c.closePath(); };
+  c.strokeStyle = c.fillStyle = '#00ff00'; c.lineWidth = 2.4 / TOWN_PX;            // 家の周り（犬走り・駐車場）
+  for (const b of TOWN.bld) { path(ringOf(b.p), true); c.fill(); c.stroke(); }
+  c.strokeStyle = '#ff0000';
+  for (const r of TOWN.road) { c.lineWidth = r.w / TOWN_PX; path(ringOf(r.p)); c.stroke(); }
+  c.fillStyle = c.strokeStyle = '#0000ff'; c.lineWidth = 2 / TOWN_PX;
+  for (const w of TOWN.water) { path(ringOf(w), true); c.fill(); }
+  for (const r of TOWN.river) { path(ringOf(r)); c.stroke(); }
+  townMaskData = c.getImageData(0, 0, N, N).data;
+  const mt = new THREE.CanvasTexture(cv);
+  mt.flipY = false; mt.colorSpace = THREE.NoColorSpace; mt.generateMipmaps = false; mt.minFilter = THREE.LinearFilter;
+  townU.uTownMask.value = mt;
+  townU.uTownXf.value.set(TOWN.half, n, MH);
+  // 入れない所
+  const oc = document.createElement('canvas'); oc.width = oc.height = N;
+  const o = oc.getContext('2d');
+  o.fillStyle = '#fff';
+  for (const b of TOWN.bld) { o.beginPath(); ringOf(b.p).forEach((p, i) => { const [u, v] = toPx(p); i ? o.lineTo(u, v) : o.moveTo(u, v); }); o.closePath(); o.fill(); }
+  for (const w of TOWN.water) { o.beginPath(); ringOf(w).forEach((p, i) => { const [u, v] = toPx(p); i ? o.lineTo(u, v) : o.moveTo(u, v); }); o.closePath(); o.fill(); }
+  const od = o.getImageData(0, 0, N, N).data;
+  townOcc = new Uint8Array(N * N);
+  for (let k = 0; k < N * N; k++) townOcc[k] = od[k * 4] > 100 ? 1 : 0;
+}
+const townCell = (x, z) => {
+  const i = Math.floor((x + TOWN.half) / TOWN_PX), j = Math.floor((z + TOWN.half) / TOWN_PX);
+  return i < 0 || j < 0 || i >= townMaskN || j >= townMaskN ? -1 : j * townMaskN + i;
+};
+const townBlocked = (x, z) => {
+  if (Math.abs(x) > TOWN.area || Math.abs(z) > TOWN.area) return true;   // 町の範囲の外へは出ない
+  const k = townCell(x, z); return k < 0 || townOcc[k] === 1;
+};
+const townRoad = (x, z) => { const k = townCell(x, z); return k < 0 ? 0 : townMaskData[k * 4] / 255; };
 
 // ---------- renderer / scene ----------
 const canvas = document.getElementById('c');
@@ -242,7 +318,7 @@ const groundTexU = {
 };
 const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
 groundMat.onBeforeCompile = sh => {
-  Object.assign(sh.uniforms, groundTexU);
+  Object.assign(sh.uniforms, groundTexU, townU);
   sh.vertexShader = 'varying vec2 vGW;\n' + FIELD_GLSL + '\n' + sh.vertexShader
     .replace('#include <beginnormal_vertex>', `
       vec2 gw = (modelMatrix * vec4(position, 1.0)).xz;
@@ -266,6 +342,13 @@ groundMat.onBeforeCompile = sh => {
       g = mix(g, texture2D(tPath, p*0.5).rgb * vec3(1.35, 1.25, 1.1), 1.0 - smoothstep(0.55, 1.05, dp)); // 土の小道
       float ds = abs(p.x - streamX(p.y));
       g = mix(g, texture2D(tBed, p*0.45).rgb * 0.7, 1.0 - smoothstep(1.4, 2.3, ds));   // 川床の濡れた石
+      vec4 tm = townMask(p);                                                            // 町：道路・家の周り・水辺
+      vec3 yard = texture2D(tPath, p*0.6).rgb;
+      yard = mix(yard, vec3(dot(yard, vec3(0.33))) * 1.25, 0.65);                      // 砂利と土間コンクリート
+      g = mix(g, yard, tm.g * (1.0 - tm.r));
+      float grain = dot(texture2D(tPath, p*0.35).rgb, vec3(0.33));
+      g = mix(g, vec3(0.05, 0.051, 0.055) * (0.7 + 1.3*grain), tm.r);                  // アスファルト
+      g = mix(g, texture2D(tBed, p*0.45).rgb * 0.55, tm.b * (1.0 - tm.r));
       return g;
     }
     ` + sh.fragmentShader
@@ -373,6 +456,7 @@ const bladeSet = (count, size, spread) => {
   return g;
 };
 const grassU = {
+  ...townU,
   uTime: { value: 0 }, uSize: { value: PATCH }, uCenter: { value: new THREE.Vector2() },
   uInner: { value: -100 }, uWide: { value: 1 }, uLod: { value: 9 }, uDbg: { value: new THREE.Color(AB.includes('d') ? 0xff2020 : 0) },
   uDog: { value: new THREE.Vector3() }, uDogR: { value: 0.5 }, uFogColor: { value: FOG_COLOR },
@@ -413,6 +497,7 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMate
       float dp = abs(base.x - pathX(base.y)), ds = abs(base.x - streamX(base.y));
       float h = (0.1 + 0.34*pow(fract(r*7.13), 1.6)) * edge
               * smoothstep(0.45, 1.2, dp) * smoothstep(1.7, 2.5, ds)   // 小道と川には生やさない
+              * (1.0 - min(1.0, dot(townMask(base).rgb, vec3(1.3))))   // 町の道路・家の周り・水にも
               * (1.0 - 0.25*he);
       vHe = he;
       float w = (0.016 + 0.016*fract(r*3.71)) * uWide * widen;
@@ -542,7 +627,7 @@ const rng = seed => { let s = seed >>> 0; return () => (s = (s * 1664525 + 10139
     sh.vertexShader = 'uniform float uTime; uniform vec2 uDog; varying float vFadeT;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
       #include <begin_vertex>
       vec2 tOff = modelMatrix[3].xz - uDog;
-      vFadeT = 1.0 - smoothstep(${(TREE_AREA * 0.36).toFixed(1)}, ${(TREE_AREA * 0.48).toFixed(1)}, max(abs(tOff.x), abs(tOff.y)));
+      vFadeT = 1.0 - smoothstep(${TOWN ? '120.0' : (TREE_AREA * 0.36).toFixed(1)}, ${TOWN ? '160.0' : (TREE_AREA * 0.48).toFixed(1)}, max(abs(tOff.x), abs(tOff.y)));   // 町の木は動かさないので遠くまで見せる
       ${wind ? `
       float ph = modelMatrix[3].x * 0.37 + modelMatrix[3].z * 0.23;          // 葉先が風でそよぐ
       transformed.x += sin(uTime * 1.9 + position.y * 1.3 + ph) * 0.035 * position.y / 4.0;
@@ -626,7 +711,7 @@ const rng = seed => { let s = seed >>> 0; return () => (s = (s * 1664525 + 10139
     buildTree({ seed: 41, trunkLen: 1.8, trunkRad: 0.14, depth: 3, spread: 0.75, lift: 0.15, shrink: 0.72, card: 1.3, cards: 5, bark: barkDark, leaves: autumnLeaves }),
   ];
   const pick = [0, 1, 0, 1, 2, 2, 0, 1, 3, 2];
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < (TOWN ? 110 : 40); i++) {
     const g = templates[pick[i % pick.length]].clone();
     const s = 0.8 + Math.random() * 0.45;
     g.scale.set(s, s * (0.9 + Math.random() * 0.25), s);
@@ -636,6 +721,162 @@ const rng = seed => { let s = seed >>> 0; return () => (s = (s * 1664525 + 10139
   }
 }
 const wrap = (v, c, size) => ((((v - c + size / 2) % size) + size) % size) + c - size / 2;
+
+// ---------- 町の家（建物の輪郭を立ち上げ、四角に近い家には切妻か寄棟の屋根を載せる） ----------
+// 高さと屋根の形は元データに無いので推定：普通の家は2階建てが多め、堅ろう建物は3階、壁の無い建物（車庫・物置）は低く平ら
+if (TOWN) {
+  const r = rng(11);
+  const WALLS = ['#e9e3d4', '#ddd0b6', '#f1eee6', '#c9bfae', '#b9ad98', '#d8c6a4', '#a9a49b', '#cdbfa8', '#8f8679', '#e2d9c6', '#9c8f7c', '#c4c8c6'];
+  const ROOFS = ['#3c4148', '#4a4f57', '#5b4a3e', '#3f4f63', '#6b3b2e', '#555a5e', '#2f3337', '#48443f'];
+  const W = { pos: [], uv: [], col: [] }, Rf = { pos: [], uv: [], col: [] };
+  const col = new THREE.Color();
+  const tri = (m, a, b, c, ua, ub, uc, cl) => {
+    m.pos.push(...a, ...b, ...c); m.uv.push(...ua, ...ub, ...uc);
+    for (let i = 0; i < 3; i++) m.col.push(cl.r, cl.g, cl.b);
+  };
+  const quad = (m, a, b, c, d, ua, ub, uc, ud, cl) => { tri(m, a, b, c, ua, ub, uc, cl); tri(m, a, c, d, ua, uc, ud, cl); };
+  // 凸包と最小外接長方形（屋根の向きと大きさを決める）
+  const hull = pts => {
+    const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lo = [], up = [];
+    for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+    for (const q of p.reverse()) { while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+    return lo.slice(0, -1).concat(up.slice(0, -1));
+  };
+  const obb = pts => {
+    const h = hull(pts); let best = null;
+    for (let i = 0; i < h.length; i++) {
+      const a = h[i], b = h[(i + 1) % h.length], ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      const ux = Math.cos(ang), uz = Math.sin(ang);
+      let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+      for (const q of h) { const u = q[0] * ux + q[1] * uz, v = -q[0] * uz + q[1] * ux; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+      const area = (u1 - u0) * (v1 - v0);
+      if (!best || area < best.area) best = { area, ux, uz, cu: (u0 + u1) / 2, cv: (v0 + v1) / 2, a: (u1 - u0) / 2, b: (v1 - v0) / 2 };
+    }
+    if (best.a < best.b) { const { ux, uz } = best; Object.assign(best, { ux: -uz, uz: ux, cu: best.cv, cv: -best.cu, a: best.b, b: best.a }); }   // u を長い辺の向きに
+    return best;
+  };
+  const polyArea = p => { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+  for (const b of TOWN.bld) {
+    const p = ringOf(b.p);
+    if (p.length < 3) continue;
+    const area = Math.abs(polyArea(p));
+    if (area < 4) continue;
+    let gMin = 1e9, gMax = -1e9;
+    for (const q of p) { const h = H(q[0], q[1]); gMin = Math.min(gMin, h); gMax = Math.max(gMax, h); }
+    const shed = b.t === 3111, solid = b.t === 3102 || b.t === 3103;
+    const wallH = shed ? 2.4 : solid ? (area > 400 ? 12 : 9) : (r() < 0.72 ? 5.8 : 3.1);
+    const base = gMin - 0.4, top = gMax + wallH;
+    col.set(shed ? '#9a9890' : WALLS[Math.floor(r() * WALLS.length)]).convertSRGBToLinear();
+    // 壁：辺ごとに縦の四角。窓の模様は 7.2m×2.9m ごとに繰り返す（u=辺に沿った距離, v=1階の床からの高さ）。
+    // 1階の床より下は基礎（坂の家は基礎が高くなる）
+    const floor = gMax + 0.35, found = new THREE.Color('#77746e').convertSRGBToLinear();
+    let run = r() * 7.2;
+    for (let i = 0; i < p.length; i++) {
+      const a = p[i], c = p[(i + 1) % p.length], len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      const u0 = run / 7.2, u1 = (run + len) / 7.2, v1 = (top - floor) / 2.9;
+      quad(W, [a[0], floor, a[1]], [c[0], floor, c[1]], [c[0], top, c[1]], [a[0], top, a[1]], [u0, 0], [u1, 0], [u1, v1], [u0, v1], col);
+      quad(W, [a[0], base, a[1]], [c[0], base, c[1]], [c[0], floor, c[1]], [a[0], floor, a[1]], [0.01, 0.5], [0.01, 0.5], [0.01, 0.5], [0.01, 0.5], found);
+      run += len;
+    }
+    // 屋根
+    const o = obb(p), rect = area / (4 * o.a * o.b);
+    const roofCol = new THREE.Color(shed ? '#6f7377' : ROOFS[Math.floor(r() * ROOFS.length)]).convertSRGBToLinear();
+    const at = (u, v, y) => [o.ux * u - o.uz * v, y, o.uz * u + o.ux * v];   // 屋根の座標 → 世界
+    if (!shed && !solid && rect > 0.78 && o.b < 9) {
+      const E = 0.45, A = o.a + E, B = o.b + E, rise = o.b * 0.42, ridgeY = top + rise, eaveY = top - E * rise / o.b;
+      const cu = o.cu, cv = o.cv, hip = r() < 0.5;
+      const L = hip ? Math.max(A - B, 0.2) : A;
+      const c1 = at(cu - A, cv - B, eaveY), c2 = at(cu + A, cv - B, eaveY), c3 = at(cu + A, cv + B, eaveY), c4 = at(cu - A, cv + B, eaveY);
+      const r1 = at(cu - L, cv, ridgeY), r2 = at(cu + L, cv, ridgeY);
+      const sl = Math.hypot(B, rise) / 2.9;   // 屋根の縞（瓦の段）は斜面に沿って
+      quad(Rf, c1, c2, r2, r1, [0, 0], [2 * A / 2.9, 0], [(A + L) / 2.9, sl], [(A - L) / 2.9, sl], roofCol);
+      quad(Rf, c3, c4, r1, r2, [0, 0], [2 * A / 2.9, 0], [(A + L) / 2.9, sl], [(A - L) / 2.9, sl], roofCol);
+      if (hip) {
+        tri(Rf, c2, c3, r2, [0, 0], [2 * B / 2.9, 0], [B / 2.9, sl], roofCol);
+        tri(Rf, c4, c1, r1, [0, 0], [2 * B / 2.9, 0], [B / 2.9, sl], roofCol);
+      } else {   // 切妻：妻側の三角の壁
+        for (const s of [-1, 1]) {
+          const g1 = at(cu + s * o.a, cv - o.b, top), g2 = at(cu + s * o.a, cv + o.b, top), g3 = at(cu + s * o.a, cv, ridgeY - 0.05);
+          tri(W, g1, g2, g3, [0.01, 0.5], [0.01, 0.5], [0.01, 0.5], col);
+        }
+      }
+    } else {   // 平らな屋根（形が複雑な家・大きな建物・車庫）
+      const tris = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
+      for (const [i, j, k] of tris) tri(Rf, [p[i][0], top, p[i][1]], [p[j][0], top, p[j][1]], [p[k][0], top, p[k][1]], [0, 0], [0, 0], [0, 0], roofCol);
+    }
+  }
+  const mesh = (m, mat) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(m.pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(m.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(m.col, 3));
+    g.computeVertexNormals();
+    const o = new THREE.Mesh(g, mat);
+    o.castShadow = o.receiveShadow = true;
+    scene.add(o);
+  };
+  // 壁の模様：白地に窓（暗いガラス・枠・格子）。地色は頂点色が掛かる
+  const wallTex = (() => {
+    // 横 7.2m・縦 2.9m（1階分）：掃き出し窓1つと小窓1つ。左端の帯は無地（基礎・妻壁用に頂点色だけで塗る所）
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 104;
+    const x = cv.getContext('2d'), px = 256 / 7.2;
+    x.fillStyle = '#fff'; x.fillRect(0, 0, 256, 104);
+    for (let i = 0; i < 500; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`; x.fillRect(Math.random() * 256, Math.random() * 104, 2, 2); }
+    for (let k = 0; k < 104; k += 5) { x.fillStyle = 'rgba(0,0,0,.035)'; x.fillRect(0, k, 256, 1); }   // サイディングの目地
+    const win = (u, v, w, h, bars) => {   // u,v,w,h は m（v は床から窓の下端まで）。canvas は上が天井側
+      const X = u * px, Y = 104 - (v + h) * px, Wd = w * px, Hd = h * px;
+      x.fillStyle = '#e0e0de'; x.fillRect(X - 3, Y - 3, Wd + 6, Hd + 6);
+      x.fillStyle = '#2b323c'; x.fillRect(X, Y, Wd, Hd);
+      x.fillStyle = 'rgba(170,190,210,.35)'; x.fillRect(X, Y, Wd, Hd * 0.3);
+      x.fillStyle = '#e0e0de'; for (let k = 1; k < bars; k++) x.fillRect(X + Wd * k / bars - 1, Y, 3, Hd);
+    };
+    win(1.2, 0.1, 1.7, 1.9, 2);   // 掃き出し窓
+    win(4.8, 1.0, 0.8, 0.9, 2);   // 小窓
+    x.fillStyle = 'rgba(0,0,0,.2)'; x.fillRect(0, 100, 256, 4);        // 床の継ぎ目
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+    return t;
+  })();
+  const roofTex = (() => {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+    const x = cv.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, 64, 64);
+    for (let k = 0; k < 8; k++) { x.fillStyle = 'rgba(0,0,0,.22)'; x.fillRect(0, k * 8, 64, 2); }   // 瓦の段
+    for (let k = 0; k < 16; k++) { x.fillStyle = 'rgba(0,0,0,.08)'; x.fillRect(k * 4, 0, 1, 64); }
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  mesh(W, new THREE.MeshStandardMaterial({ map: wallTex, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }));
+  mesh(Rf, new THREE.MeshStandardMaterial({ map: roofTex, vertexColors: true, roughness: 0.7, side: THREE.DoubleSide }));
+
+  // 池：水面は岸の一番低い所より少し下
+  for (const w of TOWN.water) {
+    const p = ringOf(w);
+    let lvl = 1e9; for (const q of p) lvl = Math.min(lvl, H(q[0], q[1]));
+    const tris = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
+    const pos = [];
+    for (const t of tris) for (const i of t) pos.push(p[i][0], lvl - 0.25, p[i][1]);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    scene.add(new THREE.Mesh(g, water.material));
+  }
+
+  // 木：林の中に多め、残りは家の庭（建物・道路・水の上には立てない）
+  const inPoly = (x, z, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; } return c; };
+  const woods = TOWN.wood.map(ringOf);
+  const free = (x, z) => !townBlocked(x, z) && !townBlocked(x + 1.5, z) && !townBlocked(x - 1.5, z) && !townBlocked(x, z + 1.5) && !townBlocked(x, z - 1.5) && townRoad(x, z) < 0.05;
+  let k = 0;
+  for (let tries = 0; tries < 20000 && k < trees.length; tries++) {
+    const x = (r() * 2 - 1) * (TOWN.area - 5), z = (r() * 2 - 1) * (TOWN.area - 5);
+    const inWood = woods.some(p => inPoly(x, z, p));
+    if (!free(x, z) || (!inWood && (k < trees.length * 0.55 || r() > 0.02))) continue;   // 庭木はまばらに
+    trees[k].userData.bx = x; trees[k].userData.bz = z;
+    trees[k].position.set(x, H(x, z) - 0.1, z); k++;
+  }
+  for (; k < trees.length; k++) trees[k].visible = false;
+}
 
 // ---------- 柴犬（骨組み・歩き方・姿勢・仕草） ----------
 // 骨組み：胴は後ろ半身と前半身（背骨をしならせる）。脚は3節（前脚＝上腕・前腕・中手、後脚＝太もも・すね・中足）。
@@ -1568,8 +1809,15 @@ function step(dt, t) {
   const inWater = Math.abs(st.x - streamX(st.z)) < 1.8;
   const target = mag * (inWater ? 3.0 : 8.5);           // 川の中は水を分けて進むので遅い
   st.speed += (target - st.speed) * Math.min(1, dt * (target > st.speed ? 2.2 : 3.5));
-  st.x += Math.sin(st.yaw) * st.speed * dt;
-  st.z += Math.cos(st.yaw) * st.speed * dt;
+  const nx = st.x + Math.sin(st.yaw) * st.speed * dt, nz = st.z + Math.cos(st.yaw) * st.speed * dt;
+  if (!TOWN) { st.x = nx; st.z = nz; }
+  else {   // 町：家と池には入らない。ぶつかったら壁に沿って滑る（鼻先0.45mも確かめる）
+    const hit = (x, z) => townBlocked(x, z) || townBlocked(x + Math.sin(st.yaw) * 0.45, z + Math.cos(st.yaw) * 0.45);
+    if (!hit(nx, nz)) { st.x = nx; st.z = nz; }
+    else if (!hit(nx, st.z)) st.x = nx;
+    else if (!hit(st.x, nz)) st.z = nz;
+    else st.speed *= 0.5;
+  }
 
   // ジャンプ
   if (jumpReq && st.jumpY <= 0.001 && !S.block) { st.vy = 3.6; S.posture = 'stand'; if (S.act && S.act !== 'zoom') S.act = null; }
@@ -1595,7 +1843,11 @@ function step(dt, t) {
   const dash = smooth(5.5, 8.5, st.speed);
   camera.fov += ((innerWidth < innerHeight ? 62 : 50) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
   camera.updateProjectionMatrix();
-  const dist = 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4, ch = 1.0 + run * 0.15;
+  let dist = 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
+  const ch = 1.0 + run * 0.15;
+  if (TOWN) for (let d = 0.5; d < dist; d += 0.25) {   // 町：カメラが家の壁の向こうへ回り込まないよう手前で止める
+    if (townBlocked(st.x - Math.sin(camYaw) * d, st.z - Math.cos(camYaw) * d)) { dist = Math.max(0.8, d - 0.35); break; }
+  }
   const cx = st.x - Math.sin(camYaw) * dist, cz = st.z - Math.cos(camYaw) * dist;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
@@ -1615,8 +1867,8 @@ function step(dt, t) {
   treeU.uTime.value = t;
   treeU.uDog.value.set(st.x, st.z);
   sky.position.copy(camera.position);
-  mountains.position.set(camera.position.x, 0, camera.position.z);
-  for (const tr of trees) {
+  mountains.position.set(camera.position.x, TOWN ? gy * 0.8 : 0, camera.position.z);   // 町は坂で標高が変わるので山並みも上下させる
+  if (!TOWN) for (const tr of trees) {
     const x = wrap(tr.userData.bx, st.x, TREE_AREA), z = wrap(tr.userData.bz, st.z, TREE_AREA);
     tr.position.set(x, H(x, z) - 0.1, z);
     tr.visible = Math.abs(x - streamX(z)) > 4 && Math.abs(x - pathX(z)) > 2.5;   // 川と小道には木を立てない
@@ -1625,6 +1877,16 @@ function step(dt, t) {
 
 // 最初の一枚：小道の上、犬の斜め後ろから
 st.x = pathX(0); st.yaw = 0.6; camYaw = 0.6;
+if (TOWN) {   // 町：中心に一番近い道路の上から
+  groundTexU.uFarGrass.value.set(0x6f7c3a).convertSRGBToLinear();   // 町の庭や空き地は草原より落ち着いた緑
+  water.visible = false;
+  let best = 1e9;
+  for (let z = -60; z <= 60; z += 1) for (let x = -60; x <= 60; x += 1) {
+    const d = x * x + z * z;
+    if (d < best && townRoad(x, z) > 0.9 && !townBlocked(x, z)) { best = d; st.x = x; st.z = z; }
+  }
+  document.getElementById('credit').hidden = false;
+}
 step(0, 0);
 camera.position.set(st.x - Math.sin(camYaw) * 2.7, H(st.x, st.z) + 1.0, st.z - Math.cos(camYaw) * 2.7);
 camera.lookAt(st.x, H(st.x, st.z) + 0.42, st.z);
@@ -1650,7 +1912,7 @@ function frame() {
 }
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
-window.__shiba = { trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { TOWN, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
