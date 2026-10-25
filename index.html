@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v21 · -- fps</div>
+<div id="fps" class="ui">v22 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +86,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v21';
+const VERSION = 'v22';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1640,7 +1640,9 @@ function frame() {
     const fps = Math.round(fpsN * 1000 / (now - fpsT));
     // 60に届かない端末では解像度を少しずつ下げる（2秒続けて遅いとき。上げ直すと行ったり来たりするので下げるだけ）
     slowN = fps < 56 && t > 4 && !TEST ? slowN + 1 : 0;
-    if (slowN >= 4 && pixelRatio > 1.15) { pixelRatio = Math.max(1.1, pixelRatio - 0.1); renderer.setPixelRatio(pixelRatio); resize(); slowN = 0; }
+    if (slowN >= 4 && pixelRatio > 1.15) { pixelRatio = Math.max(1.1, pixelRatio - 0.1); renderer.setPixelRatio(pixelRatio); resize(); slowN = 0;
+      renderer.render(scene, camera);   // 大きさを変えると画面が空になるので、その場で描き直す（しないと背景色が一瞬白く光る）
+    }
     fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + fps + ' fps' + (pixelRatio < Math.min(window.devicePixelRatio || 1, 1.5) ? ' ×' + pixelRatio.toFixed(1) : '');
     fpsN = 0; fpsT = now;
   }
