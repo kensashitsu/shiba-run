@@ -27,6 +27,10 @@
     font-size: 13px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0,0,0,.5); opacity: .85;
   }
   #credit { position: fixed; right: 8px; bottom: 4px; font-size: 9px; color: rgba(255,255,255,.75); text-shadow: 0 0 3px rgba(0,0,0,.6); }
+  #map { top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(10px, env(safe-area-inset-right, 0px));
+    width: 104px; height: 104px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  #map.compass { width: 64px; height: 64px; pointer-events: none; box-shadow: none; }
+  #map.big { width: min(92vw, 80vh); height: min(92vw, 80vh); border-radius: 14px; top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
   #hint {
     top: calc(env(safe-area-inset-top, 0px) + 44px); left: 50%; transform: translateX(-50%);
     background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 999px;
@@ -64,7 +68,8 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v23 · -- fps</div>
+<div id="fps" class="ui">v24 · -- fps</div>
+<canvas id="map" class="ui"></canvas>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
@@ -88,7 +93,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v23';
+const VERSION = 'v24';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1784,6 +1789,76 @@ new RGBELoader().load('assets/sky.hdr', tex => {
   hintEl.textContent = hintText;
 }, undefined, () => { hintEl.textContent = '空の写真を読み込めませんでした'; });
 
+// ---------- 地図（町：北が上の地図。タップで全体図／草原：北を指す方位磁針） ----------
+// 世界の向き：+x が東、+z が南（北は -z）
+const mapEl = document.getElementById('map'), mapCtx = mapEl.getContext('2d');
+let mapBase = null;
+if (TOWN) {   // 町の地図は最初に一枚描いておく（1px = 1m）
+  const M = TOWN.half, S = 2 * M, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const c = cv.getContext('2d');
+  let hMax = 0; for (const h of townH) hMax = Math.max(hMax, h);
+  for (let j = 0; j < TOWN.n; j++) for (let i = 0; i < TOWN.n; i++) {   // 低い所ほど濃い緑（坂が分かるように）
+    c.fillStyle = `hsl(95, 22%, ${42 + townH[j * TOWN.n + i] / hMax * 30}%)`;
+    c.fillRect(i * TOWN.step - TOWN.step / 2, j * TOWN.step - TOWN.step / 2, TOWN.step + 1, TOWN.step + 1);
+  }
+  const path = (pts, close) => { c.beginPath(); pts.forEach(([x, z], i) => i ? c.lineTo(x + M, z + M) : c.moveTo(x + M, z + M)); if (close) c.closePath(); };
+  c.fillStyle = 'rgba(40,80,40,.45)'; for (const w of TOWN.wood) { path(ringOf(w), true); c.fill(); }
+  c.fillStyle = '#7fb2db'; for (const w of TOWN.water) { path(ringOf(w), true); c.fill(); }
+  c.strokeStyle = '#7fb2db'; c.lineWidth = 2; for (const r of TOWN.river) { path(ringOf(r)); c.stroke(); }
+  c.lineCap = c.lineJoin = 'round';
+  c.strokeStyle = '#8d8a84'; for (const r of TOWN.road) { c.lineWidth = r.w + 1.6; path(ringOf(r.p)); c.stroke(); }
+  c.strokeStyle = '#fbfaf6'; for (const r of TOWN.road) { c.lineWidth = r.w; path(ringOf(r.p)); c.stroke(); }
+  c.fillStyle = '#e3d6bf'; c.strokeStyle = '#9d907c'; c.lineWidth = 0.6;
+  for (const b of TOWN.bld) { path(ringOf(b.p), true); c.fill(); c.stroke(); }
+  mapBase = cv;
+  mapEl.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); mapEl.classList.toggle('big'); sizeMap(); });
+  hintEl.style.top = 'calc(env(safe-area-inset-top, 0px) + 124px)';   // 地図と重ならないように
+} else mapEl.classList.add('compass');
+function sizeMap() {
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  mapEl.width = Math.round(mapEl.clientWidth * d); mapEl.height = Math.round(mapEl.clientHeight * d);
+}
+addEventListener('resize', sizeMap); sizeMap();
+function drawMap() {
+  const c = mapCtx, W = mapEl.width, Hh = mapEl.height, u = W / Math.max(1, mapEl.clientWidth);   // u：画面の1px（印の大きさの単位）
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, Hh);
+  if (!TOWN) {   // 方位磁針：画面の上＝カメラの向き。N の針が北を指す
+    const R = W / 2, a = Math.atan2(-Math.sin(camYaw), -Math.cos(camYaw));
+    c.translate(R, R);
+    c.fillStyle = 'rgba(30,28,22,.35)'; c.beginPath(); c.arc(0, 0, R - 1, 0, 7); c.fill();
+    c.save(); c.rotate(a);
+    c.fillStyle = '#e5533d'; c.beginPath(); c.moveTo(0, -R * 0.52); c.lineTo(R * 0.17, 0); c.lineTo(-R * 0.17, 0); c.fill();
+    c.fillStyle = 'rgba(255,250,240,.85)'; c.beginPath(); c.moveTo(0, R * 0.52); c.lineTo(R * 0.17, 0); c.lineTo(-R * 0.17, 0); c.fill();
+    c.restore();
+    c.fillStyle = '#fff'; c.font = `700 ${R * 0.36}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('N', Math.sin(a) * R * 0.75, -Math.cos(a) * R * 0.75);   // 文字は立てたまま、針の先の外側に
+    return;
+  }
+  const big = mapEl.classList.contains('big'), M = TOWN.half;
+  const scale = big ? W / (2 * TOWN.area + 40) : W / 104 * 0.85;          // 1m あたりの px（小さい時は半径約60m）
+  const cx = big ? 0 : st.x, cz = big ? 0 : st.z;                       // 地図の中心（小さい時は犬）
+  c.save();
+  if (!big) { c.beginPath(); c.arc(W / 2, Hh / 2, W / 2, 0, 7); c.clip(); }
+  c.fillStyle = '#8fa97a'; c.fillRect(0, 0, W, Hh);
+  c.translate(W / 2, Hh / 2); c.scale(scale, scale); c.translate(-cx - M, -cz - M);
+  c.imageSmoothingEnabled = true;
+  c.drawImage(mapBase, 0, 0);
+  c.restore();
+  // 見ている向き（扇）と犬
+  const px = W / 2 + (st.x - cx) * scale, pz = Hh / 2 + (st.z - cz) * scale;
+  const fovH = Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect), va = Math.atan2(Math.cos(camYaw), Math.sin(camYaw));
+  c.fillStyle = 'rgba(255,255,255,.28)'; c.beginPath(); c.moveTo(px, pz); c.arc(px, pz, 30 * u, va - fovH, va + fovH); c.closePath(); c.fill();
+  c.save(); c.translate(px, pz); c.rotate(Math.atan2(Math.cos(st.yaw), Math.sin(st.yaw)) + Math.PI / 2);
+  c.fillStyle = '#f08a3c'; c.strokeStyle = '#fff'; c.lineWidth = 1.5 * u;
+  c.beginPath(); c.moveTo(0, -7 * u); c.lineTo(5 * u, 5 * u); c.lineTo(0, 2.5 * u); c.lineTo(-5 * u, 5 * u); c.closePath(); c.fill(); c.stroke();
+  c.restore();
+  // 北の印（地図は常に北が上）
+  c.fillStyle = '#e5533d'; c.beginPath(); c.moveTo(W / 2, 3 * u); c.lineTo(W / 2 + 6 * u, 14 * u); c.lineTo(W / 2 - 6 * u, 14 * u); c.fill();
+  c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 3 * u; c.font = `700 ${11 * u}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'top';
+  c.strokeText('N', W / 2, 15 * u); c.fillText('N', W / 2, 15 * u);
+  if (!big) { c.strokeStyle = 'rgba(255,250,240,.8)'; c.lineWidth = 2 * u; c.beginPath(); c.arc(W / 2, Hh / 2, W / 2 - u, 0, 7); c.stroke(); }
+}
+
 function step(dt, t) {
   // 入力 → 進む向き（カメラ基準）
   let ix = input.x, iy = input.y;
@@ -1896,6 +1971,7 @@ function frame() {
   if (!TEST) step(dt, t);   // 確認用（?test）は時間を手で進める
   renderer.render(scene, camera);
   if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
+  if (fpsN % 3 === 0) drawMap();   // 地図は3コマに1回で十分
   fpsN++;
   const now = performance.now();
   if (now - fpsT >= 500) {
