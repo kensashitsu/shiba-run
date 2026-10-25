@@ -63,7 +63,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v20 · -- fps</div>
+<div id="fps" class="ui">v21 · -- fps</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
   <button type="button" data-cmd="bark">ほえる</button>
@@ -86,7 +86,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const VERSION = 'v20';
+const VERSION = 'v21';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -135,7 +135,8 @@ float heather(vec2 p){
 // ---------- renderer / scene ----------
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5));
+let pixelRatio = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5);
+renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = !AB.includes('c');
@@ -1460,7 +1461,7 @@ const TEST = /[?&]test/.test(location.search);
 let camSnap = false, simT = 0;
 let camYaw = 0;
 const fpsEl = document.getElementById('fps');
-let fpsN = 0, fpsT = 0, hinted = false;
+let fpsN = 0, fpsT = 0, hinted = false, slowN = 0;
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const camGoal = new THREE.Vector3();
 
@@ -1635,7 +1636,14 @@ function frame() {
   if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
   fpsN++;
   const now = performance.now();
-  if (now - fpsT >= 500) { fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + Math.round(fpsN * 1000 / (now - fpsT)) + ' fps'; fpsN = 0; fpsT = now; }
+  if (now - fpsT >= 500) {
+    const fps = Math.round(fpsN * 1000 / (now - fpsT));
+    // 60に届かない端末では解像度を少しずつ下げる（2秒続けて遅いとき。上げ直すと行ったり来たりするので下げるだけ）
+    slowN = fps < 56 && t > 4 && !TEST ? slowN + 1 : 0;
+    if (slowN >= 4 && pixelRatio > 1.15) { pixelRatio = Math.max(1.1, pixelRatio - 0.1); renderer.setPixelRatio(pixelRatio); resize(); slowN = 0; }
+    fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + fps + ' fps' + (pixelRatio < Math.min(window.devicePixelRatio || 1, 1.5) ? ' ×' + pixelRatio.toFixed(1) : '');
+    fpsN = 0; fpsT = now;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
