@@ -83,7 +83,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v39 · -- fps</div>
+<div id="fps" class="ui">v40 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -113,7 +113,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v39';
+const VERSION = 'v40';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1918,15 +1918,17 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
   }
   return { object: root, hand, update(dt, x, z, yaw, speed, aim, tension) {
     root.position.set(x, H(x, z), z); root.rotation.y = yaw;
-    run += ((speed > 2.4 ? 1 : 0) - run) * Math.min(1, dt * 4);             // 走りの度合い
+    // 歩き方の混ぜ具合：歩く（〜1.9m/s）・小走り（2.2〜3.2m/s）・走る（3.5m/s〜）
+    const wr = smooth(3.2, 3.7, speed), ww = 1 - smooth(1.85, 2.25, speed), wj = Math.max(0, 1 - ww - wr);
+    run = wj * 0.6 + wr;                                                       // 走っている度合い（姿勢に使う）
     const amp = Math.min(speed / 1.3, 1);
     // 1歩の周期（1秒あたりの回数＝歩数の半分）：歩きは歩幅で稼ぐので回転はゆっくり（1.35m/sで約1.9歩/秒、1.6m/sで約2.1歩/秒）、走りは回転を上げる
-    const freq = speed < 0.05 ? 0 : (1 - run) * (0.35 + Math.min(speed, 2.4) * 0.45) + run * (1.25 + Math.max(0, speed - 2.4) * 0.09);
+    const freq = speed < 0.05 ? 0 : ww * (0.35 + Math.min(speed, 2.3) * 0.45) + wj * (1.3 + Math.max(0, speed - 2.2) * 0.05) + wr * (1.36 + Math.max(0, speed - 3.4) * 0.1);
     ph = (ph + dt * freq * Math.PI * 2) % (Math.PI * 2);
     const p0 = ph / (Math.PI * 2);                                             // 左脚の1歩の中での位置（0＝かかとが着く）
     const brace = tension * (1 - amp * 0.7);                                   // 立ち止まって引かれている時の踏ん張り
     const fwx = Math.sin(yaw), fwz = Math.cos(yaw), lx = Math.cos(yaw), lz = -Math.sin(yaw);   // 前・左の向き
-    const duty = 0.6 - 0.25 * run;                                             // 片足が地面に着いている割合（歩き0.6・走り0.35）
+    const duty = 0.6 * ww + 0.42 * wj + 0.32 * wr;                             // 片足が地面に着いている割合（歩くと両足が着く時間があり、走ると両足が浮く時間がある）
     // --- 足の置き場所：柴と同じく、着地した足は地面に固定し、浮いている足だけ次の着地点へ運ぶ
     const neutral = (G, px, pz, out, fwd = 0) => {
       const X = px + lx * G.s * 0.095 + fwx * fwd, Z = pz + lz * G.s * 0.095 + fwz * fwd;
@@ -1942,10 +1944,11 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
         if (p >= duty) {                                                       // 振り出し
           if (!F.swing) { F.swing = true; F.from.copy(F.foot); }
           const s = (p - duty) / (1 - duty);
-          const lead = (1 - s) * (1 - duty) / freq + 0.4 * duty / freq;       // 着地する頃に体がいる所の少し先（置きすぎると腰が沈む）
+          const lead = (1 - s) * (1 - duty) / freq + (0.4 * ww + 0.28 * (1 - ww)) * duty / freq;   // 着地する頃に体がいる所の少し先（走ると体の真下近くに着く）
           neutral(G, x + fwx * speed * lead, z + fwz * speed * lead, tmpV);
-          F.foot.lerpVectors(F.from, tmpV, ease(s));
-          F.foot.y = H(F.foot.x, F.foot.z) + ANK + Math.sin(Math.PI * s) * (0.045 + 0.03 * amp + 0.12 * run) + (1 - s) * (1 - s) * 0.05;
+          F.foot.lerpVectors(F.from, tmpV, Math.pow(ease(s), 1 + 0.7 * run));   // 走ると蹴った足がしばらく後ろに残る
+          const sh = Math.pow(s, 1 - 0.35 * run);                              // 走ると早めに高く上がる（かかとがお尻の方へ）
+          F.foot.y = H(F.foot.x, F.foot.z) + ANK + Math.sin(Math.PI * sh) * (0.05 * ww + 0.16 * wj + 0.3 * wr) + (1 - s) * (1 - s) * 0.05 * ww;
           F.pitch = s < 0.35 ? 0.55 * (1 - s / 0.35) : -0.22 * smooth(0.55, 1, s);   // 蹴り出した直後はつま先が下、着地前はつま先を上げる
         } else {                                                               // 接地：足は地面に固定。終わりかけにかかとが上がり、つま先で蹴る
           if (F.swing) { F.swing = false; F.plant.set(F.foot.x, H(F.foot.x, F.foot.z) + ANK, F.foot.z); }
@@ -1969,8 +1972,9 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
       }
     });
     // --- 腰：歩くと片足立ちの時に高く、両足の時に低い。左右にも少し揺れる。脚が届く高さより上には上げない
-    const bob = (1 - run) * 0.022 * amp * (1 + Math.cos(4 * Math.PI * p0)) / 2 - run * 0.03 * Math.sin(4 * Math.PI * (p0 - 0.1));
-    let py = root.position.y + HIP_Y - 0.008 - bob - 0.07 * brace - 0.025 * run;
+    // 腰の上下：歩くと片足立ちの時に高い（振り子）。走ると着地して体重を受ける時に沈み、浮いている時に高い（ばね）
+    const bob = ww * 0.022 * amp * (1 + Math.cos(4 * Math.PI * p0)) / 2 + (0.03 * wj + 0.045 * wr) * (1 + Math.cos(4 * Math.PI * (p0 - duty / 2))) / 2;
+    let py = root.position.y + HIP_Y - 0.008 - bob - 0.07 * brace - 0.02 * wj - 0.035 * wr;
     for (const G of legs) {
       if (G.f.swing && freq > 0) continue;   // 腰の高さは地面に着いている足だけで決める（浮いた足に合わせると沈み込む）
       const hx = x + lx * G.s * 0.09 - fwx * 0.06 * brace, hz = z + lz * G.s * 0.09 - fwz * 0.06 * brace;
@@ -1978,11 +1982,11 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
       py = Math.min(py, G.f.foot.y + Math.sqrt(Math.max(0.01, (0.985 * LEG) ** 2 - hd * hd)));
     }
     pelvY += (py - pelvY) * (pelvY ? Math.min(1, dt * 18) : 1);
-    pelvis.position.set(0.02 * amp * (1 - run) * Math.cos(2 * Math.PI * (p0 - 0.3)), pelvY - root.position.y, -0.06 * brace);   // 立っている脚の側へ寄る・踏ん張ると腰を引く
-    pelvis.rotation.set(0, -0.08 * amp * Math.cos(2 * Math.PI * p0), 0.045 * amp * (1 - run) * Math.cos(2 * Math.PI * (p0 - 0.3)));   // 振り出す脚の側が前へ回り、浮いた側が下がる
+    pelvis.position.set(0.02 * amp * ww * Math.cos(2 * Math.PI * (p0 - 0.3)), pelvY - root.position.y, -0.06 * brace);   // 立っている脚の側へ寄る・踏ん張ると腰を引く
+    pelvis.rotation.set(0, -0.08 * amp * Math.cos(2 * Math.PI * p0), 0.045 * amp * (ww + 0.3 * wj) * Math.cos(2 * Math.PI * (p0 - 0.3)));   // 振り出す脚の側が前へ回り、浮いた側が下がる
     // 胴は腰と逆にひねって肩を水平に保つ。走ると前傾、踏ん張ると後ろへ体重をかける
-    torso.rotation.set(0.04 * amp + 0.2 * run - 0.18 * brace, 0.15 * amp * Math.cos(2 * Math.PI * p0), -pelvis.rotation.z * 0.9);
-    head.rotation.set(-0.18 * run + 0.13 * brace, -(pelvis.rotation.y + torso.rotation.y) * 0.8, 0);   // 頭は前を向いたまま
+    torso.rotation.set(0.04 * amp * ww + 0.11 * wj + 0.2 * wr - 0.18 * brace, 0.15 * amp * Math.cos(2 * Math.PI * p0), -pelvis.rotation.z * 0.9);
+    head.rotation.set(-(0.09 * wj + 0.17 * wr) + 0.13 * brace, -(pelvis.rotation.y + torso.rotation.y) * 0.8, 0);   // 頭は前を向いたまま
     // --- 脚を足の位置へ（股・ひざ・足首の3点。ひざは前へ曲げる）。足首は足の裏の傾きに合わせる
     root.updateMatrixWorld(true);
     for (const G of legs) {
@@ -2014,8 +2018,9 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     arms.forEach((A, i) => {
       if (busy(i)) return;
       const fw = (i ? 1 : -1) * Math.cos(ph);                                  // 腕は反対側の脚と一緒に前へ（1＝前）
-      A.sh.quaternion.identity(); A.sh.rotation.set(-fw * (0.32 + 0.4 * run) * amp + 0.04, 0, 0.07 * A.s);
-      A.el.quaternion.identity(); A.el.rotation.set(-(0.22 + 0.18 * Math.max(0, fw) + 1.0 * run) * Math.max(amp, 0.3) - 0.08, 0, 0);
+      // 歩く：ひじは軽く曲げて振る。小走り・走る：ひじを直角近くまで曲げ、走るほど大きく振る
+      A.sh.quaternion.identity(); A.sh.rotation.set(-fw * (0.32 * ww + 0.34 * wj + 0.6 * wr) * amp + 0.04 - 0.1 * (wj + wr), 0, 0.07 * A.s);
+      A.el.quaternion.identity(); A.el.rotation.set(-(ww * (0.22 + 0.18 * Math.max(0, fw)) * Math.max(amp, 0.3) + wj * 1.35 + wr * 1.45) - 0.08, 0, 0);
     });
     if (aim) {
       root.updateMatrixWorld(true);
@@ -2111,8 +2116,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       rdst.yaw = rst.yaw; rdst.speed = 1.05;
 
       // --- 飼い主（自分）
-      // なぞる量の半分で柴と同じ速さ（1.35m/s）、9割までは早歩き（最高1.6m/s）、それより大きく倒すと走る（最高4.5m/s）
-      const want = W.ev === 'bite' ? 0 : mag < 0.9 ? Math.min(1.6, mag / 0.5 * 1.35) : 1.6 + (mag - 0.9) / 0.1 * 2.9;
+      // なぞる量の半分で柴と同じ速さ（1.35m/s）、3/4 まで早歩き（1.8m/s）、9割まで小走り（3.0m/s）、それより大きく倒すと走る（最高4.5m/s）
+      const want = W.ev === 'bite' ? 0 : mag < 0.5 ? mag / 0.5 * 1.35 : mag < 0.75 ? 1.35 + (mag - 0.5) / 0.25 * 0.45 : mag < 0.9 ? 1.8 + (mag - 0.75) / 0.15 * 1.2 : 3.0 + (mag - 0.9) / 0.1 * 1.5;
       if (W.ev === 'bite') mag = 0;   // 咬まれた直後は手を引っ込めて動けない
       if (mag > 0.05) walker.yaw += angDiff(walker.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 8);
       walker.speed += (want - walker.speed) * Math.min(1, dt * 5);
