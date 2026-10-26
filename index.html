@@ -80,7 +80,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v30 · -- fps</div>
+<div id="fps" class="ui">v31 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -110,7 +110,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v30';
+const VERSION = 'v31';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1822,46 +1822,129 @@ new RGBELoader().load('assets/sky.hdr', tex => {
 // 犬の周りを回って崩しやすい向きを探し、そこから歩き出すと、崩れた流れのまま犬がついてくる
 const LEASH = 1.7;
 const walker = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
-function makeHuman({ shirt, pants, hair, skin = 0xe2bc98 }) {
-  const M = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
-  const cap = (r, len, mat) => { const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat); m.castShadow = true; return m; };
-  const root = new THREE.Group(), hips = new THREE.Group();
-  hips.position.y = 0.88; root.add(hips);
-  const torso = cap(0.19, 0.36, M(shirt)); torso.position.y = 0.36; torso.scale.z = 0.66; hips.add(torso);
-  const pelvis = cap(0.17, 0.08, M(pants)); pelvis.position.y = 0.04; pelvis.rotation.z = Math.PI / 2; pelvis.scale.set(1, 1, 0.7); hips.add(pelvis);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), M(skin)); head.position.y = 0.76; head.castShadow = true; hips.add(head);
-  const hairM = new THREE.Mesh(new THREE.SphereGeometry(0.112, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), M(hair));
-  hairM.position.set(0, 0.775, -0.012); hairM.rotation.x = -0.3; hips.add(hairM);
-  const limb = (x, y, len, r, mat) => {   // 付け根で回る手足
-    const g = new THREE.Group(); g.position.set(x, y, 0);
-    const c = cap(r, len, mat); c.position.y = -len / 2 - r; g.add(c); hips.add(g); return g;
+// 人：柴と同じく図形の組み合わせ。腰→胴→胸→首→頭、肩→上腕→ひじ→前腕→手、股→太もも→ひざ→すね→足首→靴。
+// 歩く・走るは脚の付け根とひざ、腕の付け根とひじの角度を1歩の周期で動かす。リードを持つ手は肩・ひじ・手の3点で犬の方へ伸ばす
+function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
+  const mat = (c, r = 0.85) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+  const M = { shirt: mat(shirt), pants: mat(pants), hair: mat(hair, 0.7), skin: mat(skin, 0.75), shoes: mat(shoes, 0.6), dark: mat(0x1a1410, 0.4) };
+  const SPH = new THREE.SphereGeometry(1, 18, 14);
+  const blob = (m, sx, sy, sz, x, y, z, parent) => { const o = new THREE.Mesh(SPH, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); parent.add(o); return o; };
+  // 付け根から下へ伸びる太さの変わる筒（関節のふくらみ付き）
+  const seg = (parent, len, r0, r1, m) => {
+    const g = new THREE.CylinderGeometry(r1, r0, len, 12); g.translate(0, -len / 2, 0);
+    parent.add(new THREE.Mesh(g, m)); blob(m, r1, r1, r1, 0, -len, 0, parent);
   };
-  const legs = [limb(0.095, 0.02, 0.72, 0.075, M(pants)), limb(-0.095, 0.02, 0.72, 0.075, M(pants))];
-  const arms = [limb(0.235, 0.6, 0.5, 0.05, M(shirt)), limb(-0.235, 0.6, 0.5, 0.05, M(shirt))];   // 0=左腕 1=右腕（リードを持つ）
-  let ph = 0, side = 1;
-  const hand = new THREE.Vector3(), tmpV = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0);
+  const joint = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+  const L = { thigh: 0.44, shin: 0.43, upper: 0.29, fore: 0.26 };
+  const HIP_Y = 0.07 + L.thigh + L.shin;   // 足首の高さ＋脚の長さ
+
+  const root = new THREE.Group();
+  const pelvis = joint(root, 0, HIP_Y, 0);
+  blob(M.pants, 0.15, 0.11, 0.092, 0, -0.01, 0, pelvis);                       // 腰（上着の裾から出ない大きさ）
+  const torso = joint(pelvis, 0, 0.08, 0);
+  // 上着：裾から肩までを一続きの回転体で作り、前後に薄くつぶす（玉を積むと浮き輪のような段ができる）
+  const coat = new THREE.Mesh(new THREE.LatheGeometry([[0.001, -0.15], [0.158, -0.15], [0.162, -0.08], [0.152, 0.06], [0.158, 0.2], [0.182, 0.33], [0.192, 0.41], [0.178, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.shirt);
+  coat.scale.z = 0.64; torso.add(coat);
+  const chest = joint(torso, 0, 0.26, 0);
+  const neck = joint(chest, 0, 0.24, 0);
+  seg(neck, 0.08, 0.05, 0.048, M.skin); neck.rotation.x = Math.PI;             // 首（上向きに伸ばす）
+  const head = joint(chest, 0, 0.36, 0.005);
+  blob(M.skin, 0.085, 0.108, 0.098, 0, 0, 0, head);                            // 頭
+  blob(M.skin, 0.06, 0.05, 0.05, 0, -0.06, 0.03, head);                        // あご
+  blob(M.hair, 0.092, 0.08, 0.1, 0, 0.04, -0.012, head);                       // 髪
+  blob(M.hair, 0.088, 0.07, 0.05, 0, 0.005, -0.06, head);                      // 後ろ髪
+  blob(M.skin, 0.014, 0.024, 0.014, 0.085, -0.005, 0, head);                   // 耳
+  blob(M.skin, 0.014, 0.024, 0.014, -0.085, -0.005, 0, head);
+  blob(M.skin, 0.014, 0.02, 0.018, 0, -0.012, 0.098, head);                    // 鼻
+  blob(M.dark, 0.011, 0.007, 0.006, 0.032, 0.012, 0.09, head);                 // 目
+  blob(M.dark, 0.011, 0.007, 0.006, -0.032, 0.012, 0.09, head);
+  blob(M.hair, 0.022, 0.005, 0.006, 0.032, 0.03, 0.092, head);                 // 眉
+  blob(M.hair, 0.022, 0.005, 0.006, -0.032, 0.03, 0.092, head);
+  // 腕（0=左 1=右。人は +z を向いているので +x が左）
+  const arms = [1, -1].map(s => {
+    const sh = joint(chest, 0.19 * s, 0.16, 0);
+    blob(M.shirt, 0.06, 0.06, 0.06, 0, 0, 0, sh);
+    seg(sh, L.upper, 0.052, 0.044, M.shirt);
+    const el = joint(sh, 0, -L.upper, 0);
+    seg(el, L.fore - 0.04, 0.043, 0.036, M.shirt);
+    blob(M.skin, 0.03, 0.025, 0.03, 0, -L.fore + 0.03, 0, el);                 // 手首
+    const hand = joint(el, 0, -L.fore, 0);
+    blob(M.skin, 0.028, 0.05, 0.042, 0, -0.035, 0.005, hand);                 // 手
+    sh.rotation.z = 0.08 * s;
+    return { sh, el, hand, s };
+  });
+  // 脚
+  const legs = [1, -1].map(s => {
+    const hp = joint(pelvis, 0.09 * s, 0, 0);
+    seg(hp, L.thigh, 0.092, 0.066, M.pants);
+    const kn = joint(hp, 0, -L.thigh, 0);
+    seg(kn, L.shin, 0.064, 0.05, M.pants);
+    const an = joint(kn, 0, -L.shin, 0);
+    blob(M.shoes, 0.05, 0.04, 0.125, 0, -0.035, 0.045, an);                    // 靴
+    blob(M.shoes, 0.052, 0.012, 0.13, 0, -0.068, 0.045, an);                   // 靴底
+    return { hp, kn, an, s };
+  });
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+  let ph = 0, side = 1, run = 0;
+  const hand = new THREE.Vector3(), tmpV = new THREE.Vector3(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Vector3();
+  const DOWN = new THREE.Vector3(0, -1, 0), q = new THREE.Quaternion(), pole = new THREE.Vector3();
+  // 肩→手を target へ。ひじは pole（外・下・後ろ）の側へ曲げる。腕の付け根の座標（chest）で解く
+  function reach(A, target, slack) {
+    chest.updateMatrixWorld(true);
+    S.copy(A.sh.position);
+    chest.worldToLocal(T.copy(target));
+    const a = L.upper, b = L.fore + 0.04;
+    let d = T.clone().sub(S); const dl = Math.min(d.length(), (a + b) * (0.999 - slack * 0.25));
+    d.normalize();
+    const cosA = (a * a + dl * dl - b * b) / (2 * a * dl), ang = Math.acos(Math.max(-1, Math.min(1, cosA)));
+    pole.set(A.s * 0.6, -0.5, -0.6); pole.sub(d.clone().multiplyScalar(pole.dot(d))).normalize();
+    E.copy(S).addScaledVector(d, Math.cos(ang) * a).addScaledVector(pole, Math.sin(ang) * a);
+    A.sh.quaternion.setFromUnitVectors(DOWN, tmpV.copy(E).sub(S).normalize());
+    const tip = S.clone().addScaledVector(d, dl);
+    tmpV.copy(tip).sub(E).normalize().applyQuaternion(q.copy(A.sh.quaternion).invert());
+    A.el.quaternion.setFromUnitVectors(DOWN, tmpV);
+  }
   return { object: root, hand, update(dt, x, z, yaw, speed, aim, tension) {
     root.position.set(x, H(x, z), z); root.rotation.y = yaw;
-    const amp = Math.min(speed / 1.4, 1) + Math.max(0, Math.min((speed - 2.2) / 2, 0.7));   // 走ると大きく振る
-    ph += dt * (1.6 + Math.min(speed, 2.2) * 1.5 + Math.max(0, speed - 2.2) * 0.6) * Math.PI;
-    const sw = Math.sin(ph);
-    legs[0].rotation.x = sw * 0.5 * amp; legs[1].rotation.x = -sw * 0.5 * amp;
-    // リードは犬のいる側の手で持つ（体の前を横切らせない）
-    if (aim) { root.updateMatrixWorld(true); hips.worldToLocal(tmpV.copy(aim)); if (Math.abs(tmpV.x) > 0.3) side = tmpV.x > 0 ? 0 : 1; }
-    const free = arms[1 - side], hold = arms[side];
-    free.rotation.set(-sw * 0.35 * amp * (side ? 1 : -1), 0, 0);
-    hips.position.y = 0.88 + Math.abs(Math.cos(ph)) * 0.025 * amp;
-    hips.rotation.x = -0.14 * tension;                                   // 引っ張られると後ろへ体重をかけて踏ん張る
-    // リードを持つ右腕は犬の方へ向ける（張るほど伸びる）
-    hold.rotation.set(0, 0, 0);
-    if (aim) {   // 肩から犬の方へ。たるんでいる時は少しだけ、張ると腕ごと持っていかれる
+    run += ((speed > 2.4 ? 1 : 0) - run) * Math.min(1, dt * 4);             // 走りの度合い
+    const amp = Math.min(speed / 1.3, 1);
+    const freq = speed < 0.05 ? 0 : 0.9 + Math.min(speed, 2) * 0.45 + Math.max(0, speed - 2) * 0.25;   // 1秒あたりの歩数の半分
+    ph = (ph + dt * freq * Math.PI * 2) % (Math.PI * 2);
+    const brace = tension * (1 - amp * 0.7);                                   // 立ち止まって引かれている時の踏ん張り
+    // 脚：付け根を前後に振り、振り出す脚のひざを曲げる。走るとひざを大きく上げる
+    legs.forEach((G, i) => {
+      const p = ph + (i ? Math.PI : 0), sw = Math.sin(p);
+      const hipA = (0.42 + 0.35 * run) * sw * amp;
+      const kneeA = (Math.max(0, Math.sin(p + 1.3)) * (0.75 + 0.8 * run) + 0.08 + 0.25 * run) * amp + 0.25 * brace;
+      G.hp.rotation.set(-hipA - 0.15 * brace + (i ? 0.25 : -0.05) * brace, 0, G.s * (0.03 + 0.06 * brace));
+      G.kn.rotation.x = kneeA;
+      G.an.rotation.x = -kneeA * 0.4 + hipA * 0.3;                              // 足の裏をなるべく地面に沿わせる
+    });
+    // 体：歩くと上下に揺れ、走ると前傾。引かれると腰を落として後ろに体重をかける
+    pelvis.position.y = HIP_Y - 0.035 * amp * (1 + run) * Math.abs(Math.cos(ph)) - 0.06 * brace - 0.02 * run;
+    pelvis.rotation.y = Math.sin(ph) * 0.08 * amp;
+    torso.rotation.set(0.05 * amp + 0.22 * run - 0.2 * brace, -Math.sin(ph) * 0.12 * amp, 0);
+    head.rotation.set(-0.2 * run + 0.15 * brace, Math.sin(ph) * 0.06 * amp, 0);
+    // 腕：リードを持たない方は脚と逆に振る。走るとひじを曲げる
+    if (aim) { root.updateMatrixWorld(true); pelvis.worldToLocal(tmpV.copy(aim)); if (Math.abs(tmpV.x) > 0.3) side = tmpV.x > 0 ? 0 : 1; }
+    arms.forEach((A, i) => {
+      if (aim && i === side) return;
+      const sw = Math.sin(ph + (i ? 0 : Math.PI));
+      A.sh.quaternion.identity(); A.sh.rotation.set(-sw * (0.35 + 0.35 * run) * amp, 0, 0.08 * A.s);
+      A.el.quaternion.identity(); A.el.rotation.set(-(0.18 + 1.1 * run) * amp - 0.1, 0, 0);
+    });
+    if (aim) {   // リードの手：たるんでいる時は腰の前、張るほど犬の方へ腕を伸ばす
+      const A = arms[side];
       root.updateMatrixWorld(true);
-      hips.worldToLocal(tmpV.copy(aim)).sub(hold.position).normalize();
-      tmpV.lerp(DOWN, 1 - (0.3 + 0.6 * tension)).normalize();
-      hold.quaternion.setFromUnitVectors(DOWN, tmpV);
-    } else hold.rotation.x = sw * 0.35 * amp * (side ? 1 : -1);
+      const rest = tmpV.set(A.s * 0.16, HIP_Y + 0.02, 0.22); root.localToWorld(rest);
+      const sh = new THREE.Vector3(); A.sh.getWorldPosition(sh);
+      const toward = aim.clone().sub(sh); toward.setLength(Math.min(toward.length(), L.upper + L.fore + 0.04));
+      const tgt = rest.clone().lerp(sh.add(toward), 0.25 + 0.75 * tension);
+      reach(A, tgt, 1 - tension);
+    }
     root.updateMatrixWorld(true);
-    hold.localToWorld(hand.set(0, -0.6, 0));
+    arms[aim ? side : 1].hand.localToWorld(hand.set(0, -0.06, 0.01));
   } };
 }
 
