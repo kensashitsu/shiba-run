@@ -67,6 +67,10 @@
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink);
     font: 700 13px var(--font-ui); letter-spacing: .02em;
   }
+  #pickBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+    width: 76px; height: 76px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.85); border: 2px solid #8a6a3a; color: #4a3520;
+    font: 700 15px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+  #pickBtn:active { background: rgba(240,180,106,.8); }
   #acts #jump { width: 76px; height: 76px; font-size: 15px; margin-top: 4px; }
   #acts button:active { background: rgba(240,180,106,.45); }
   #acts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -87,9 +91,10 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v52 · -- fps</div>
+<div id="fps" class="ui">v53 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
+<button type="button" id="pickBtn" class="ui" hidden>拾う</button>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
@@ -118,7 +123,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v52';
+const VERSION = 'v53';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2138,6 +2143,11 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const fitLeash = () => leashMat.resolution.set(innerWidth, innerHeight);   // 線の太さは画面の px で指定するので大きさを教える
   addEventListener('resize', fitLeash); fitLeash();
   const stamEl = document.getElementById('stam'); stamEl.hidden = false;
+  const pickBtn = document.getElementById('pickBtn');
+  pickBtn.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (W.dung && !W.pick) { W.pick = { ph: 'down', t: 0, g: W.dung }; W.dung = null; }
+  });
   const ui = document.getElementById('walkui'), uiL = document.getElementById('wl'), uiBal = document.getElementById('wbal'), uiSt = document.getElementById('wst'), uiSl = document.getElementById('wsl'), flashEl = document.getElementById('flash');
   ui.hidden = false;
   document.getElementById('acts').style.display = 'none';   // 散歩では犬への指示ボタンは使わない
@@ -2418,7 +2428,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.prevAct !== S.act && W.mode === 'follow') {
         if (W.prevAct === 'poop' && !S.act) {                        // うんちの後：身震いして、飼い主がフンを拾う
           dog.__start('shake'); const g = dog.poops[dog.poops.length - 1];
-          if (g) W.pick = { ph: 'wait', t: 0, g };
+          if (g) { W.dung = g; W.leftT = 0; }   // 拾うかどうかは飼い主しだい（近づくと「拾う」が出る）
         } else if (W.prevAct === 'mark' && !S.act && W.after === 'shake') { W.after = null; dog.__start('shake'); }   // 高ぶった後は身震いして落ち着く
       }
       W.prevAct = S.act;
@@ -2458,7 +2468,15 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       uiBal.style.setProperty('--v', Math.min(W.bal, 1)); uiSt.style.setProperty('--v', W.stress); uiSl.style.setProperty('--v', W.slip);
       if (!W.sniff && !seq) W.sbal = Math.max(0, (W.sbal || 0) - dt);
       else W.sbal = Math.max(0, (W.sbal || 0) - 0.15 * dt);   // 引くのをやめると踏ん張り直す
+      if (W.dung) {
+        const dd2 = Math.hypot(W.dung.position.x - walker.x, W.dung.position.z - walker.z);
+        pickBtn.hidden = !(dd2 < 1.3 && !W.pick);
+        if (dd2 > 15) { W.dung = null; W.leftT = 4; W.sat = Math.max(0, W.sat - 0.1); }   // 置き去りにした
+      } else pickBtn.hidden = true;
+      W.leftT = Math.max(0, (W.leftT || 0) - dt);
       if (W.mode === 'follow' && W.pick) uiL.textContent = 'フンを拾う';
+      else if (W.mode === 'follow' && W.leftT > 0 && !S.act) uiL.textContent = 'フンを置き去りにしてしまった…';
+      else if (W.mode === 'follow' && W.dung && !S.act && !W.sniff) uiL.textContent = Math.hypot(W.dung.position.x - walker.x, W.dung.position.z - walker.z) < 1.3 ? '「拾う」を押してフンを拾う' : 'フンを拾おう（近づくと「拾う」が出る）';
       else if (W.mode === 'follow' && S.act === 'shake') uiL.textContent = 'ブルブル…（身震いして落ち着く）';
       else if (W.mode === 'follow' && W.heat) uiL.textContent = 'いきなり走り出した！';
       else if (W.mode === 'follow' && W.sniff && W.sniff.heat) uiL.textContent = 'くんくんくんくん！ 異様に執着している' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
