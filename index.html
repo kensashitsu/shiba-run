@@ -83,7 +83,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v41 · -- fps</div>
+<div id="fps" class="ui">v42 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -113,7 +113,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v41';
+const VERSION = 'v42';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1881,7 +1881,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
   blob(M.pants, 0.17, 0.13, 0.1, 0, 0.0, 0, pelvis);                          // 腰（ズボンの付け根をつなぐ）
   const torso = joint(pelvis, 0, 0.08, 0);
   // 上着：裾から肩までを一続きの回転体で作り、前後に薄くつぶす（玉を積むと浮き輪のような段ができる）
-  const coat = new THREE.Mesh(new THREE.LatheGeometry([[0.001, -0.15], [0.158, -0.15], [0.162, -0.08], [0.152, 0.06], [0.158, 0.2], [0.182, 0.33], [0.192, 0.41], [0.178, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.shirt);
+  const coat = new THREE.Mesh(new THREE.LatheGeometry([[0.001, -0.04], [0.15, -0.04], [0.158, 0.0], [0.152, 0.06], [0.158, 0.2], [0.182, 0.33], [0.192, 0.41], [0.178, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.shirt);
   coat.scale.z = 0.64; torso.add(coat);
   const chest = joint(torso, 0, 0.26, 0);
   const neck = joint(chest, 0, 0.24, 0);
