@@ -31,6 +31,14 @@
     width: 104px; height: 104px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
   #map.compass { width: 64px; height: 64px; pointer-events: none; box-shadow: none; }
   #map.big { width: min(92vw, 80vh); height: min(92vw, 80vh); border-radius: 14px; top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
+  #walkui { top: calc(env(safe-area-inset-top, 0px) + 124px); left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
+    border-radius: 12px; font-size: 14px; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0; }
+  #walkui:empty { display: none; }
+  #walkui.stare { background: rgba(200,160,40,.45); }
+  #walkui.lock { background: rgba(190,50,40,.55); }
+  #walkui.leave { background: rgba(60,140,80,.55); }
+  #walkui.lock::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 4px; height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, #ffe08a calc(var(--bal) * 100%), rgba(255,255,255,.25) 0); }
   #hint {
     top: calc(env(safe-area-inset-top, 0px) + 44px); left: 50%; transform: translateX(-50%);
     background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 999px;
@@ -68,8 +76,9 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v24 · -- fps</div>
+<div id="fps" class="ui">v25 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
+<div id="walkui" class="ui" hidden></div>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
 <div id="acts" class="ui">
@@ -92,8 +101,11 @@ addEventListener('error', e => { const el = document.getElementById('err'); el.h
 import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v24';
+const VERSION = 'v25';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -112,7 +124,7 @@ const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0),
 
 // 町（?town）：実在の住宅地の起伏・建物・道路・池。assets/town.json は中心からの距離(m)だけで、地名や緯度経度は持たない
 // 元データ：国土地理院（標高タイル・ベクトルタイル）、© OpenStreetMap contributors（林）
-const TOWN = /[?&]town/.test(location.search) ? await (await fetch('assets/town.json')).json() : null;
+const TOWN = /[?&](town|walk)/.test(location.search) ? await (await fetch('assets/town.json')).json() : null;
 let townH = null;
 if (TOWN) {
   const raw = Uint8Array.from(atob(TOWN.height), c => c.charCodeAt(0));
@@ -887,13 +899,14 @@ if (TOWN) {
 // 骨組み：胴は後ろ半身と前半身（背骨をしならせる）。脚は3節（前脚＝上腕・前腕・中手、後脚＝太もも・すね・中足）。
 // 足先の位置を先に決め、関節の角度を逆算する（IK）。歩く時、着地中の足は地面に固定し、浮いている足だけ次の着地点へ運ぶ。
 // 何をするか（姿勢・仕草）は dog.think、形と動きは dog.update が受け持つ。
-const dog = (() => {
+// 毛色を変えれば別の犬も作れる（散歩で出会う犬など）
+const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8 } = {}) => {
   const mats = {
-    red: new THREE.MeshStandardMaterial({ color: 0xc4692e, roughness: 0.85 }),
-    cream: new THREE.MeshStandardMaterial({ color: 0xf4e8d2, roughness: 0.9 }),
+    red: new THREE.MeshStandardMaterial({ color: red, roughness: 0.85 }),
+    cream: new THREE.MeshStandardMaterial({ color: cream, roughness: 0.9 }),
     black: new THREE.MeshStandardMaterial({ color: 0x1b1410, roughness: 0.25 }),
-    earRed: new THREE.MeshStandardMaterial({ color: 0xc4692e, roughness: 0.85, flatShading: true }),
-    earIn: new THREE.MeshStandardMaterial({ color: 0xe9c9a8, roughness: 0.9, flatShading: true }),
+    earRed: new THREE.MeshStandardMaterial({ color: red, roughness: 0.85, flatShading: true }),
+    earIn: new THREE.MeshStandardMaterial({ color: earIn, roughness: 0.9, flatShading: true }),
     pink: new THREE.MeshStandardMaterial({ color: 0xd9707a, roughness: 0.45 }),
     mouth: new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7 }),
   };
@@ -1506,6 +1519,14 @@ const dog = (() => {
       if (u >= 1) S.bark = -1;
       else { const k = Math.max(0, Math.sin(Math.PI * ((u * 2) % 1))) * (u < 1 ? 1 : 0); P.jaw = Math.max(P.jaw, 0.75 * k); P.neck -= 0.12 * k; P.earsBack = Math.min(P.earsBack, -0.2); P.eyes = Math.min(P.eyes, 1 - 0.3 * k); }
     }
+    // 踏ん張って相手をにらむ（散歩でほかの犬にロックオンした時）：重心を前へ・耳と尾を立てる・口を結ぶ
+    if (S.strain > 0.01) {
+      const k = S.strain;
+      P.pitch -= 0.1 * k; P.y -= 0.03 * k; P.neck -= 0.3 * k; P.headPitch -= 0.1 * k;
+      P.earsBack = Math.min(P.earsBack, -0.35 * k); P.tailDown = Math.min(P.tailDown, -0.35 * k); P.wag *= 1 - k; P.look = 0;
+      P.headYaw += ((S.gaze ?? 0) - P.headYaw) * k;
+      if (st.speed < 0.3) lerpPose(P, { legs: [V(0.09, 0, 0.27), V(-0.09, 0, 0.27), V(0.1, 0, -0.23), V(-0.1, 0, -0.23)] }, k);   // 脚を開いて踏ん張る
+    }
     // まばたき
     S.blinkT -= dt;
     if (S.blinkT < 0) { S.blink = 0.13; S.blinkT = 2 + Math.random() * 4; }
@@ -1636,7 +1657,8 @@ const dog = (() => {
   }
 
   return { object: root, points, extras, radius: 0.5, think, command, update, state: S, __start: start, __startSeq: startSeq, __feet: feet, __legs: legs };
-})();
+};
+const dog = makeDog();
 scene.add(dog.object, dog.points, dog.extras);
 grassU.uDogR.value = dog.radius;
 
@@ -1786,8 +1808,248 @@ new RGBELoader().load('assets/sky.hdr', tex => {
   FOG_COLOR.setRGB(hor[0] / nHor * bgScale, hor[1] / nHor * bgScale, hor[2] / nHor * bgScale);   // 霞＝背景に映る地平線の色
   scene.fog.color.copy(FOG_COLOR);
   colorRidges();
-  hintEl.textContent = hintText;
+  hintEl.textContent = WALK ? '左側をなぞって散歩します' : hintText;
 }, undefined, () => { hintEl.textContent = '空の写真を読み込めませんでした'; });
+
+// ---------- 散歩（?walk）：飼い主を動かし、リードでつないだ柴を連れて歩く ----------
+// 柴は黒柴を見つけるとロックオンする：視線が相手に固定され、足を踏ん張って吠え続け、真後ろへ引いてもテコでも動かない。
+// 犬の向きに対して横から引くほど体が回って踏ん張りが崩れる。人は張ったリードの長さの円の上しか動けないので、
+// 犬の周りを回って崩しやすい向きを探し、そこから歩き出すと、崩れた流れのまま犬がついてくる
+const LEASH = 1.7;
+const walker = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
+function makeHuman({ shirt, pants, hair, skin = 0xe2bc98 }) {
+  const M = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
+  const cap = (r, len, mat) => { const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat); m.castShadow = true; return m; };
+  const root = new THREE.Group(), hips = new THREE.Group();
+  hips.position.y = 0.88; root.add(hips);
+  const torso = cap(0.19, 0.36, M(shirt)); torso.position.y = 0.36; torso.scale.z = 0.66; hips.add(torso);
+  const pelvis = cap(0.17, 0.08, M(pants)); pelvis.position.y = 0.04; pelvis.rotation.z = Math.PI / 2; pelvis.scale.set(1, 1, 0.7); hips.add(pelvis);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), M(skin)); head.position.y = 0.76; head.castShadow = true; hips.add(head);
+  const hairM = new THREE.Mesh(new THREE.SphereGeometry(0.112, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), M(hair));
+  hairM.position.set(0, 0.775, -0.012); hairM.rotation.x = -0.3; hips.add(hairM);
+  const limb = (x, y, len, r, mat) => {   // 付け根で回る手足
+    const g = new THREE.Group(); g.position.set(x, y, 0);
+    const c = cap(r, len, mat); c.position.y = -len / 2 - r; g.add(c); hips.add(g); return g;
+  };
+  const legs = [limb(0.095, 0.02, 0.72, 0.075, M(pants)), limb(-0.095, 0.02, 0.72, 0.075, M(pants))];
+  const arms = [limb(0.235, 0.6, 0.5, 0.05, M(shirt)), limb(-0.235, 0.6, 0.5, 0.05, M(shirt))];   // 0=左腕 1=右腕（リードを持つ）
+  let ph = 0, side = 1;
+  const hand = new THREE.Vector3(), tmpV = new THREE.Vector3(), DOWN = new THREE.Vector3(0, -1, 0);
+  return { object: root, hand, update(dt, x, z, yaw, speed, aim, tension) {
+    root.position.set(x, H(x, z), z); root.rotation.y = yaw;
+    const amp = Math.min(speed / 1.4, 1);
+    ph += dt * (1.6 + speed * 1.5) * Math.PI;
+    const sw = Math.sin(ph);
+    legs[0].rotation.x = sw * 0.5 * amp; legs[1].rotation.x = -sw * 0.5 * amp;
+    // リードは犬のいる側の手で持つ（体の前を横切らせない）
+    if (aim) { root.updateMatrixWorld(true); hips.worldToLocal(tmpV.copy(aim)); if (Math.abs(tmpV.x) > 0.3) side = tmpV.x > 0 ? 0 : 1; }
+    const free = arms[1 - side], hold = arms[side];
+    free.rotation.set(-sw * 0.35 * amp * (side ? 1 : -1), 0, 0);
+    hips.position.y = 0.88 + Math.abs(Math.cos(ph)) * 0.025 * amp;
+    hips.rotation.x = 0.1 * tension;                                     // 引っ張られると前のめり
+    // リードを持つ右腕は犬の方へ向ける（張るほど伸びる）
+    hold.rotation.set(0, 0, 0);
+    if (aim) {   // 肩から犬の方へ。たるんでいる時は少しだけ、張ると腕ごと持っていかれる
+      root.updateMatrixWorld(true);
+      hips.worldToLocal(tmpV.copy(aim)).sub(hold.position).normalize();
+      tmpV.lerp(DOWN, 1 - (0.3 + 0.6 * tension)).normalize();
+      hold.quaternion.setFromUnitVectors(DOWN, tmpV);
+    } else hold.rotation.x = sw * 0.35 * amp * (side ? 1 : -1);
+    root.updateMatrixWorld(true);
+    hold.localToWorld(hand.set(0, -0.6, 0));
+  } };
+}
+
+let WALK = null;
+if (TOWN && /[?&]walk/.test(location.search)) {
+  const me = makeHuman({ shirt: 0x3d5a80, pants: 0x2b2d33, hair: 0x2a1f1a });
+  scene.add(me.object);
+  // 出会う相手：黒柴とその飼い主。道路を行き来する
+  const rivalDog = makeDog({ red: 0x2a2421, cream: 0xd9b48a, earIn: 0xc9a27a });
+  scene.add(rivalDog.object, rivalDog.points, rivalDog.extras);
+  const rival = makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b });
+  scene.add(rival.object);
+  // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
+  const W = { mode: 'follow', exc: 0, bal: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
+  const rst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 }, rdst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
+  // 道路の線を一本選んで行き来させる（自分の出発地点の近くを通る、長い道）
+  const routeOf = r => { const p = ringOf(r.p), cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return { p, cum, len: cum[cum.length - 1] }; };
+  const at = (R, s) => {
+    s = Math.max(0, Math.min(R.len, s)); let i = 1; while (i < R.cum.length - 1 && R.cum[i] < s) i++;
+    const a = R.p[i - 1], b = R.p[i], u = (s - R.cum[i - 1]) / ((R.cum[i] - R.cum[i - 1]) || 1);
+    return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, Math.atan2(b[0] - a[0], b[1] - a[1])];
+  };
+  const visible = (ax, az, bx, bz) => {   // 家に遮られずに見えるか
+    const d = Math.hypot(bx - ax, bz - az);
+    for (let s = 1; s < d - 1; s += 0.8) { const u = s / d; if (townBlocked(ax + (bx - ax) * u, az + (bz - az) * u)) return false; }
+    return true;
+  };
+  // リード
+  const leashMat = new LineMaterial({ color: 0xc8402e, linewidth: 3, worldUnits: false });
+  const leashGeo = new LineGeometry(), LN = 20, lp = new Float32Array(LN * 3);
+  leashGeo.setPositions(lp);
+  const leash = new Line2(leashGeo, leashMat); leash.frustumCulled = false; scene.add(leash);
+  const fitLeash = () => leashMat.resolution.set(innerWidth, innerHeight);   // 線の太さは画面の px で指定するので大きさを教える
+  addEventListener('resize', fitLeash); fitLeash();
+  const ui = document.getElementById('walkui');
+  ui.hidden = false;
+  document.getElementById('acts').style.display = 'none';   // 散歩では犬への指示ボタンは使わない
+  const collar = new THREE.Vector3(), tv = new THREE.Vector3();
+  const rand = Math.random;
+
+  WALK = {
+    me, rivalDog, rst, rdst, W, leashMat,
+    start(x, z) {
+      walker.x = x; walker.z = z;
+      st.x = x + 1; st.z = z;
+      let best = null;
+      for (const r of TOWN.road) {
+        const R = routeOf(r); if (R.len < 90) continue;
+        let dmin = 1e9; for (const q of R.p) dmin = Math.min(dmin, Math.hypot(q[0] - x, q[1] - z));
+        if (dmin > 8 && (!best || dmin < best.d)) best = { R, d: dmin };
+      }
+      W.route = (best || { R: routeOf(TOWN.road[0]) }).R;
+      W.rs = W.route.len * 0.05; W.rdir = 1;
+    },
+    move(dt, t, dx, dz, mag) {
+      const S = dog.state;
+      // --- 相手（黒柴と飼い主）：道を行き来し、端で折り返す
+      W.rs += W.rdir * 1.05 * dt;
+      if (W.rs > W.route.len || W.rs < 0) { W.rdir *= -1; W.rs = Math.max(0, Math.min(W.route.len, W.rs)); }
+      const [rx, rz, ryaw] = at(W.route, W.rs);
+      rst.speed = 1.05; rst.yaw = ryaw + (W.rdir < 0 ? Math.PI : 0);
+      rst.x = rx - Math.cos(rst.yaw) * 0.6; rst.z = rz + Math.sin(rst.yaw) * 0.6;                    // 道の端寄りを歩く
+      const hx = rst.x + Math.cos(rst.yaw) * 0.7 + Math.sin(rst.yaw) * 0.5, hz = rst.z - Math.sin(rst.yaw) * 0.7 + Math.cos(rst.yaw) * 0.5;   // 黒柴は飼い主の横を少し先に
+      if (!rdst.init) { rdst.x = hx; rdst.z = hz; rdst.init = true; }
+      rdst.x += (hx - rdst.x) * Math.min(1, dt * 4); rdst.z += (hz - rdst.z) * Math.min(1, dt * 4);
+      rdst.yaw = rst.yaw; rdst.speed = 1.05;
+
+      // --- 飼い主（自分）
+      const want = mag * 1.7;
+      if (mag > 0.05) walker.yaw += angDiff(walker.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 8);
+      walker.speed += (want - walker.speed) * Math.min(1, dt * 5);
+      let nx = walker.x + Math.sin(walker.yaw) * walker.speed * dt, nz = walker.z + Math.cos(walker.yaw) * walker.speed * dt;
+      if (townBlocked(nx, nz)) { nx = walker.x; nz = walker.z; }
+
+      // --- 柴の気持ち
+      const rdx = rdst.x - st.x, rdz = rdst.z - st.z, rd = Math.hypot(rdx, rdz);
+      const sees = rd < 24 && visible(st.x, st.z, rdst.x, rdst.z);
+      const toRival = Math.atan2(rdx, rdz);
+      if (W.mode === 'follow') {
+        W.exc = Math.max(0, W.exc + (sees ? (rd < 14 ? 1.2 : 0.5) : -0.4) * dt);
+        if (W.exc > 0.25) W.mode = 'stare';
+      } else if (W.mode === 'stare') {           // 固まってじっと見る（ここで離れれば間に合う）
+        W.exc += (sees ? (rd < 14 ? 0.45 : 0.2) : -0.6) * dt;
+        if (W.exc >= 1) { W.mode = 'lock'; W.bal = 0; W.lockT = 0; W.barkT = 0; W.lostT = 0; }
+        else if (W.exc <= 0) W.mode = 'follow';
+      } else if (W.mode === 'lock') {
+        W.lockT += dt;
+        W.lostT = sees ? 0 : W.lostT + dt;
+        if (W.lostT > 3) { W.mode = 'follow'; W.exc = 0.2; }
+      } else if (W.mode === 'leave') {
+        W.leaveT += dt;
+        // まだ相手が近くに見えていて、立ち止まったりすると、また振り返ってロックオン
+        W.stopT = walker.speed < 0.3 ? (W.stopT || 0) + dt : 0;
+        const back = sees && rd < 13 && W.leaveT > 1.5 && (W.stopT > 1 || rand() < dt * 0.1 * (1 - rd / 13));
+        if (back) { W.mode = 'lock'; W.bal = 0; W.lockT = 0; W.lostT = 0; }
+        else if (!sees || rd > 20) { W.lostT += dt; if (W.lostT > 2.5) { W.mode = 'follow'; W.exc = 0; } }
+        else W.lostT = 0;
+      }
+
+      // --- 柴の行きたい所
+      let gx, gz, dspd;
+      const fwx = Math.sin(walker.yaw), fwz = Math.cos(walker.yaw);
+      if (W.mode === 'lock') { gx = rdst.x; gz = rdst.z; dspd = rd > 2 ? 2.8 : 0; }                     // 相手へ突進しようとする
+      else if (W.mode === 'stare') { gx = st.x; gz = st.z; dspd = 0; }                                   // 固まる
+      else if (W.mode === 'leave') { gx = walker.x + fwx * 0.8; gz = walker.z + fwz * 0.8; dspd = Math.min(2.2, Math.hypot(gx - st.x, gz - st.z) * 2); }
+      else {                                                                                             // 飼い主より前を歩きたがる（引っ張る）
+        const ahead = walker.speed > 0.2 ? LEASH + 0.4 : 0.9;
+        gx = walker.x + fwx * ahead + fwz * 0.25; gz = walker.z + fwz * ahead - fwx * 0.25;
+        dspd = Math.min(2.3, Math.hypot(gx - st.x, gz - st.z) * 1.8);
+      }
+      const gyaw = Math.atan2(gx - st.x, gz - st.z);
+      let dyaw = W.mode === 'lock' || W.mode === 'stare' ? toRival : (dspd > 0.1 ? gyaw : st.yaw);
+      let sx = st.x, sz = st.z;
+      if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
+
+      // --- リード：張ったら長さを超えた分を、人と犬に振り分けて戻す
+      let vx = sx - nx, vz = sz - nz, d = Math.hypot(vx, vz);
+      W.tension += ((d > LEASH - 0.02 ? 1 : 0) - W.tension) * Math.min(1, dt * 6);
+      if (W.mode === 'lock') {
+        // ① 犬の突進：リードが張ったらその場で踏ん張る（円に沿って滑らせると、いつも相手と人の間に回り込んでしまう）。人は少し引きずられる
+        const ax = sx - walker.x, az = sz - walker.z, a = Math.hypot(ax, az);
+        if (a > LEASH) {
+          const e = a - LEASH;
+          nx += ax / a * e * 0.12; nz += az / a * e * 0.12;
+          if (Math.hypot(st.x - walker.x, st.z - walker.z) <= LEASH + 0.01) { const k = Math.max(0, (LEASH - Math.hypot(st.x - walker.x, st.z - walker.z)) / Math.max(a - Math.hypot(st.x - walker.x, st.z - walker.z), 1e-4)); sx = st.x + (sx - st.x) * Math.min(1, k); sz = st.z + (sz - st.z) * Math.min(1, k); }
+          else { sx = st.x; sz = st.z; }
+        }
+        // ② 人が引く：犬から離れる向きに踏み出した分だけが「引いた」こと
+        vx = sx - nx; vz = sz - nz; d = Math.hypot(vx, vz);
+        if (d > LEASH) {
+          const e = d - LEASH, ux = vx / d, uz = vz / d;   // u：人→犬
+          // 引く向き（犬→人）を、犬の視線（犬→相手）に対して分ける：真後ろの成分は受け止め、横の成分だけ効く
+          const gX = Math.sin(toRival), gZ = Math.cos(toRival);
+          const back = ux * gX + uz * gZ;                // 1＝真後ろへ引いている
+          const lat = Math.sqrt(Math.max(0, 1 - back * back)) * (back > -0.2 ? 1 : 0.5);
+          W.side = Math.sign(gX * uz - gZ * ux) || 1;   // どちら側から引いているか
+          W.bal = Math.min(1.2, W.bal + lat * lat * e * 1.6);
+          const give = 0.04 + 0.4 * lat * lat;         // 真後ろならほぼ動かず、横からなら体ごと持っていかれる
+          sx -= ux * e * give; sz -= uz * e * give;
+          nx += ux * e * (1 - give); nz += uz * e * (1 - give);
+          if (W.bal >= 1) {                            // 崩れた：よろけて人の方へ向く
+            W.mode = 'leave'; W.leaveT = 0; W.lostT = 0; W.exc = 0.4;
+            sx -= ux * 0.25; sz -= uz * 0.25; dyaw = Math.atan2(-ux, -uz);
+          }
+        }
+      } else if (d > LEASH) {
+        const e = d - LEASH, ux = vx / d, uz = vz / d;   // u：人→犬
+        {
+          const p = W.mode === 'stare' ? 0.15 : 0.32;   // 人が引きずられる割合（前を歩きたがって引っ張る）
+          nx += ux * e * p; nz += uz * e * p;
+          sx -= ux * e * (1 - p); sz -= uz * e * (1 - p);
+        }
+      }
+      W.bal = Math.max(0, W.bal - (W.mode === 'lock' ? 0.18 : 1) * dt);   // 引くのをやめると踏ん張り直す
+      // 体のねじれ：横から引かれるほど体が回る（首から上は相手を見たまま）
+      W.twist += ((W.mode === 'lock' ? W.side * Math.min(W.bal, 1) * 1.1 : 0) - W.twist) * Math.min(1, dt * 5);
+      if (W.mode === 'lock') dyaw = toRival - W.twist;
+
+      if (!townBlocked(nx, nz)) { walker.x = nx; walker.z = nz; }
+      const moved = Math.hypot(sx - st.x, sz - st.z);
+      if (!townBlocked(sx, sz)) { st.x = sx; st.z = sz; }
+      st.speed += (moved / Math.max(dt, 1e-4) - st.speed) * Math.min(1, dt * 8);
+      st.yaw += angDiff(st.yaw, dyaw) * Math.min(1, dt * (W.mode === 'lock' ? 9 : 5));
+
+      // --- 仕草
+      dog.think(true, dt, t, st, camera.position);
+      S.strain = (S.strain || 0) + ((W.mode === 'lock' || W.mode === 'stare' ? 1 : 0) - (S.strain || 0)) * Math.min(1, dt * 6);
+      S.gaze = Math.max(-1.3, Math.min(1.3, angDiff(st.yaw, toRival)));
+      if (W.mode === 'lock') { W.barkT -= dt; if (W.barkT <= 0) { dog.command('bark', st); W.barkT = 0.35 + rand() * 0.5; } }
+      rivalDog.think(true, dt, t, rdst, camera.position);
+      rivalDog.state.strain = W.mode === 'lock' && rd < 10 ? 0.6 : 0;
+      rivalDog.state.gaze = Math.max(-1.3, Math.min(1.3, angDiff(rdst.yaw, Math.atan2(st.x - rdst.x, st.z - rdst.z))));
+      rivalDog.update(dt, t, rdst, camera.position);
+      rival.update(dt, rst.x, rst.z, rst.yaw, rst.speed, null, 0);
+
+      // --- 人とリードの形
+      collar.set(st.x + Math.sin(st.yaw) * 0.25, H(st.x, st.z) + 0.43, st.z + Math.cos(st.yaw) * 0.25);
+      me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension);
+      const hd = me.hand.distanceTo(collar), sag = Math.sqrt(Math.max(0, LEASH * LEASH - hd * hd)) * 0.45;
+      for (let i = 0; i < LN; i++) {
+        const u = i / (LN - 1);
+        tv.lerpVectors(me.hand, collar, u); tv.y -= sag * 4 * u * (1 - u);
+        tv.y = Math.max(tv.y, H(tv.x, tv.z) + 0.02);
+        lp[i * 3] = tv.x; lp[i * 3 + 1] = tv.y; lp[i * 3 + 2] = tv.z;
+      }
+      leashGeo.setPositions(lp);
+      // --- 表示
+      ui.textContent = { follow: '', stare: 'じっと見ている…（今なら離れられる）', lock: 'ロックオン！ 吠えて動かない', leave: '崩れた！ このまま立ち去る' }[W.mode];
+      ui.style.setProperty('--bal', W.mode === 'lock' ? Math.min(W.bal, 1) : 0);
+      ui.className = 'ui ' + W.mode;
+    },
+  };
+}
 
 // ---------- 地図（町：北が上の地図。タップで全体図／草原：北を指す方位磁針） ----------
 // 世界の向き：+x が東、+z が南（北は -z）
@@ -1836,7 +2098,8 @@ function drawMap() {
   }
   const big = mapEl.classList.contains('big'), M = TOWN.half;
   const scale = big ? W / (2 * TOWN.area + 40) : W / 104 * 0.85;          // 1m あたりの px（小さい時は半径約60m）
-  const cx = big ? 0 : st.x, cz = big ? 0 : st.z;                       // 地図の中心（小さい時は犬）
+  const me = WALK ? walker : st;                                          // 地図の中心と矢印＝自分（散歩では飼い主）
+  const cx = big ? 0 : me.x, cz = big ? 0 : me.z;
   c.save();
   if (!big) { c.beginPath(); c.arc(W / 2, Hh / 2, W / 2, 0, 7); c.clip(); }
   c.fillStyle = '#8fa97a'; c.fillRect(0, 0, W, Hh);
@@ -1845,10 +2108,14 @@ function drawMap() {
   c.drawImage(mapBase, 0, 0);
   c.restore();
   // 見ている向き（扇）と犬
-  const px = W / 2 + (st.x - cx) * scale, pz = Hh / 2 + (st.z - cz) * scale;
+  if (WALK) {   // 散歩：黒柴は赤い点、自分の柴は小さな橙の点
+    const dot = (x, z, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(W / 2 + (x - cx) * scale, Hh / 2 + (z - cz) * scale, r * u, 0, 7); c.fill(); };
+    dot(WALK.rdst.x, WALK.rdst.z, 4, '#d23a2a'); dot(st.x, st.z, 2.6, '#f08a3c');
+  }
+  const px = W / 2 + (me.x - cx) * scale, pz = Hh / 2 + (me.z - cz) * scale;
   const fovH = Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect), va = Math.atan2(Math.cos(camYaw), Math.sin(camYaw));
   c.fillStyle = 'rgba(255,255,255,.28)'; c.beginPath(); c.moveTo(px, pz); c.arc(px, pz, 30 * u, va - fovH, va + fovH); c.closePath(); c.fill();
-  c.save(); c.translate(px, pz); c.rotate(Math.atan2(Math.cos(st.yaw), Math.sin(st.yaw)) + Math.PI / 2);
+  c.save(); c.translate(px, pz); c.rotate(Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) + Math.PI / 2);
   c.fillStyle = '#f08a3c'; c.strokeStyle = '#fff'; c.lineWidth = 1.5 * u;
   c.beginPath(); c.moveTo(0, -7 * u); c.lineTo(5 * u, 5 * u); c.lineTo(0, 2.5 * u); c.lineTo(-5 * u, 5 * u); c.closePath(); c.fill(); c.stroke();
   c.restore();
@@ -1872,9 +2139,11 @@ function step(dt, t) {
   const user = mag > 0.08;
   if (user && !hinted) { hinted = true; setTimeout(() => hintEl.classList.add('off'), 2500); }
 
+  const S = dog.state;
+  if (WALK) WALK.move(dt, t, dx, dz, user ? mag : 0);
+  else {
   // 犬が何をするか決める（嫌がって踏ん張る・ズーミーで勝手に走る・お手でこちらを向く）
   dog.think(user, dt, t, st, camera.position);
-  const S = dog.state;
   let turnRate = 7;
   if (!user) mag = 0;
   if (S.block) mag = 0;
@@ -1899,35 +2168,39 @@ function step(dt, t) {
   jumpReq = false;
   st.vy -= 12 * dt; st.jumpY = Math.max(0, st.jumpY + st.vy * dt);
   if (st.jumpY === 0) st.vy = 0;
+  }
 
   dog.update(dt, t, st, camera.position);
-  const gy = H(st.x, st.z);
+  const fol = WALK ? walker : st;
+  const gy = H(fol.x, fol.z);
   const settled = S.pw.sit + S.pw.down + S.pw.sleep;   // 座る・伏せる時はカメラを少し寄せる
-  contact.position.set(st.x, gy + 0.01, st.z);
+  contact.position.set(st.x, H(st.x, st.z) + 0.01, st.z);
   const cs = 0.7 / (1 + st.jumpY * 2);
   contact.scale.set(cs * 0.6, cs, 1);
   contact.rotation.z = st.yaw;
 
   // 太陽の影は犬の周りだけ描く（影の範囲を犬に追従させる）
-  sun.target.position.set(st.x, gy, st.z);
+  sun.target.position.set(fol.x, gy, fol.z);
   sun.position.copy(sun.target.position).addScaledVector(SUN_DIR, 35);
 
   // カメラ：後ろから追う（なぞって回した直後は追わない）
   const run = smooth(2.5, 4.8, st.speed);
-  if (st.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, st.yaw) * Math.min(1, dt * 1.6);
+  if (WALK && WALK.W.mode === 'lock') { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
+  else if (fol.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, fol.yaw) * Math.min(1, dt * 1.6);
   const dash = smooth(5.5, 8.5, st.speed);
   camera.fov += ((innerWidth < innerHeight ? 62 : 50) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
   camera.updateProjectionMatrix();
-  let dist = 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
-  const ch = 1.0 + run * 0.15;
+  let dist = WALK ? 4.6 : 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
+  const ch = WALK ? 3.0 : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
   if (TOWN) for (let d = 0.5; d < dist; d += 0.25) {   // 町：カメラが家の壁の向こうへ回り込まないよう手前で止める
-    if (townBlocked(st.x - Math.sin(camYaw) * d, st.z - Math.cos(camYaw) * d)) { dist = Math.max(0.8, d - 0.35); break; }
+    if (townBlocked(fol.x - Math.sin(camYaw) * d, fol.z - Math.cos(camYaw) * d)) { dist = Math.max(0.8, d - 0.35); break; }
   }
-  const cx = st.x - Math.sin(camYaw) * dist, cz = st.z - Math.cos(camYaw) * dist;
+  const cx = fol.x - Math.sin(camYaw) * dist, cz = fol.z - Math.cos(camYaw) * dist;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
   camSnap = false;
-  camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
+  if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
+  else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
   // 周りの物を犬に合わせて巻き戻す
   grassU.uTime.value = t;
@@ -1936,11 +2209,11 @@ function step(dt, t) {
   grassU.uCenter.value.set(camera.position.x + camF * (PATCH_AHEAD + 2.7), camera.position.z + camFz * (PATCH_AHEAD + 2.7));
   farU.uCenter.value.set(camera.position.x + camF * (FAR_AHEAD + 2.7), camera.position.z + camFz * (FAR_AHEAD + 2.7));
   grassU.uDog.value.set(st.x, st.jumpY, st.z);   // y は地面からの浮き(ジャンプ中は草を押さない)
-  updateGround(st.x, st.z);
-  updateWater(st.z);
+  updateGround(fol.x, fol.z);
+  updateWater(fol.z);
   waterU.uTime.value = t;
   treeU.uTime.value = t;
-  treeU.uDog.value.set(st.x, st.z);
+  treeU.uDog.value.set(fol.x, fol.z);
   sky.position.copy(camera.position);
   mountains.position.set(camera.position.x, TOWN ? gy * 0.8 : 0, camera.position.z);   // 町は坂で標高が変わるので山並みも上下させる
   if (!TOWN) for (const tr of trees) {
@@ -1961,10 +2234,12 @@ if (TOWN) {   // 町：中心に一番近い道路の上から
     if (d < best && townRoad(x, z) > 0.9 && !townBlocked(x, z)) { best = d; st.x = x; st.z = z; }
   }
   document.getElementById('credit').hidden = false;
+  if (WALK) { WALK.start(st.x, st.z); hintEl.textContent = '左側をなぞって散歩します'; }
 }
 step(0, 0);
-camera.position.set(st.x - Math.sin(camYaw) * 2.7, H(st.x, st.z) + 1.0, st.z - Math.cos(camYaw) * 2.7);
-camera.lookAt(st.x, H(st.x, st.z) + 0.42, st.z);
+{ const o = WALK ? walker : st;
+  camera.position.set(o.x - Math.sin(camYaw) * 2.7, H(o.x, o.z) + 1.0, o.z - Math.cos(camYaw) * 2.7);
+  camera.lookAt(o.x, H(o.x, o.z) + 0.42, o.z); }
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
@@ -1988,7 +2263,7 @@ function frame() {
 }
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
-window.__shiba = { TOWN, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
