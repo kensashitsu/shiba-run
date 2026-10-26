@@ -80,9 +80,9 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v29 · -- fps</div>
+<div id="fps" class="ui">v30 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
-<div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
+<div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
 <div id="hint" class="ui">画面の左側をなぞると走ります</div>
@@ -110,7 +110,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v29';
+const VERSION = 'v30';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1875,7 +1875,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rival = makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b });
   scene.add(rival.object);
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
-  const W = { mode: 'follow', exc: 0, bal: 0, stress: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
+  const W = { mode: 'follow', exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   const rst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 }, rdst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
   // 道路の線を一本選んで行き来させる（自分の出発地点の近くを通る、長い道）
   const routeOf = r => { const p = ringOf(r.p), cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return { p, cum, len: cum[cum.length - 1] }; };
@@ -1896,7 +1896,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const leash = new Line2(leashGeo, leashMat); leash.frustumCulled = false; scene.add(leash);
   const fitLeash = () => leashMat.resolution.set(innerWidth, innerHeight);   // 線の太さは画面の px で指定するので大きさを教える
   addEventListener('resize', fitLeash); fitLeash();
-  const ui = document.getElementById('walkui'), uiL = document.getElementById('wl'), uiBal = document.getElementById('wbal'), uiSt = document.getElementById('wst'), flashEl = document.getElementById('flash');
+  const ui = document.getElementById('walkui'), uiL = document.getElementById('wl'), uiBal = document.getElementById('wbal'), uiSt = document.getElementById('wst'), uiSl = document.getElementById('wsl'), flashEl = document.getElementById('flash');
   ui.hidden = false;
   document.getElementById('acts').style.display = 'none';   // 散歩では犬への指示ボタンは使わない
   const collar = new THREE.Vector3(), tv = new THREE.Vector3();
@@ -1982,7 +1982,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.ev) { W.evT += dt; if (W.evT > (W.ev === 'bite' ? 0.9 : 3.5)) {
         if (W.ev === 'slip') {   // やり直し：柴を連れ戻し、相手は道の遠くへ
           st.x = walker.x + Math.sin(walker.yaw) * 0.6; st.z = walker.z + Math.cos(walker.yaw) * 0.6;
-          W.mode = 'follow'; W.exc = 0; W.bal = 0; W.stress = 0; W.rs = (W.rs + W.route.len / 2) % W.route.len; rdst.init = false;
+          W.mode = 'follow'; W.exc = 0; W.bal = 0; W.stress = 0; W.slip = 0; W.rs = (W.rs + W.route.len / 2) % W.route.len; rdst.init = false;
         }
         W.ev = null;
       } }
@@ -2014,8 +2014,11 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           const lat = Math.sqrt(Math.max(0, 1 - back * back)) * (back > -0.2 ? 1 : 0.5);
           W.side = Math.sign(gX * uz - gZ * ux) || 1;   // どちら側から引いているか
           W.bal = Math.min(1.2, W.bal + lat * lat * e * (frenzy ? 0.8 : 1.6));   // 突っ込んでいる時は崩しにくい
-          // 力まかせに引くと首が締まって犬にストレスがたまる（真後ろほど・相手が近いほど）。満タンで首輪が抜けるか、咬みつかれる
-          W.stress = Math.min(1, W.stress + e * (0.03 + 0.12 * (1 - lat * lat)) * (frenzy ? 1.6 : 1));
+          // 力まかせに引いた時：犬の顔の側（前方）へ引かれると後ずさりして首輪が頭から抜けそうになる。
+          // 後ろ側から引いても首輪は抜けないが、首が締まってストレスがたまり（真後ろほど・相手が近いほど）、限界で飼い主に咬みつく
+          const front = -(Math.sin(st.yaw) * ux + Math.cos(st.yaw) * uz);   // 犬の向き・(犬→人)：正＝顔の側から引かれている
+          if (front > 0.2) W.slip = Math.min(1, W.slip + e * front * 0.3);
+          else W.stress = Math.min(1, W.stress + e * (0.03 + 0.12 * (1 - lat * lat)) * (frenzy ? 1.6 : 1));
           const give = 0.04 + 0.4 * lat * lat;         // 真後ろならほぼ動かず、横からなら体ごと持っていかれる
           sx -= ux * e * give; sz -= uz * e * give;
           nx += ux * e * (1 - give); nz += uz * e * (1 - give);
@@ -2032,8 +2035,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
       W.bal = Math.max(0, W.bal - (W.mode === 'lock' ? 0.18 : 1) * dt);   // 引くのをやめると踏ん張り直す
       W.stress = Math.max(0, W.stress - (W.mode === 'lock' ? 0.05 : 0.15) * dt);
-      if (W.mode === 'lock' && W.stress >= 0.97 && !W.ev) {   // 限界：首輪が抜ける／振り返って咬みつく
-        W.ev = rand() < 0.5 ? 'slip' : 'bite'; W.evT = 0;
+      W.slip = Math.max(0, W.slip - 0.2 * dt);   // 引くのをやめれば首輪は戻る
+      if (W.mode === 'lock' && (W.stress >= 0.97 || W.slip >= 0.97) && !W.ev) {   // 限界：首輪が抜ける／振り返って咬みつく
+        W.ev = W.slip >= 0.97 ? 'slip' : 'bite'; W.evT = 0;
         if (W.ev === 'bite') { W.stress = 0.4; flashEl.classList.add('on'); setTimeout(() => flashEl.classList.remove('on'), 350); dog.command('bark', st); }
       }
       // 体のねじれ：横から引かれるほど体が回る（首から上は相手を見たまま）
@@ -2073,7 +2077,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 表示
       uiL.textContent = W.ev === 'slip' ? '首輪が抜けた！' : W.ev === 'bite' ? '咬まれた！' : frenzy ? '突っ込む！ リードがビンビン'
         : { follow: '', stare: 'じっと見ている…（今なら離れられる）', lock: 'ロックオン！ 吠えて動かない', leave: '崩れた！ このまま立ち去る' }[W.mode];
-      uiBal.style.setProperty('--v', Math.min(W.bal, 1)); uiSt.style.setProperty('--v', W.stress);
+      uiBal.style.setProperty('--v', Math.min(W.bal, 1)); uiSt.style.setProperty('--v', W.stress); uiSl.style.setProperty('--v', W.slip);
       ui.className = 'ui ' + (W.ev ? 'ev' : W.mode);
     },
   };
