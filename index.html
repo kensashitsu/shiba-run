@@ -83,7 +83,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v46 · -- fps</div>
+<div id="fps" class="ui">v47 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -113,7 +113,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v46';
+const VERSION = 'v47';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2253,7 +2253,19 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       } else if (d > LEASH) {
         const e = d - LEASH, ux = vx / d, uz = vz / d;   // u：人→犬
         {
-          if (W.mode === 'follow' && (W.sniff || seq)) { nx += ux * e; nz += uz * e; }   // 嗅いでいる間は踏ん張って動かない（人が止められる）
+          if (W.mode === 'follow' && W.sniff && !seq) {
+            // 嗅いでいる間は踏ん張るが、ロックオンほど頑固ではない：引けば崩しがたまり、横から引くほど早い。満タンで嗅ぐのをやめてついてくる
+            const fX = Math.sin(st.yaw), fZ = Math.cos(st.yaw);
+            const lat = Math.sqrt(Math.max(0, 1 - (ux * fX + uz * fZ) ** 2));
+            W.sbal = Math.min(1, (W.sbal || 0) + e * (0.15 + 0.8 * lat * lat) * (1 + W.sat));
+            const give = 0.1 + 0.35 * lat * lat;
+            sx -= ux * e * give; sz -= uz * e * give; nx += ux * e * (1 - give); nz += uz * e * (1 - give);
+            if (W.sbal >= 1) {                       // 崩れた：においから離れて飼い主の方へ
+              W.sniff = null; W.nextSniff = 6 + rand() * 8; W.sbal = 0; if (S.act === 'sniff') S.act = null;
+              dyaw = Math.atan2(-ux, -uz);
+            }
+          }
+          else if (W.mode === 'follow' && (W.sniff || seq)) { nx += ux * e; nz += uz * e; }   // マーキング・うんちの間は踏ん張って動かない（人が止められる）
           else { sx -= ux * e; sz -= uz * e; }          // 人は引きずられない（前へ行きたい犬がリードの端で止まる）
         }
       }
@@ -2315,7 +2327,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       uiL.textContent = W.ev === 'slip' ? '首輪が抜けた！' : W.ev === 'bite' ? '咬まれた！' : frenzy ? '突っ込む！ リードがビンビン'
         : { follow: '', stare: 'じっと見ている…（今なら離れられる）', lock: 'ロックオン！ 吠えて動かない', leave: '崩れた！ このまま立ち去る' }[W.mode];
       uiBal.style.setProperty('--v', Math.min(W.bal, 1)); uiSt.style.setProperty('--v', W.stress); uiSl.style.setProperty('--v', W.slip);
-      if (W.mode === 'follow' && W.sniff) uiL.textContent = 'くんくん…（終わるまで待つ）';
+      if (!W.sniff) W.sbal = Math.max(0, (W.sbal || 0) - dt);
+      else W.sbal = Math.max(0, (W.sbal || 0) - 0.15 * dt);   // 引くのをやめると踏ん張り直す
+      if (W.mode === 'follow' && W.sniff) uiL.textContent = 'くんくん…（待つ／引いて崩す）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && (S.act === 'mark' || S.act === 'poop')) uiL.textContent = S.act === 'mark' ? 'マーキング中…（待つ）' : 'うんち中…（待つ）';
       else if (W.mode === 'follow' && W.rush) uiL.textContent = '急に走り出した！';
       else if (W.mode === 'follow' && !W.ev) uiL.textContent = (W.harm > 0.95 ? '歩調ぴったり' : '歩調 ' + '●'.repeat(Math.round(W.harm * 5)) + '○'.repeat(5 - Math.round(W.harm * 5))) + '　満足 ' + '★'.repeat(Math.round(W.sat * 5)) + '☆'.repeat(5 - Math.round(W.sat * 5));
