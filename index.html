@@ -83,7 +83,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v37 · -- fps</div>
+<div id="fps" class="ui">v38 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -113,7 +113,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v37';
+const VERSION = 'v38';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1891,11 +1891,12 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     const an = joint(kn, 0, -L.shin, 0);
     blob(M.shoes, 0.05, 0.04, 0.125, 0, -0.035, 0.045, an);                    // 靴
     blob(M.shoes, 0.052, 0.012, 0.13, 0, -0.068, 0.045, an);                   // 靴底
-    return { hp, kn, an, s };
+    return { hp, kn, an, s, f: { plant: new THREE.Vector3(), foot: new THREE.Vector3(), from: new THREE.Vector3(), swing: false, s: 0, init: false, pitch: 0 } };
   });
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
-  let ph = 0, run = 0, side = 0, swapT = 0, swap = null;   // swap：持ち替えの途中（両手を体の前で合わせる）   // side：リードを持つ手（0=左 1=右）。基本は左手
+  let ph = 0, run = 0, side = 0, swapT = 0, swap = null, pelvY = 0;
+  const LEG = L.thigh + L.shin, ANK = 0.075, XAX = new THREE.Vector3(1, 0, 0), qx = new THREE.Quaternion();   // ANK：足首の高さ   // swap：持ち替えの途中（両手を体の前で合わせる）   // side：リードを持つ手（0=左 1=右）。基本は左手
   const hand = new THREE.Vector3(), tmpV = new THREE.Vector3(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Vector3();
   const DOWN = new THREE.Vector3(0, -1, 0), q = new THREE.Quaternion(), pole = new THREE.Vector3();
   // 肩→手を target へ。ひじは pole（外・下・後ろ）の側へ曲げる。腕の付け根の座標（chest）で解く
@@ -1922,21 +1923,81 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     // 1歩の周期（1秒あたりの回数＝歩数の半分）：歩きは歩幅で稼ぐので回転はゆっくり（1.35m/sで約1.9歩/秒、1.6m/sで約2.1歩/秒）、走りは回転を上げる
     const freq = speed < 0.05 ? 0 : (1 - run) * (0.35 + Math.min(speed, 2.4) * 0.45) + run * (1.25 + Math.max(0, speed - 2.4) * 0.09);
     ph = (ph + dt * freq * Math.PI * 2) % (Math.PI * 2);
+    const p0 = ph / (Math.PI * 2);                                             // 左脚の1歩の中での位置（0＝かかとが着く）
     const brace = tension * (1 - amp * 0.7);                                   // 立ち止まって引かれている時の踏ん張り
-    // 脚：付け根を前後に振り、振り出す脚のひざを曲げる。走るとひざを大きく上げる
+    const fwx = Math.sin(yaw), fwz = Math.cos(yaw), lx = Math.cos(yaw), lz = -Math.sin(yaw);   // 前・左の向き
+    const duty = 0.6 - 0.25 * run;                                             // 片足が地面に着いている割合（歩き0.6・走り0.35）
+    // --- 足の置き場所：柴と同じく、着地した足は地面に固定し、浮いている足だけ次の着地点へ運ぶ
+    const neutral = (G, px, pz, out, fwd = 0) => {
+      const X = px + lx * G.s * 0.095 + fwx * fwd, Z = pz + lz * G.s * 0.095 + fwz * fwd;
+      return out.set(X, H(X, Z) + ANK, Z);
+    };
+    const anySwing = legs.some(G => G.f.swing);
     legs.forEach((G, i) => {
-      const p = ph + (i ? Math.PI : 0), sw = Math.sin(p);
-      const hipA = (0.42 + 0.35 * run) * sw * amp;
-      const kneeA = (Math.max(0, Math.sin(p + 1.3)) * (0.75 + 0.8 * run) + 0.08 + 0.25 * run) * amp + 0.25 * brace;
-      G.hp.rotation.set(-hipA - 0.15 * brace + (i ? 0.25 : -0.05) * brace, 0, G.s * (0.03 + 0.06 * brace));
-      G.kn.rotation.x = kneeA;
-      G.an.rotation.x = -kneeA * 0.4 + hipA * 0.3;                              // 足の裏をなるべく地面に沿わせる
+      const F = G.f;
+      if (!F.init) { neutral(G, x, z, F.plant); F.foot.copy(F.plant); F.init = true; }
+      F.pitch = 0;
+      if (freq > 0) {
+        const p = (p0 + (i ? 0.5 : 0)) % 1;
+        if (p >= duty) {                                                       // 振り出し
+          if (!F.swing) { F.swing = true; F.from.copy(F.foot); }
+          const s = (p - duty) / (1 - duty);
+          const lead = (1 - s) * (1 - duty) / freq + 0.5 * duty / freq;       // 着地する頃に体がいる所の、半歩先
+          neutral(G, x + fwx * speed * lead, z + fwz * speed * lead, tmpV);
+          F.foot.lerpVectors(F.from, tmpV, ease(s));
+          F.foot.y = H(F.foot.x, F.foot.z) + ANK + Math.sin(Math.PI * s) * (0.045 + 0.03 * amp + 0.12 * run) + (1 - s) * (1 - s) * 0.05;
+          F.pitch = s < 0.35 ? 0.55 * (1 - s / 0.35) : -0.22 * smooth(0.55, 1, s);   // 蹴り出した直後はつま先が下、着地前はつま先を上げる
+        } else {                                                               // 接地：足は地面に固定。終わりかけにかかとが上がり、つま先で蹴る
+          if (F.swing) { F.swing = false; F.plant.set(F.foot.x, H(F.foot.x, F.foot.z) + ANK, F.foot.z); }
+          F.foot.copy(F.plant);
+          const hr = Math.max(0, (p - (duty - 0.2)) / 0.2);
+          F.foot.y += hr * hr * 0.055; F.pitch = 0.6 * hr * hr;
+          if (p < 0.1) F.pitch = -0.22 * (1 - p / 0.1);                      // かかとから着く
+        }
+      } else {                                                                 // 止まっている時：ずれた足だけ一歩ずつ置き直す（踏ん張る時は前後に開く）
+        neutral(G, x, z, tmpV, brace * (i ? -0.16 : 0.16));
+        if (F.swing) {
+          F.s = Math.min(1, F.s + dt / 0.35);
+          F.foot.lerpVectors(F.from, tmpV, ease(F.s));
+          F.foot.y = H(F.foot.x, F.foot.z) + ANK + Math.sin(Math.PI * F.s) * 0.05;
+          if (F.s >= 1) { F.swing = false; F.plant.copy(tmpV); }
+        } else {
+          if (Math.hypot(F.plant.x - tmpV.x, F.plant.z - tmpV.z) > 0.12 && !anySwing) { F.swing = true; F.s = 0; F.from.copy(F.plant); }
+          F.foot.copy(F.plant);
+        }
+      }
     });
-    // 体：歩くと上下に揺れ、走ると前傾。引かれると腰を落として後ろに体重をかける
-    pelvis.position.y = HIP_Y - 0.035 * amp * (1 + run) * Math.abs(Math.cos(ph)) - 0.06 * brace - 0.02 * run;
-    pelvis.rotation.y = Math.sin(ph) * 0.08 * amp;
-    torso.rotation.set(0.05 * amp + 0.22 * run - 0.2 * brace, -Math.sin(ph) * 0.12 * amp, 0);
-    head.rotation.set(-0.2 * run + 0.15 * brace, Math.sin(ph) * 0.06 * amp, 0);
+    // --- 腰：歩くと片足立ちの時に高く、両足の時に低い。左右にも少し揺れる。脚が届く高さより上には上げない
+    const bob = (1 - run) * 0.022 * amp * (1 + Math.cos(4 * Math.PI * p0)) / 2 - run * 0.03 * Math.sin(4 * Math.PI * (p0 - 0.1));
+    let py = root.position.y + HIP_Y - 0.008 - bob - 0.07 * brace - 0.025 * run;
+    for (const G of legs) {
+      const hx = x + lx * G.s * 0.09 - fwx * 0.06 * brace, hz = z + lz * G.s * 0.09 - fwz * 0.06 * brace;
+      const hd = Math.hypot(G.f.foot.x - hx, G.f.foot.z - hz);
+      py = Math.min(py, G.f.foot.y + Math.sqrt(Math.max(0.01, (0.985 * LEG) ** 2 - hd * hd)));
+    }
+    pelvY += (py - pelvY) * (pelvY ? Math.min(1, dt * 18) : 1);
+    pelvis.position.set(0.02 * amp * (1 - run) * Math.cos(2 * Math.PI * (p0 - 0.3)), pelvY - root.position.y, -0.06 * brace);   // 立っている脚の側へ寄る・踏ん張ると腰を引く
+    pelvis.rotation.set(0, -0.08 * amp * Math.cos(2 * Math.PI * p0), 0.045 * amp * (1 - run) * Math.cos(2 * Math.PI * (p0 - 0.3)));   // 振り出す脚の側が前へ回り、浮いた側が下がる
+    // 胴は腰と逆にひねって肩を水平に保つ。走ると前傾、踏ん張ると後ろへ体重をかける
+    torso.rotation.set(0.04 * amp + 0.2 * run - 0.18 * brace, 0.15 * amp * Math.cos(2 * Math.PI * p0), -pelvis.rotation.z * 0.9);
+    head.rotation.set(-0.18 * run + 0.13 * brace, -(pelvis.rotation.y + torso.rotation.y) * 0.8, 0);   // 頭は前を向いたまま
+    // --- 脚を足の位置へ（股・ひざ・足首の3点。ひざは前へ曲げる）。足首は足の裏の傾きに合わせる
+    root.updateMatrixWorld(true);
+    for (const G of legs) {
+      pelvis.worldToLocal(T.copy(G.f.foot));
+      S.copy(G.hp.position);
+      const a = L.thigh, b = L.shin;
+      const d = T.clone().sub(S), dl = Math.min(d.length(), (a + b) * 0.999); d.normalize();
+      const ang = Math.acos(Math.max(-1, Math.min(1, (a * a + dl * dl - b * b) / (2 * a * dl))));
+      pole.set(G.s * 0.08, 0, 1); pole.sub(d.clone().multiplyScalar(pole.dot(d))).normalize();
+      E.copy(S).addScaledVector(d, Math.cos(ang) * a).addScaledVector(pole, Math.sin(ang) * a);
+      G.hp.quaternion.setFromUnitVectors(DOWN, tmpV.copy(E).sub(S).normalize());
+      tmpV.copy(S).addScaledVector(d, dl).sub(E).normalize().applyQuaternion(q.copy(G.hp.quaternion).invert());
+      G.kn.quaternion.setFromUnitVectors(DOWN, tmpV);
+      G.kn.updateMatrixWorld(true);
+      G.kn.getWorldQuaternion(q).invert();
+      G.an.quaternion.copy(q).multiply(root.quaternion).multiply(qx.setFromAxisAngle(XAX, G.f.pitch));
+    }
     // 腕：リードを持たない方は脚と逆に振る。走るとひじを曲げる
     // 犬が右側に回り込んだまましばらく経ったら右手に持ち替え、左側へ戻れば左手に戻す
     if (aim) {
@@ -1950,9 +2011,9 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     const busy = i => aim && (i === side || (swap && (i === swap.from || i === swap.to)));
     arms.forEach((A, i) => {
       if (busy(i)) return;
-      const sw = Math.sin(ph + (i ? 0 : Math.PI));
-      A.sh.quaternion.identity(); A.sh.rotation.set(-sw * (0.35 + 0.35 * run) * amp, 0, 0.08 * A.s);
-      A.el.quaternion.identity(); A.el.rotation.set(-(0.18 + 1.1 * run) * amp - 0.1, 0, 0);
+      const fw = (i ? 1 : -1) * Math.cos(ph);                                  // 腕は反対側の脚と一緒に前へ（1＝前）
+      A.sh.quaternion.identity(); A.sh.rotation.set(-fw * (0.32 + 0.4 * run) * amp + 0.04, 0, 0.07 * A.s);
+      A.el.quaternion.identity(); A.el.rotation.set(-(0.22 + 0.18 * Math.max(0, fw) + 1.0 * run) * Math.max(amp, 0.3) - 0.08, 0, 0);
     });
     if (aim) {
       root.updateMatrixWorld(true);
@@ -2457,6 +2518,7 @@ function frame() {
 }
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
+window.__V = THREE.Vector3; window.__gy = (x, z) => H(x, z);
 window.__shiba = { TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
