@@ -83,7 +83,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v35 · -- fps</div>
+<div id="fps" class="ui">v36 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -113,7 +113,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v35';
+const VERSION = 'v36';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1895,8 +1895,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
   });
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
-  let ph = 0, run = 0;
-  const side = 0;   // リードはいつも左手で持つ
+  let ph = 0, run = 0, side = 0, swapT = 0;   // side：リードを持つ手（0=左 1=右）。基本は左手
   const hand = new THREE.Vector3(), tmpV = new THREE.Vector3(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Vector3();
   const DOWN = new THREE.Vector3(0, -1, 0), q = new THREE.Quaternion(), pole = new THREE.Vector3();
   // 肩→手を target へ。ひじは pole（外・下・後ろ）の側へ曲げる。腕の付け根の座標（chest）で解く
@@ -1937,6 +1936,13 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     torso.rotation.set(0.05 * amp + 0.22 * run - 0.2 * brace, -Math.sin(ph) * 0.12 * amp, 0);
     head.rotation.set(-0.2 * run + 0.15 * brace, Math.sin(ph) * 0.06 * amp, 0);
     // 腕：リードを持たない方は脚と逆に振る。走るとひじを曲げる
+    // 犬が右側に回り込んだまましばらく経ったら右手に持ち替え、左側へ戻れば左手に戻す
+    if (aim) {
+      root.updateMatrixWorld(true); pelvis.worldToLocal(tmpV.copy(aim));
+      const wantRight = side === 0 ? tmpV.x < -0.35 : tmpV.x < 0.05;
+      swapT = wantRight === (side === 1) ? 0 : swapT + dt;
+      if (swapT > (side === 0 ? 1.5 : 1.0)) { side = 1 - side; swapT = 0; }
+    }
     arms.forEach((A, i) => {
       if (aim && i === side) return;
       const sw = Math.sin(ph + (i ? 0 : Math.PI));
