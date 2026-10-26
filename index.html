@@ -83,7 +83,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v38 · -- fps</div>
+<div id="fps" class="ui">v39 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -113,7 +113,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v38';
+const VERSION = 'v39';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1942,7 +1942,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
         if (p >= duty) {                                                       // 振り出し
           if (!F.swing) { F.swing = true; F.from.copy(F.foot); }
           const s = (p - duty) / (1 - duty);
-          const lead = (1 - s) * (1 - duty) / freq + 0.5 * duty / freq;       // 着地する頃に体がいる所の、半歩先
+          const lead = (1 - s) * (1 - duty) / freq + 0.4 * duty / freq;       // 着地する頃に体がいる所の少し先（置きすぎると腰が沈む）
           neutral(G, x + fwx * speed * lead, z + fwz * speed * lead, tmpV);
           F.foot.lerpVectors(F.from, tmpV, ease(s));
           F.foot.y = H(F.foot.x, F.foot.z) + ANK + Math.sin(Math.PI * s) * (0.045 + 0.03 * amp + 0.12 * run) + (1 - s) * (1 - s) * 0.05;
@@ -1950,8 +1950,9 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
         } else {                                                               // 接地：足は地面に固定。終わりかけにかかとが上がり、つま先で蹴る
           if (F.swing) { F.swing = false; F.plant.set(F.foot.x, H(F.foot.x, F.foot.z) + ANK, F.foot.z); }
           F.foot.copy(F.plant);
-          const hr = Math.max(0, (p - (duty - 0.2)) / 0.2);
-          F.foot.y += hr * hr * 0.055; F.pitch = 0.6 * hr * hr;
+          // 終わりかけはかかとが上がり、つま先の上を転がって足首が前へ出る（脚を長く使えるので腰が沈まない）
+          const hr = Math.max(0, (p - (duty - 0.25)) / 0.25);
+          F.foot.y += hr * hr * 0.09; F.foot.x += fwx * 0.08 * hr * hr; F.foot.z += fwz * 0.08 * hr * hr; F.pitch = 0.7 * hr * hr;
           if (p < 0.1) F.pitch = -0.22 * (1 - p / 0.1);                      // かかとから着く
         }
       } else {                                                                 // 止まっている時：ずれた足だけ一歩ずつ置き直す（踏ん張る時は前後に開く）
@@ -1971,6 +1972,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     const bob = (1 - run) * 0.022 * amp * (1 + Math.cos(4 * Math.PI * p0)) / 2 - run * 0.03 * Math.sin(4 * Math.PI * (p0 - 0.1));
     let py = root.position.y + HIP_Y - 0.008 - bob - 0.07 * brace - 0.025 * run;
     for (const G of legs) {
+      if (G.f.swing && freq > 0) continue;   // 腰の高さは地面に着いている足だけで決める（浮いた足に合わせると沈み込む）
       const hx = x + lx * G.s * 0.09 - fwx * 0.06 * brace, hz = z + lz * G.s * 0.09 - fwz * 0.06 * brace;
       const hd = Math.hypot(G.f.foot.x - hx, G.f.foot.z - hz);
       py = Math.min(py, G.f.foot.y + Math.sqrt(Math.max(0.01, (0.985 * LEG) ** 2 - hd * hd)));
