@@ -71,6 +71,9 @@
     width: 76px; height: 76px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.85); border: 2px solid #8a6a3a; color: #4a3520;
     font: 700 15px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
   #pickBtn:active { background: rgba(240,180,106,.8); }
+  #crouchBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+    width: 64px; height: 64px; border-radius: 50%; padding: 0; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 13px var(--font-ui); }
+  #crouchBtn.on { background: rgba(240,180,106,.6); }
   #acts #jump { width: 76px; height: 76px; font-size: 15px; margin-top: 4px; }
   #acts button:active { background: rgba(240,180,106,.45); }
   #acts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -91,10 +94,11 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v53 · -- fps</div>
+<div id="fps" class="ui">v54 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
+<button type="button" id="crouchBtn" class="ui" hidden>しゃがむ</button>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
@@ -123,7 +127,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v53';
+const VERSION = 'v54';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1569,6 +1573,17 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8 } = {}) =>
       P.headYaw += ((S.gaze ?? 0) - P.headYaw) * k;
       if (st.speed < 0.3) lerpPose(P, { legs: [V(0.09, 0, 0.27), V(-0.09, 0, 0.27), V(0.1, 0, -0.23), V(-0.1, 0, -0.23)] }, k);   // 脚を開いて踏ん張る
     }
+    if (S.lick) {   // 飼い主がしゃがむと：後ろ脚で立ち上がり、前脚をひざに掛けて、尻尾を振りながら顔を舐める
+      P.pitch += 0.55; P.y += 0.04; P.neck -= 0.25; P.headPitch -= 0.35; P.look = 0; P.headYaw = Math.sin(t * 3) * 0.15;
+      P.legs[0] = V(0.07, 0.24, 0.3); P.legs[1] = V(-0.07, 0.22, 0.31); P.legs[2] = V(0.09, 0, -0.08); P.legs[3] = V(-0.09, 0, -0.08);
+      P.tongue = 1; P.jaw = 0.35 + 0.25 * Math.max(0, Math.sin(t * 11)); P.wag = 0.5; P.wagHz = 12; P.earsBack = 0.4; P.eyes = 0.6;
+    }
+    if (S.ponderLook) { P.headYaw = Math.sin(t * 1.4) * 0.9; P.look = 0; P.earsBack = -0.2; }   // どっちへ行こうか、きょろきょろ
+    if (S.refuse > 0.01) {   // 拒否柴：腰を落として前脚を突っ張り、頭を下げて首輪から引かれる力に逆らう
+      const k = S.refuse;
+      P.pitch += 0.28 * k; P.y -= 0.06 * k; P.neck += 0.25 * k; P.earsBack = Math.max(P.earsBack, 0.6 * k); P.tailDown = Math.max(P.tailDown, 0.5 * k); P.wag *= 1 - k;
+      lerpPose(P, { legs: [V(0.08, 0, 0.32), V(-0.08, 0, 0.32), V(0.1, 0, -0.14), V(-0.1, 0, -0.14)] }, k);
+    }
     if (S.frantic > 0.01) {   // 異様に執着して嗅ぐ：いつもの3倍くらいの速さで鼻をひくつかせ、頭を左右に振って嗅ぎ回る
       const k = S.frantic;
       P.neck += (0.95 - P.neck) * k; P.headPitch += (0.25 + Math.sin(t * 95) * 0.035 + Math.sin(t * 9) * 0.06) * k;
@@ -2121,7 +2136,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rival = makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b });
   scene.add(rival.object);
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
-  const W = { mode: 'follow', stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
+  const W = { mode: 'follow', crouch: false, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   const rst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 }, rdst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
   // 道路の線を一本選んで行き来させる（自分の出発地点の近くを通る、長い道）
   const routeOf = r => { const p = ringOf(r.p), cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return { p, cum, len: cum[cum.length - 1] }; };
@@ -2144,6 +2159,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   addEventListener('resize', fitLeash); fitLeash();
   const stamEl = document.getElementById('stam'); stamEl.hidden = false;
   const pickBtn = document.getElementById('pickBtn');
+  const crouchBtn = document.getElementById('crouchBtn');
+  crouchBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.crouch = !W.crouch; });
   pickBtn.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation();
     if (W.dung && !W.pick) { W.pick = { ph: 'down', t: 0, g: W.dung }; W.dung = null; }
@@ -2187,6 +2204,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.ev === 'bite') mag = 0;   // 咬まれた直後は手を引っ込めて動けない
       // フン拾い：歩み寄る→しゃがむ→袋をかぶせた手でつかむ→立つ→袋をしまう（その間は操作が効かない）
       W.pickPose = null;
+      if (W.crouch && (mag > 0.15 || W.pick || W.mode !== 'follow')) W.crouch = false;
+      W.crouchK = (W.crouchK || 0) + ((W.crouch ? 1 : 0) - (W.crouchK || 0)) * Math.min(1, dt * 5);
+      if (W.crouch) mag = 0;
       if (W.pick) {
         const P = W.pick; P.t += dt; dog.state.idleT = 0;   // 拾っている間、柴は勝手に別の仕草を始めない
         const gp = P.g.position, toX = gp.x - walker.x, toZ = gp.z - walker.z, dd = Math.hypot(toX, toZ);
@@ -2240,6 +2260,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
 
       // --- 柴の行きたい所
       const seq = S.act === 'mark' || S.act === 'poop' || S.act === 'shake' || !!W.pick;
+      S.lick = 0;
       let gx, gz, dspd;
       const fwx = Math.sin(walker.yaw), fwz = Math.cos(walker.yaw);
       const frenzy = W.mode === 'lock' && rd < 5;                                                       // 相手が5m以内：全速力で突っ込む
@@ -2248,7 +2269,14 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'leave') { gx = walker.x + fwx * 0.8; gz = walker.z + fwz * 0.8; dspd = Math.min(3.2, Math.hypot(gx - st.x, gz - st.z) * 2); }
       else {   // 落ち着いている時：柴が自分のペースで常に前へ歩き、人はそれについていく。人の歩く向きには合わせて曲がり、人が走れば一緒に走る
         if (W.dh === undefined) W.dh = st.yaw;
-        if (seq) {   // マーキング・うんち：段取りが終わるまでその場で（木へ寄る・くるくる回るのは段取りの指示どおり）
+        if (W.crouch && !seq && !W.sniff) {   // しゃがむと：満足していれば、うれしそうに寄ってきて顔を舐める
+          if (W.sat > 0.5) {
+            const fx = walker.x + Math.sin(walker.yaw) * 0.66, fz = walker.z + Math.cos(walker.yaw) * 0.66, dd = Math.hypot(fx - st.x, fz - st.z);
+            gx = fx; gz = fz; dspd = dd > 0.08 ? Math.min(1.6, dd * 3) : 0;
+            S.lick = dd < 0.25 ? 1 : 0;
+            if (S.lick) W.sat = Math.min(1, W.sat + 0.01 * dt);
+          } else { dspd = 0; gx = st.x + Math.sin(st.yaw); gz = st.z + Math.cos(st.yaw); }
+        } else if (seq) {   // マーキング・うんち：段取りが終わるまでその場で（木へ寄る・くるくる回るのは段取りの指示どおり）
           if (S.auto) { dspd = S.auto.mag * 8.5; gx = st.x + Math.sin(S.auto.yaw); gz = st.z + Math.cos(S.auto.yaw); }
           else { dspd = 0; gx = st.x + Math.sin(st.yaw); gz = st.z + Math.cos(st.yaw); }
         } else if (W.sniff) {   // 道端のにおい嗅ぎ：終わるまでその場から動かない（人は待つ）
@@ -2316,9 +2344,36 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           const fvx = fwx * walker.speed + (ax2 - st.x) * 2.5, fvz = fwz * walker.speed + (az2 - st.z) * 2.5;
           if (!W.rush && !W.heat && walker.speed > pace && Math.hypot(fvx, fvz) > pace) { dspd = Math.min(8, Math.hypot(fvx, fvz)); gx = st.x + fvx; gz = st.z + fvz; W.dh = Math.atan2(fvx, fvz); }
           else { dspd = pace; gx = st.x + Math.sin(W.dh); gz = st.z + Math.cos(W.dh); }   // 人が止まればリードの端で前へ引っ張る
+          // 急に立ち止まって、どっちへ行こうか考える。行きたい方が決まると、そっちへ行こうとする。
+          // そのとき飼い主が行きたくない方へ引くと踏ん張って拒否（崩せるが満足度は下がる）
+          W.ponderT += walker.speed > 0.4 && !W.rush && !W.heat ? dt : 0;
+          if (!W.ponder && W.ponderT > W.ponderAt) {
+            const opts = [Math.PI / 2, -Math.PI / 2, Math.PI * 0.85, -Math.PI * 0.85].map(k => W.dh + k).filter(a => !townBlocked(st.x + Math.sin(a) * 2, st.z + Math.cos(a) * 2) && !townBlocked(st.x + Math.sin(a) * 4, st.z + Math.cos(a) * 4));
+            if (opts.length) W.ponder = { ph: 'think', t: 0, think: 1.8 + rand() * 1.8, pref: opts[Math.floor(rand() * opts.length)], look: st.yaw };
+            W.ponderT = 0; W.ponderAt = 50 + rand() * 70;
+          }
+          if (W.ponder) {
+            const Pn = W.ponder; Pn.t += dt;
+            const walkerDir = walker.speed > 0.3 ? walker.yaw : null;
+            if (Pn.ph === 'think') { dspd = 0; gx = st.x + Math.sin(st.yaw); gz = st.z + Math.cos(st.yaw); if (Pn.t > Pn.think) { Pn.ph = 'want'; Pn.t = 0; } }
+            else {
+              W.dh = Pn.pref;
+              const toMe = Math.atan2(walker.x - st.x, walker.z - st.z);
+              if (Pn.ph === 'want') {
+                dspd = 1.2; gx = st.x + Math.sin(Pn.pref); gz = st.z + Math.cos(Pn.pref);
+                if (walkerDir !== null && Math.abs(angDiff(walkerDir, Pn.pref)) < 0.7) W.ponder = null;                 // 行きたい方へ一緒に行く
+                else if (W.tension > 0.8 && walker.speed > 0.3 && Math.abs(angDiff(toMe, Pn.pref)) > 1.3) { Pn.ph = 'refuse'; Pn.t = 0; }   // 反対へ引かれた
+                else if (Pn.t > 10) W.ponder = null;
+              } else {                                                                                               // 拒否柴：踏ん張って動かない
+                dspd = 0; gx = st.x + Math.sin(Pn.pref); gz = st.z + Math.cos(Pn.pref);
+                if (walkerDir !== null && Math.abs(angDiff(walkerDir, Pn.pref)) < 0.7) W.ponder = null;
+                else if (W.tension < 0.3 && Pn.t > 1.5) { Pn.ph = 'want'; Pn.t = 0; }
+              }
+            }
+          }
           // 気になる所：道端（道路の外の庭・草むら・塀ぎわ）を見つけると、立ち止まって嗅ぐ
           W.nextSniff = (W.nextSniff ?? 5) - dt;
-          if (W.nextSniff <= 0 && !W.rush && !W.heat) {
+          if (W.nextSniff <= 0 && !W.rush && !W.heat && !W.ponder) {
             const spots = [1, -1].map(sd => { const a = W.dh + sd * Math.PI / 2; return [st.x + Math.sin(a) * 0.9 + Math.sin(W.dh) * 0.6, st.z + Math.cos(a) * 0.9 + Math.cos(W.dh) * 0.6]; })
               .filter(([x, z]) => townRoad(x, z) < 0.5 && !townBlocked(x, z));
             if (spots.length) { const [x, z] = spots[Math.floor(rand() * spots.length)]; W.sniff = { x, z, t: 3.5 + rand() * 6 }; }
@@ -2336,7 +2391,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         W.ev = null;
       } }
       const gyaw = Math.atan2(gx - st.x, gz - st.z);
-      let dyaw = W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
+      let dyaw = W.mode === 'follow' && S.lick ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.mode === 'follow' && W.ponder && W.ponder.ph !== 'want' ? (W.ponder.ph === 'think' ? W.ponder.look : W.ponder.pref) : W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
       let sx = st.x, sz = st.z;
       if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
 
@@ -2379,15 +2434,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       } else if (d > LEASH) {
         const e = d - LEASH, ux = vx / d, uz = vz / d;   // u：人→犬
         {
-          if (W.mode === 'follow' && (W.sniff || seq)) {   // マーキング・うんちの最中も同じように崩せる（うんちは一番頑固）
+          const balking = W.ponder && W.ponder.ph !== 'want';
+          if (W.mode === 'follow' && (W.sniff || seq || balking)) {   // マーキング・うんち・拒否柴も同じように崩せる（うんちは一番頑固）
             // 嗅いでいる間は踏ん張るが、ロックオンほど頑固ではない：引けば崩しがたまり、横から引くほど早い。満タンで嗅ぐのをやめてついてくる
             const fX = Math.sin(st.yaw), fZ = Math.cos(st.yaw);
             const lat = Math.sqrt(Math.max(0, 1 - (ux * fX + uz * fZ) ** 2));
-            W.sbal = Math.min(1, (W.sbal || 0) + e * (0.15 + 0.8 * lat * lat) * (1 + W.sat) * (S.act === 'poop' ? 0.6 : S.act === 'mark' ? 0.85 : W.sniff && W.sniff.heat ? 0.35 : 1));   // 執着している時はなかなか崩れない
+            W.sbal = Math.min(1, (W.sbal || 0) + e * (0.15 + 0.8 * lat * lat) * (1 + W.sat) * (S.act === 'poop' ? 0.6 : S.act === 'mark' ? 0.85 : W.sniff && W.sniff.heat ? 0.35 : balking ? 0.55 : 1));   // 執着している時はなかなか崩れない
             const give = 0.1 + 0.35 * lat * lat;
             sx -= ux * e * give; sz -= uz * e * give; nx += ux * e * (1 - give); nz += uz * e * (1 - give);
             if (W.sbal >= 1) {                       // 崩れた：においから離れて飼い主の方へ
               if (S.act === 'poop') W.poopT = Math.max(0, W.poopAt - 15);   // 途中でやめさせたうんちは、しばらくしてまたしたくなる
+              if (balking) { W.ponder = null; W.sat = Math.max(0, W.sat - 0.15); W.dh = Math.atan2(-ux, -uz); }   // 拒否を崩した：ついてくるが満足度は下がる
               W.sniff = null; W.nextSniff = 6 + rand() * 8; W.sbal = 0; if (S.act === 'sniff' || S.act === 'mark' || S.act === 'poop') S.act = null;
               dyaw = Math.atan2(-ux, -uz);
             }
@@ -2424,6 +2481,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 仕草
       dog.think(!(W.mode === 'follow' && (W.sniff || S.act === 'mark' || S.act === 'poop' || S.act === 'shake' || W.pick)), dt, t, st, camera.position);   // このコマで始まった段取りも止めない   // 嗅いでいる間は仕草を止めない
       const pulling = W.mode === 'follow' && !W.sniff && !seq && W.tension > 0.8;      // リードの端で前へ引っ張っている
+      S.ponderLook = W.mode === 'follow' && W.ponder && W.ponder.ph === 'think' ? 1 : 0;
+      S.refuse = (S.refuse || 0) + ((W.mode === 'follow' && W.ponder && W.ponder.ph === 'refuse' ? 1 : 0) - (S.refuse || 0)) * Math.min(1, dt * 6);
       S.frantic = (S.frantic || 0) + ((W.sniff && W.sniff.heat && W.mode === 'follow' ? 1 : 0) - (S.frantic || 0)) * Math.min(1, dt * 6);
       if (W.prevAct !== S.act && W.mode === 'follow') {
         if (W.prevAct === 'poop' && !S.act) {                        // うんちの後：身震いして、飼い主がフンを拾う
@@ -2452,7 +2511,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 人とリードの形
       if (W.ev === 'slip') collar.set(walker.x + Math.sin(walker.yaw + 0.6) * 1.0, H(walker.x, walker.z) + 0.03, walker.z + Math.cos(walker.yaw + 0.6) * 1.0);
       else collar.set(st.x + Math.sin(st.yaw) * 0.25, H(st.x, st.z) + 0.43, st.z + Math.cos(st.yaw) * 0.25);
-      me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension, { ...(W.pickPose || {}), tired: W.tired });
+      me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension, W.pickPose ? { ...W.pickPose, tired: W.tired }
+        : { crouch: W.crouchK, hand: W.crouchK > 0.6 && S.lick ? new THREE.Vector3(st.x - Math.sin(st.yaw) * 0.05, H(st.x, st.z) + 0.62, st.z - Math.cos(st.yaw) * 0.05) : null, tired: W.tired });   // しゃがむ・舐めに来た柴をなでる
       const hd = me.hand.distanceTo(collar), sag = W.ev === 'slip' ? 0.3 : Math.sqrt(Math.max(0, LEASH * LEASH - hd * hd)) * 0.45 * (1 - W.tension) ** 2;   // 張っている時は一直線
       for (let i = 0; i < LN; i++) {
         const u = i / (LN - 1);
@@ -2466,15 +2526,20 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         : { follow: '', stare: 'じっと見ている…（今なら離れられる）', lock: 'ロックオン！ 吠えて動かない', leave: '崩れた！ このまま立ち去る' }[W.mode];
       stamEl.style.setProperty('--v', W.stam); stamEl.style.setProperty('--c', W.spent ? '#ff7a5c' : W.stam < 0.3 ? '#ffd166' : '#9be07a'); stamEl.classList.toggle('full', W.stam > 0.99);
       uiBal.style.setProperty('--v', Math.min(W.bal, 1)); uiSt.style.setProperty('--v', W.stress); uiSl.style.setProperty('--v', W.slip);
-      if (!W.sniff && !seq) W.sbal = Math.max(0, (W.sbal || 0) - dt);
+      if (!W.sniff && !seq && !(W.ponder && W.ponder.ph !== 'want')) W.sbal = Math.max(0, (W.sbal || 0) - dt);
       else W.sbal = Math.max(0, (W.sbal || 0) - 0.15 * dt);   // 引くのをやめると踏ん張り直す
       if (W.dung) {
         const dd2 = Math.hypot(W.dung.position.x - walker.x, W.dung.position.z - walker.z);
         pickBtn.hidden = !(dd2 < 1.3 && !W.pick);
         if (dd2 > 15) { W.dung = null; W.leftT = 4; W.sat = Math.max(0, W.sat - 0.1); }   // 置き去りにした
       } else pickBtn.hidden = true;
+      crouchBtn.hidden = !(W.mode === 'follow' && pickBtn.hidden && !W.pick && (W.crouch || walker.speed < 0.4));
+      crouchBtn.textContent = W.crouch ? '立つ' : 'しゃがむ'; crouchBtn.classList.toggle('on', W.crouch);
       W.leftT = Math.max(0, (W.leftT || 0) - dt);
       if (W.mode === 'follow' && W.pick) uiL.textContent = 'フンを拾う';
+      else if (W.mode === 'follow' && W.crouch) uiL.textContent = S.lick ? 'うれしそうに顔を舐めてきた！' : W.sat > 0.5 ? 'しゃがんでいる' : 'しゃがんでいる（満足していないと寄ってこない）';
+      else if (W.mode === 'follow' && W.ponder) uiL.textContent = W.ponder.ph === 'think' ? '立ち止まって、どっちへ行こうか考えている' : W.ponder.ph === 'want' ? 'こっちへ行きたいらしい'
+        : '拒否柴！ 踏ん張って動かない' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.leftT > 0 && !S.act) uiL.textContent = 'フンを置き去りにしてしまった…';
       else if (W.mode === 'follow' && W.dung && !S.act && !W.sniff) uiL.textContent = Math.hypot(W.dung.position.x - walker.x, W.dung.position.z - walker.z) < 1.3 ? '「拾う」を押してフンを拾う' : 'フンを拾おう（近づくと「拾う」が出る）';
       else if (W.mode === 'follow' && S.act === 'shake') uiL.textContent = 'ブルブル…（身震いして落ち着く）';
@@ -2484,7 +2549,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'follow' && (S.act === 'mark' || S.act === 'poop')) uiL.textContent = (S.act === 'mark' ? 'マーキング中…（待つ／引いて崩す）' : 'うんち中…（待つ／引いて崩す）') + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.rush) uiL.textContent = W.rush.ph === 'seek' ? 'うんちしたい！ ぐんぐん引っ張る' : 'くんくん…場所を探している';
       else if (W.mode === 'follow' && !W.ev) uiL.textContent = (W.harm > 0.95 ? '歩調ぴったり' : '歩調 ' + '●'.repeat(Math.round(W.harm * 5)) + '○'.repeat(5 - Math.round(W.harm * 5))) + '　満足 ' + '★'.repeat(Math.round(W.sat * 5)) + '☆'.repeat(5 - Math.round(W.sat * 5));
-      ui.className = 'ui ' + (W.ev ? 'ev' : W.mode === 'follow' && (W.sniff || seq || W.rush || W.heat) ? 'sniff' : W.mode === 'follow' ? 'harm' + (W.harm > 0.95 ? ' full' : '') : W.mode);
+      ui.className = 'ui ' + (W.ev ? 'ev' : W.mode === 'follow' && (W.sniff || seq || W.rush || W.heat || W.crouch || W.ponder) ? 'sniff' : W.mode === 'follow' ? 'harm' + (W.harm > 0.95 ? ' full' : '') : W.mode);
     },
   };
 }
