@@ -31,8 +31,8 @@
     width: 104px; height: 104px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
   #map.compass { width: 64px; height: 64px; pointer-events: none; box-shadow: none; }
   #map.big { width: min(92vw, 80vh); height: min(92vw, 80vh); border-radius: 14px; top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
-  #walkui { top: calc(env(safe-area-inset-top, 0px) + 176px); left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
-    border-radius: 12px; font-size: 14px; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0; }
+  #walkui { bottom: calc(env(safe-area-inset-bottom, 0px) + 26px); pointer-events: none; min-width: 200px; left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
+    border-radius: 12px; font-size: 13px; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0; }
   #walkui.follow { display: none; }
   #walkui.stare { background: rgba(200,160,40,.45); }
   #walkui.lock { background: rgba(190,50,40,.55); }
@@ -80,7 +80,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v28 · -- fps</div>
+<div id="fps" class="ui">v29 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -110,7 +110,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v28';
+const VERSION = 'v29';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2062,7 +2062,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.ev === 'slip') collar.set(walker.x + Math.sin(walker.yaw + 0.6) * 1.0, H(walker.x, walker.z) + 0.03, walker.z + Math.cos(walker.yaw + 0.6) * 1.0);
       else collar.set(st.x + Math.sin(st.yaw) * 0.25, H(st.x, st.z) + 0.43, st.z + Math.cos(st.yaw) * 0.25);
       me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension);
-      const hd = me.hand.distanceTo(collar), sag = Math.sqrt(Math.max(0, LEASH * LEASH - hd * hd)) * 0.45;
+      const hd = me.hand.distanceTo(collar), sag = W.ev === 'slip' ? 0.3 : Math.sqrt(Math.max(0, LEASH * LEASH - hd * hd)) * 0.45 * (1 - W.tension) ** 2;   // 張っている時は一直線
       for (let i = 0; i < LN; i++) {
         const u = i / (LN - 1);
         tv.lerpVectors(me.hand, collar, u); tv.y -= sag * 4 * u * (1 - u);
