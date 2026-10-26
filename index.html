@@ -31,7 +31,7 @@
     width: 104px; height: 104px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
   #map.compass { width: 64px; height: 64px; pointer-events: none; box-shadow: none; }
   #map.big { width: min(92vw, 80vh); height: min(92vw, 80vh); border-radius: 14px; top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
-  #walkui { top: calc(env(safe-area-inset-top, 0px) + 124px); left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
+  #walkui { top: calc(env(safe-area-inset-top, 0px) + 176px); left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
     border-radius: 12px; font-size: 14px; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0; }
   #walkui:empty { display: none; }
   #walkui.stare { background: rgba(200,160,40,.45); }
@@ -76,7 +76,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v25 · -- fps</div>
+<div id="fps" class="ui">v26 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden></div>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
@@ -105,7 +105,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v25';
+const VERSION = 'v26';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1846,7 +1846,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98 }) {
     const free = arms[1 - side], hold = arms[side];
     free.rotation.set(-sw * 0.35 * amp * (side ? 1 : -1), 0, 0);
     hips.position.y = 0.88 + Math.abs(Math.cos(ph)) * 0.025 * amp;
-    hips.rotation.x = 0.1 * tension;                                     // 引っ張られると前のめり
+    hips.rotation.x = -0.14 * tension;                                   // 引っ張られると後ろへ体重をかけて踏ん張る
     // リードを持つ右腕は犬の方へ向ける（張るほど伸びる）
     hold.rotation.set(0, 0, 0);
     if (aim) {   // 肩から犬の方へ。たるんでいる時は少しだけ、張ると腕ごと持っていかれる
@@ -1925,7 +1925,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       rdst.yaw = rst.yaw; rdst.speed = 1.05;
 
       // --- 飼い主（自分）
-      const want = mag * 1.7;
+      const want = mag * 2.4;
       if (mag > 0.05) walker.yaw += angDiff(walker.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 8);
       walker.speed += (want - walker.speed) * Math.min(1, dt * 5);
       let nx = walker.x + Math.sin(walker.yaw) * walker.speed * dt, nz = walker.z + Math.cos(walker.yaw) * walker.speed * dt;
@@ -1959,13 +1959,14 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 柴の行きたい所
       let gx, gz, dspd;
       const fwx = Math.sin(walker.yaw), fwz = Math.cos(walker.yaw);
-      if (W.mode === 'lock') { gx = rdst.x; gz = rdst.z; dspd = rd > 2 ? 2.8 : 0; }                     // 相手へ突進しようとする
+      const frenzy = W.mode === 'lock' && rd < 5;                                                       // 相手が5m以内：全速力で突っ込む
+      if (W.mode === 'lock') { gx = rdst.x; gz = rdst.z; dspd = rd < 1.2 ? 0 : frenzy ? 7 : 2.8; }      // 相手へ突進しようとする（去る方へも追う）
       else if (W.mode === 'stare') { gx = st.x; gz = st.z; dspd = 0; }                                   // 固まる
-      else if (W.mode === 'leave') { gx = walker.x + fwx * 0.8; gz = walker.z + fwz * 0.8; dspd = Math.min(2.2, Math.hypot(gx - st.x, gz - st.z) * 2); }
+      else if (W.mode === 'leave') { gx = walker.x + fwx * 0.8; gz = walker.z + fwz * 0.8; dspd = Math.min(3.2, Math.hypot(gx - st.x, gz - st.z) * 2); }
       else {                                                                                             // 飼い主より前を歩きたがる（引っ張る）
         const ahead = walker.speed > 0.2 ? LEASH + 0.4 : 0.9;
         gx = walker.x + fwx * ahead + fwz * 0.25; gz = walker.z + fwz * ahead - fwx * 0.25;
-        dspd = Math.min(2.3, Math.hypot(gx - st.x, gz - st.z) * 1.8);
+        dspd = Math.min(3.4, Math.hypot(gx - st.x, gz - st.z) * 1.8);
       }
       const gyaw = Math.atan2(gx - st.x, gz - st.z);
       let dyaw = W.mode === 'lock' || W.mode === 'stare' ? toRival : (dspd > 0.1 ? gyaw : st.yaw);
@@ -1976,12 +1977,14 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       let vx = sx - nx, vz = sz - nz, d = Math.hypot(vx, vz);
       W.tension += ((d > LEASH - 0.02 ? 1 : 0) - W.tension) * Math.min(1, dt * 6);
       if (W.mode === 'lock') {
-        // ① 犬の突進：リードが張ったらその場で踏ん張る（円に沿って滑らせると、いつも相手と人の間に回り込んでしまう）。人は少し引きずられる
+        // ① 犬の突進：リードが張ったらその場で踏ん張る（円に沿って滑らせると、いつも相手と人の間に回り込んでしまう）。人は少し引きずられる。
+        //    相手が5m以内の時は全力で突っ込むので、人は大きく引きずられる
         const ax = sx - walker.x, az = sz - walker.z, a = Math.hypot(ax, az);
         if (a > LEASH) {
-          const e = a - LEASH;
-          nx += ax / a * e * 0.12; nz += az / a * e * 0.12;
-          if (Math.hypot(st.x - walker.x, st.z - walker.z) <= LEASH + 0.01) { const k = Math.max(0, (LEASH - Math.hypot(st.x - walker.x, st.z - walker.z)) / Math.max(a - Math.hypot(st.x - walker.x, st.z - walker.z), 1e-4)); sx = st.x + (sx - st.x) * Math.min(1, k); sz = st.z + (sz - st.z) * Math.min(1, k); }
+          const e = a - LEASH, drag = frenzy ? 0.18 : 0.12;
+          nx += ax / a * e * drag; nz += az / a * e * drag;
+          if (frenzy) { sx = walker.x + ax / a * LEASH + ax / a * e * drag; sz = walker.z + az / a * LEASH + az / a * e * drag; }
+          else if (Math.hypot(st.x - walker.x, st.z - walker.z) <= LEASH + 0.01) { const k = Math.max(0, (LEASH - Math.hypot(st.x - walker.x, st.z - walker.z)) / Math.max(a - Math.hypot(st.x - walker.x, st.z - walker.z), 1e-4)); sx = st.x + (sx - st.x) * Math.min(1, k); sz = st.z + (sz - st.z) * Math.min(1, k); }
           else { sx = st.x; sz = st.z; }
         }
         // ② 人が引く：犬から離れる向きに踏み出した分だけが「引いた」こと
@@ -1993,7 +1996,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           const back = ux * gX + uz * gZ;                // 1＝真後ろへ引いている
           const lat = Math.sqrt(Math.max(0, 1 - back * back)) * (back > -0.2 ? 1 : 0.5);
           W.side = Math.sign(gX * uz - gZ * ux) || 1;   // どちら側から引いているか
-          W.bal = Math.min(1.2, W.bal + lat * lat * e * 1.6);
+          W.bal = Math.min(1.2, W.bal + lat * lat * e * (frenzy ? 0.8 : 1.6));   // 突っ込んでいる時は崩しにくい
           const give = 0.04 + 0.4 * lat * lat;         // 真後ろならほぼ動かず、横からなら体ごと持っていかれる
           sx -= ux * e * give; sz -= uz * e * give;
           nx += ux * e * (1 - give); nz += uz * e * (1 - give);
@@ -2025,7 +2028,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       dog.think(true, dt, t, st, camera.position);
       S.strain = (S.strain || 0) + ((W.mode === 'lock' || W.mode === 'stare' ? 1 : 0) - (S.strain || 0)) * Math.min(1, dt * 6);
       S.gaze = Math.max(-1.3, Math.min(1.3, angDiff(st.yaw, toRival)));
-      if (W.mode === 'lock') { W.barkT -= dt; if (W.barkT <= 0) { dog.command('bark', st); W.barkT = 0.35 + rand() * 0.5; } }
+      if (W.mode === 'lock') { W.barkT -= dt; if (W.barkT <= 0) { dog.command('bark', st); W.barkT = frenzy ? 0.16 + rand() * 0.14 : 0.35 + rand() * 0.5; } }   // 近いほど激しく
       rivalDog.think(true, dt, t, rdst, camera.position);
       rivalDog.state.strain = W.mode === 'lock' && rd < 10 ? 0.6 : 0;
       rivalDog.state.gaze = Math.max(-1.3, Math.min(1.3, angDiff(rdst.yaw, Math.atan2(st.x - rdst.x, st.z - rdst.z))));
@@ -2044,7 +2047,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
       leashGeo.setPositions(lp);
       // --- 表示
-      ui.textContent = { follow: '', stare: 'じっと見ている…（今なら離れられる）', lock: 'ロックオン！ 吠えて動かない', leave: '崩れた！ このまま立ち去る' }[W.mode];
+      ui.textContent = frenzy ? '突っ込む！ リードがビンビン' : { follow: '', stare: 'じっと見ている…（今なら離れられる）', lock: 'ロックオン！ 吠えて動かない', leave: '崩れた！ このまま立ち去る' }[W.mode];
       ui.style.setProperty('--bal', W.mode === 'lock' ? Math.min(W.bal, 1) : 0);
       ui.className = 'ui ' + W.mode;
     },
@@ -2195,7 +2198,8 @@ function step(dt, t) {
   if (TOWN) for (let d = 0.5; d < dist; d += 0.25) {   // 町：カメラが家の壁の向こうへ回り込まないよう手前で止める
     if (townBlocked(fol.x - Math.sin(camYaw) * d, fol.z - Math.cos(camYaw) * d)) { dist = Math.max(0.8, d - 0.35); break; }
   }
-  const cx = fol.x - Math.sin(camYaw) * dist, cz = fol.z - Math.cos(camYaw) * dist;
+  const side = WALK ? 1.1 : 0;   // 散歩は右肩越し（人の体で犬が隠れないように）
+  const cx = fol.x - Math.sin(camYaw) * dist - Math.cos(camYaw) * side, cz = fol.z - Math.cos(camYaw) * dist + Math.sin(camYaw) * side;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
   camSnap = false;
