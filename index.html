@@ -83,7 +83,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v40 · -- fps</div>
+<div id="fps" class="ui">v41 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -113,7 +113,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v40';
+const VERSION = 'v41';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1843,13 +1843,42 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     const g = new THREE.CylinderGeometry(r1, r0, len, 12); g.translate(0, -len / 2, 0);
     parent.add(new THREE.Mesh(g, m)); blob(m, r1, r1, r1, 0, -len, 0, parent);
   };
-  const joint = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+  const joint = (parent, x, y, z) => { const g = new THREE.Bone(); g.position.set(x, y, z); parent.add(g); return g; };
+  // 骨の並び（休んだ姿勢でまっすぐ下へ伸びる）を一枚の筒で包む。関節の前後は両方の骨に重みを分け、曲げた時に服がなめらかに折れる
+  const skinTube = (bones, lens, prof, m, zs = 1, top = -0.02) => {
+    const total = lens.reduce((a, b) => a + b), RS = 14, step = 0.02, NR = Math.ceil((total - top) / step);
+    const pos = [], idx = [], si = [], sw = [];
+    const joints = lens.map((_, k) => lens.slice(0, k + 1).reduce((a, b) => a + b));   // 根元からの関節の位置
+    for (let r = 0; r <= NR; r++) {
+      const d = Math.min(total, top + r * step), rad = prof(d);
+      // 重み：関節の前後 6cm で次の骨へ移る
+      const w = [1, 0, 0];
+      for (let k = 0; k < joints.length && k < bones.length - 1; k++) { const t = smooth(joints[k] - 0.06, joints[k] + 0.06, d); w[k + 1] = t; w[k] *= 1 - t; }
+      for (let j = 0; j <= RS; j++) {
+        const a = j / RS * Math.PI * 2;
+        pos.push(Math.cos(a) * rad, -d, Math.sin(a) * rad * zs);
+        si.push(0, 1, 2, 0); sw.push(w[0], w[1], w[2], 0);
+      }
+    }
+    for (let r = 0; r < NR; r++) for (let j = 0; j < RS; j++) { const k = r * (RS + 1) + j; idx.push(k, k + 1, k + RS + 1, k + 1, k + RS + 2, k + RS + 1); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+    g.setIndex(idx); g.computeVertexNormals();
+    const mesh = new THREE.SkinnedMesh(g, m);
+    mesh.position.copy(bones[0].position); bones[0].parent.add(mesh);
+    mesh.frustumCulled = false;
+    tubes.push([mesh, bones.concat(bones.length < 3 ? [bones[bones.length - 1]] : [])]);
+    return mesh;
+  };
+  const tubes = [];
   const L = { thigh: 0.44, shin: 0.43, upper: 0.29, fore: 0.26 };
   const HIP_Y = 0.07 + L.thigh + L.shin;   // 足首の高さ＋脚の長さ
 
   const root = new THREE.Group();
   const pelvis = joint(root, 0, HIP_Y, 0);
-  blob(M.pants, 0.15, 0.11, 0.092, 0, -0.01, 0, pelvis);                       // 腰（上着の裾から出ない大きさ）
+  blob(M.pants, 0.17, 0.13, 0.1, 0, 0.0, 0, pelvis);                          // 腰（ズボンの付け根をつなぐ）
   const torso = joint(pelvis, 0, 0.08, 0);
   // 上着：裾から肩までを一続きの回転体で作り、前後に薄くつぶす（玉を積むと浮き輪のような段ができる）
   const coat = new THREE.Mesh(new THREE.LatheGeometry([[0.001, -0.15], [0.158, -0.15], [0.162, -0.08], [0.152, 0.06], [0.158, 0.2], [0.182, 0.33], [0.192, 0.41], [0.178, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.shirt);
@@ -1872,28 +1901,31 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
   // 腕（0=左 1=右。人は +z を向いているので +x が左）
   const arms = [1, -1].map(s => {
     const sh = joint(chest, 0.19 * s, 0.16, 0);
-    blob(M.shirt, 0.06, 0.06, 0.06, 0, 0, 0, sh);
-    seg(sh, L.upper, 0.052, 0.044, M.shirt);
+    blob(M.shirt, 0.058, 0.058, 0.058, 0, -0.005, 0, sh);
     const el = joint(sh, 0, -L.upper, 0);
-    seg(el, L.fore - 0.04, 0.043, 0.036, M.shirt);
-    blob(M.skin, 0.03, 0.025, 0.03, 0, -L.fore + 0.03, 0, el);                 // 手首
     const hand = joint(el, 0, -L.fore, 0);
+    blob(M.skin, 0.03, 0.03, 0.03, 0, 0.025, 0, hand);                        // 手首
     blob(M.skin, 0.028, 0.05, 0.042, 0, -0.035, 0.005, hand);                 // 手
-    sh.rotation.z = 0.08 * s;
+    // 袖：肩から手首まで。上腕は肩から少し細く、ひじで一度くびれ、前腕は手首へ細る
+    skinTube([sh, el, hand], [L.upper, L.fore - 0.01], d => d < 0 ? 0.058 : d < L.upper ? 0.058 - 0.012 * d / L.upper : 0.046 - 0.01 * (d - L.upper) / L.fore, M.shirt);
     return { sh, el, hand, s };
   });
   // 脚
   const legs = [1, -1].map(s => {
     const hp = joint(pelvis, 0.09 * s, 0, 0);
-    seg(hp, L.thigh, 0.092, 0.066, M.pants);
     const kn = joint(hp, 0, -L.thigh, 0);
-    seg(kn, L.shin, 0.064, 0.05, M.pants);
     const an = joint(kn, 0, -L.shin, 0);
+    // ズボン：太ももは付け根が太く、ひざへ細り、ふくらはぎで少しふくらんで裾へ
+    skinTube([hp, kn, an], [L.thigh, L.shin], d => d < 0 ? 0.095 : d < L.thigh ? 0.095 - 0.03 * d / L.thigh + 0.006 * Math.sin(Math.PI * d / L.thigh)
+      : 0.064 - 0.014 * (d - L.thigh) / L.shin + 0.006 * Math.sin(Math.PI * Math.min(1, (d - L.thigh) / (L.shin * 0.8))), M.pants, 0.92, -0.12);   // 付け根は腰の中まで伸ばして段差を隠す
     blob(M.shoes, 0.05, 0.04, 0.125, 0, -0.035, 0.045, an);                    // 靴
     blob(M.shoes, 0.052, 0.012, 0.13, 0, -0.068, 0.045, an);                   // 靴底
     return { hp, kn, an, s, f: { plant: new THREE.Vector3(), foot: new THREE.Vector3(), from: new THREE.Vector3(), swing: false, s: 0, init: false, pitch: 0 } };
   });
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  root.updateMatrixWorld(true);
+  for (const [mesh, bones] of tubes) mesh.bind(new THREE.Skeleton(bones));   // 休んだ姿勢で皮を骨に結びつける
+  arms.forEach(A => { A.sh.rotation.z = 0.08 * A.s; });
 
   let ph = 0, run = 0, side = 0, swapT = 0, swap = null, pelvY = 0;
   const LEG = L.thigh + L.shin, ANK = 0.075, XAX = new THREE.Vector3(1, 0, 0), qx = new THREE.Quaternion();   // ANK：足首の高さ   // swap：持ち替えの途中（両手を体の前で合わせる）   // side：リードを持つ手（0=左 1=右）。基本は左手
@@ -1916,7 +1948,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     tmpV.copy(tip).sub(E).normalize().applyQuaternion(q.copy(A.sh.quaternion).invert());
     A.el.quaternion.setFromUnitVectors(DOWN, tmpV);
   }
-  return { object: root, hand, update(dt, x, z, yaw, speed, aim, tension) {
+  return { object: root, hand, __legs: legs, update(dt, x, z, yaw, speed, aim, tension) {
     root.position.set(x, H(x, z), z); root.rotation.y = yaw;
     // 歩き方の混ぜ具合：歩く（〜1.9m/s）・小走り（2.2〜3.2m/s）・走る（3.5m/s〜）
     const wr = smooth(3.2, 3.7, speed), ww = 1 - smooth(1.85, 2.25, speed), wj = Math.max(0, 1 - ww - wr);
@@ -1953,10 +1985,16 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
         } else {                                                               // 接地：足は地面に固定。終わりかけにかかとが上がり、つま先で蹴る
           if (F.swing) { F.swing = false; F.plant.set(F.foot.x, H(F.foot.x, F.foot.z) + ANK, F.foot.z); }
           F.foot.copy(F.plant);
-          // 終わりかけはかかとが上がり、つま先の上を転がって足首が前へ出る（脚を長く使えるので腰が沈まない）
+          // 終わりかけはかかとが上がる（つま先を支点に回す：足首を中心に回すとつま先が地面を滑る）。着く時はかかとを支点に
           const hr = Math.max(0, (p - (duty - 0.25)) / 0.25);
-          F.foot.y += hr * hr * 0.09; F.foot.x += fwx * 0.08 * hr * hr; F.foot.z += fwz * 0.08 * hr * hr; F.pitch = 0.7 * hr * hr;
-          if (p < 0.1) F.pitch = -0.22 * (1 - p / 0.1);                      // かかとから着く
+          F.pitch = 0.7 * hr * hr;
+          if (p < 0.1) F.pitch = -0.22 * (1 - p / 0.1);
+          if (F.pitch !== 0) {
+            const pz = F.pitch > 0 ? 0.14 : -0.06, py = -ANK;                 // 支点：つま先／かかと（足首から見た位置）
+            const c = Math.cos(F.pitch), sn = Math.sin(F.pitch);
+            const ry = py * c - pz * sn, rz = py * sn + pz * c;                 // 足を傾けた後の支点の位置
+            F.foot.y += py - ry; F.foot.x += fwx * (pz - rz); F.foot.z += fwz * (pz - rz);
+          }
         }
       } else {                                                                 // 止まっている時：ずれた足だけ一歩ずつ置き直す（踏ん張る時は前後に開く）
         neutral(G, x, z, tmpV, brace * (i ? -0.16 : 0.16));
@@ -2017,16 +2055,18 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     const busy = i => aim && (i === side || (swap && (i === swap.from || i === swap.to)));
     arms.forEach((A, i) => {
       if (busy(i)) return;
-      const fw = (i ? 1 : -1) * Math.cos(ph);                                  // 腕は反対側の脚と一緒に前へ（1＝前）
-      // 歩く：ひじは軽く曲げて振る。小走り・走る：ひじを直角近くまで曲げ、走るほど大きく振る
-      A.sh.quaternion.identity(); A.sh.rotation.set(-fw * (0.32 * ww + 0.34 * wj + 0.6 * wr) * amp + 0.04 - 0.1 * (wj + wr), 0, 0.07 * A.s);
-      A.el.quaternion.identity(); A.el.rotation.set(-(ww * (0.22 + 0.18 * Math.max(0, fw)) * Math.max(amp, 0.3) + wj * 1.35 + wr * 1.45) - 0.08, 0, 0);
+      const fw = (i ? 1 : -1) * Math.cos(ph - 0.3);                            // 腕は反対側の脚と一緒に前へ（1＝前）。脚より少し遅れて振れる
+      const fwd = Math.max(0, fw);
+      // 歩く：ひじは軽く曲げ、前へ振る時に少し深く。小走り・走る：ひじを直角近くまで曲げ、前へ振る時は体の前へ寄せる
+      A.sh.quaternion.identity();
+      A.sh.rotation.set(-fw * (0.3 * ww + 0.36 * wj + 0.58 * wr) * amp + 0.04 - 0.12 * (wj + wr), 0, A.s * (0.07 + 0.04 * run - 0.16 * run * fwd));
+      A.el.quaternion.identity(); A.el.rotation.set(-(ww * (0.2 + 0.3 * fwd) * Math.max(amp, 0.3) + wj * (1.2 + 0.3 * fwd) + wr * (1.3 + 0.35 * fwd)) - 0.08, 0, 0);
     });
     if (aim) {
       root.updateMatrixWorld(true);
       // リードの手の行き先：たるんでいる時は腰の前、張るほど犬の方へ腕を伸ばす
       const holdTarget = A => {
-        const rest = new THREE.Vector3(A.s * 0.16, HIP_Y + 0.02, 0.22); root.localToWorld(rest);
+        const rest = new THREE.Vector3(A.s * 0.16, HIP_Y + 0.02 + 0.16 * run, 0.22 + 0.08 * amp * (1 - tension) * Math.cos(ph - 0.3) * (A.s > 0 ? -1 : 1)); root.localToWorld(rest);
         const sh = new THREE.Vector3(); A.sh.getWorldPosition(sh);
         const toward = aim.clone().sub(sh); toward.setLength(Math.min(toward.length(), L.upper + L.fore + 0.04));
         return rest.lerp(sh.add(toward), 0.25 + 0.75 * tension);
