@@ -34,6 +34,10 @@
   #walkui { bottom: calc(env(safe-area-inset-bottom, 0px) + 26px); pointer-events: none; min-width: 200px; left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
     border-radius: 12px; font-size: 13px; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0; }
   #walkui.follow { display: none; }
+  #stam { left: max(12px, env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 32px); display: flex; align-items: center; gap: 6px;
+    font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,.6); transition: opacity .6s; --v: 1; }
+  #stam i { width: 90px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--c, #9be07a) calc(var(--v) * 100%), rgba(255,255,255,.25) 0); }
+  #stam.full { opacity: 0; }
   #walkui.stare { background: rgba(200,160,40,.45); }
   #walkui.lock { background: rgba(190,50,40,.55); }
   #walkui.leave { background: rgba(60,140,80,.55); }
@@ -83,8 +87,9 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v51 · -- fps</div>
+<div id="fps" class="ui">v52 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
+<div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
@@ -113,7 +118,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v51';
+const VERSION = 'v52';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1968,7 +1973,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
   for (const [mesh, bones] of tubes) mesh.bind(new THREE.Skeleton(bones));   // 休んだ姿勢で皮を骨に結びつける
   arms.forEach(A => { A.sh.rotation.z = 0.08 * A.s; });
 
-  let ph = 0, run = 0, side = 0, swapT = 0, swap = null, pelvY = 0, pelvTarget = HIP_Y;
+  let breathPh = 0, ph = 0, run = 0, side = 0, swapT = 0, swap = null, pelvY = 0, pelvTarget = HIP_Y;
   const LEG = L.thigh + L.shin, ANK = 0.075, XAX = new THREE.Vector3(1, 0, 0), qx = new THREE.Quaternion();   // ANK：足首の高さ   // swap：持ち替えの途中（両手を体の前で合わせる）   // side：リードを持つ手（0=左 1=右）。基本は左手
   const hand = new THREE.Vector3(), tmpV = new THREE.Vector3(), S = new THREE.Vector3(), T = new THREE.Vector3(), E = new THREE.Vector3();
   const DOWN = new THREE.Vector3(0, -1, 0), q = new THREE.Quaternion(), pole = new THREE.Vector3();
@@ -1990,7 +1995,8 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     A.el.quaternion.setFromUnitVectors(DOWN, tmpV);
   }
   return { object: root, hand, __legs: legs, update(dt, x, z, yaw, speed, aim, tension, act = null) {
-    const crouch = act ? act.crouch || 0 : 0;
+    const crouch = act ? act.crouch || 0 : 0, tired = act ? act.tired || 0 : 0;
+    breathPh += dt * (2 + 4 * tired);
     root.position.set(x, H(x, z), z); root.rotation.y = yaw;
     // 歩き方の混ぜ具合：歩く（〜1.9m/s）・小走り（2.2〜3.2m/s）・走る（3.5m/s〜）
     const wr = smooth(3.2, 3.7, speed), ww = 1 - smooth(1.85, 2.25, speed), wj = Math.max(0, 1 - ww - wr);
@@ -2037,11 +2043,12 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     if (nSt) pelvTarget = drop / nSt;
     const py = root.position.y + pelvTarget - (0.03 * wj + 0.04 * wr) * (nSt ? 1 : 0) - 0.04 * brace;
     pelvY += (py - pelvY) * (pelvY ? Math.min(1, dt * 14) : 1);
+    pelvY -= 0.03 * tired * (1 - amp * 0.5);   // 疲れるとひざが緩む
     pelvis.position.set(0.02 * amp * ww * Math.cos(2 * Math.PI * (p0 - 0.3)), pelvY - root.position.y, -0.06 * brace);   // 立っている脚の側へ寄る・踏ん張ると腰を引く
     pelvis.rotation.set(0, -0.1 * amp * Math.cos(2 * Math.PI * p0), 0.045 * amp * (ww + 0.3 * wj) * Math.cos(2 * Math.PI * (p0 - 0.3)));   // 振り出す脚の側が前へ回り、浮いた側が下がる
     // 胴は腰と逆にひねって肩を水平に保つ。走ると前傾、踏ん張ると後ろへ体重をかける
-    torso.rotation.set(0.04 * amp * ww + 0.13 * wj + 0.22 * wr - 0.18 * brace + 0.6 * crouch, 0.18 * amp * Math.cos(2 * Math.PI * p0), -pelvis.rotation.z * 0.9);
-    head.rotation.set(-(0.09 * wj + 0.17 * wr) + 0.13 * brace + 0.35 * crouch, -(pelvis.rotation.y + torso.rotation.y) * 0.8, 0);   // 頭は前を向いたまま
+    torso.rotation.set(0.04 * amp * ww + 0.13 * wj + 0.22 * wr - 0.18 * brace + 0.6 * crouch + tired * (0.28 + 0.05 * Math.sin(breathPh)), 0.18 * amp * Math.cos(2 * Math.PI * p0), -pelvis.rotation.z * 0.9);
+    head.rotation.set(-(0.09 * wj + 0.17 * wr) + 0.13 * brace + 0.35 * crouch - 0.12 * tired + 0.06 * tired * Math.sin(breathPh + 1), -(pelvis.rotation.y + torso.rotation.y) * 0.8, 0);   // 頭は前を向いたまま
     // 腕：リードを持たない方は脚と逆に振る。走るとひじを曲げる
     // 犬が右側に回り込んだまましばらく経ったら右手に持ち替え、左側へ戻れば左手に戻す
     if (aim) {
@@ -2109,7 +2116,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rival = makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b });
   scene.add(rival.object);
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
-  const W = { mode: 'follow', pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
+  const W = { mode: 'follow', stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   const rst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 }, rdst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
   // 道路の線を一本選んで行き来させる（自分の出発地点の近くを通る、長い道）
   const routeOf = r => { const p = ringOf(r.p), cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return { p, cum, len: cum[cum.length - 1] }; };
@@ -2130,6 +2137,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const leash = new Line2(leashGeo, leashMat); leash.frustumCulled = false; scene.add(leash);
   const fitLeash = () => leashMat.resolution.set(innerWidth, innerHeight);   // 線の太さは画面の px で指定するので大きさを教える
   addEventListener('resize', fitLeash); fitLeash();
+  const stamEl = document.getElementById('stam'); stamEl.hidden = false;
   const ui = document.getElementById('walkui'), uiL = document.getElementById('wl'), uiBal = document.getElementById('wbal'), uiSt = document.getElementById('wst'), uiSl = document.getElementById('wsl'), flashEl = document.getElementById('flash');
   ui.hidden = false;
   document.getElementById('acts').style.display = 'none';   // 散歩では犬への指示ボタンは使わない
@@ -2187,6 +2195,10 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         want = mag * 2.2;   // 拾いに行く時はゆっくり歩み寄る
       }
       if (mag > 0.05) walker.yaw += angDiff(walker.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 8);
+      W.stam = Math.max(0, Math.min(1, W.stam - Math.max(0, walker.speed - 2.6) * 0.035 * dt + (walker.speed < 0.3 ? 0.12 : walker.speed < 2 ? 0.07 : 0) * dt));
+      if (W.stam <= 0) W.spent = true; else if (W.stam > 0.45) W.spent = false;   // 尽きたら、半分近く戻るまで走れない
+      want = Math.min(want, W.spent ? 1.5 : 3 + 3.5 * smooth(0, 0.3, W.stam));   // 残りが少ないと速さが落ちていく
+      W.tired = Math.max(W.spent ? 1 : 0, 1 - smooth(0.05, 0.35, W.stam));
       walker.speed += (want - walker.speed) * Math.min(1, dt * 5);
       let nx = walker.x + Math.sin(walker.yaw) * walker.speed * dt, nz = walker.z + Math.cos(walker.yaw) * walker.speed * dt;
       if (townBlocked(nx, nz)) { nx = walker.x; nz = walker.z; }
@@ -2430,7 +2442,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 人とリードの形
       if (W.ev === 'slip') collar.set(walker.x + Math.sin(walker.yaw + 0.6) * 1.0, H(walker.x, walker.z) + 0.03, walker.z + Math.cos(walker.yaw + 0.6) * 1.0);
       else collar.set(st.x + Math.sin(st.yaw) * 0.25, H(st.x, st.z) + 0.43, st.z + Math.cos(st.yaw) * 0.25);
-      me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension, W.pickPose);
+      me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension, { ...(W.pickPose || {}), tired: W.tired });
       const hd = me.hand.distanceTo(collar), sag = W.ev === 'slip' ? 0.3 : Math.sqrt(Math.max(0, LEASH * LEASH - hd * hd)) * 0.45 * (1 - W.tension) ** 2;   // 張っている時は一直線
       for (let i = 0; i < LN; i++) {
         const u = i / (LN - 1);
@@ -2442,6 +2454,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 表示
       uiL.textContent = W.ev === 'slip' ? '首輪が抜けた！' : W.ev === 'bite' ? '咬まれた！' : frenzy ? '突っ込む！ リードがビンビン'
         : { follow: '', stare: 'じっと見ている…（今なら離れられる）', lock: 'ロックオン！ 吠えて動かない', leave: '崩れた！ このまま立ち去る' }[W.mode];
+      stamEl.style.setProperty('--v', W.stam); stamEl.style.setProperty('--c', W.spent ? '#ff7a5c' : W.stam < 0.3 ? '#ffd166' : '#9be07a'); stamEl.classList.toggle('full', W.stam > 0.99);
       uiBal.style.setProperty('--v', Math.min(W.bal, 1)); uiSt.style.setProperty('--v', W.stress); uiSl.style.setProperty('--v', W.slip);
       if (!W.sniff && !seq) W.sbal = Math.max(0, (W.sbal || 0) - dt);
       else W.sbal = Math.max(0, (W.sbal || 0) - 0.15 * dt);   // 引くのをやめると踏ん張り直す
