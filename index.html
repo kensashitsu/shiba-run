@@ -67,18 +67,21 @@
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink);
     font: 700 13px var(--font-ui); letter-spacing: .02em;
   }
-  #pickBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
-    width: 76px; height: 76px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.85); border: 2px solid #8a6a3a; color: #4a3520;
+  #pickBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 244px);
+    width: 64px; height: 64px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.85); border: 2px solid #8a6a3a; color: #4a3520;
     font: 700 15px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
   #pickBtn:active { background: rgba(240,180,106,.8); }
   #crouchBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 13px var(--font-ui); }
   #crouchBtn.on { background: rgba(240,180,106,.6); }
+  #pickBtn.off, #crouchBtn.off, #treatBtn.off, #catchBtn.off { opacity: .32; pointer-events: none; box-shadow: none; }
+  .key { display: none; font: 600 10px var(--font-ui); opacity: .75; margin-top: 2px; }
+  @media (hover: hover) and (pointer: fine) { .key { display: block; } }
   #treatBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 170px);
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 13px var(--font-ui); }
   #treatBtn:active { background: rgba(240,180,106,.8); }
-  #catchBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
-    width: 76px; height: 76px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.9); border: 2px solid #b0452a; color: #7a2a14;
+  #catchBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 244px);
+    width: 64px; height: 64px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.9); border: 2px solid #b0452a; color: #7a2a14;
     font: 700 14px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
   #acts #jump { width: 76px; height: 76px; font-size: 15px; margin-top: 4px; }
   #acts button:active { background: rgba(240,180,106,.45); }
@@ -100,13 +103,13 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v73 · -- fps</div>
+<div id="fps" class="ui">v74 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
-<button type="button" id="pickBtn" class="ui" hidden>拾う</button>
+<button type="button" id="pickBtn" class="ui" hidden>拾う<span class="key">E</span></button>
 <button type="button" id="crouchBtn" class="ui" hidden>しゃがむ</button>
-<button type="button" id="treatBtn" class="ui" hidden>おやつ</button>
-<button type="button" id="catchBtn" class="ui" hidden>捕まえる</button>
+<button type="button" id="treatBtn" class="ui" hidden>おやつ<span class="key">T</span></button>
+<button type="button" id="catchBtn" class="ui" hidden>捕まえる<span class="key">E</span></button>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
 <div id="credit" class="ui" hidden>地図：国土地理院・© OpenStreetMap</div>
@@ -135,7 +138,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v73';
+const VERSION = 'v74';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2295,7 +2298,7 @@ new RGBELoader().load('assets/sky.hdr', tex => {
   FOG_COLOR.setRGB(hor[0] / nHor * bgScale, hor[1] / nHor * bgScale, hor[2] / nHor * bgScale);   // 霞＝背景に映る地平線の色
   scene.fog.color.copy(FOG_COLOR);
   colorRidges();
-  hintEl.textContent = WALK ? '左側をなぞって散歩します' : hintText;
+  hintEl.textContent = WALK ? WALK_HINT : hintText;
 }, undefined, () => { hintEl.textContent = '空の写真を読み込めませんでした'; });
 
 // ---------- 散歩（?walk）：飼い主を動かし、リードでつないだ柴を連れて歩く ----------
@@ -2540,6 +2543,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
 }
 
 let WALK = null;
+const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WASD／矢印キーで歩く（Shiftで走る）・E 拾う／捕まえる・C しゃがむ・T おやつ" : "左側をなぞって散歩します";
 if (TOWN && /[?&]walk/.test(location.search)) {
   const me = makeHuman({ shirt: 0x3d5a80, pants: 0x2b2d33, hair: 0x2a1f1a });
   scene.add(me.object);
@@ -2582,10 +2586,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const stamEl = document.getElementById('stam'); stamEl.hidden = false;
   const pickBtn = document.getElementById('pickBtn');
   const crouchBtn = document.getElementById('crouchBtn');
-  crouchBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.crouch = !W.crouch; });
+  crouchBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.canCrouch) W.crouch = !W.crouch; });
+  // キーボード：E＝拾う／捕まえる、C＝しゃがむ／立つ、T＝おやつ
+  addEventListener('keydown', e => {
+    if (e.repeat) return;
+    if (e.code === 'KeyE') { if (W.canCatch) W.loose.catching = 0.001; else if (W.canPick && W.dung && !W.pick) { W.pick = { ph: 'down', t: 0, g: W.dung }; W.dung = null; } }
+    else if (e.code === 'KeyC') { if (W.canCrouch) W.crouch = !W.crouch; }
+    else if (e.code === 'KeyT') W.treatReq = true;
+  });
   const treatBtn = document.getElementById('treatBtn'); treatBtn.hidden = false;
   const catchBtn = document.getElementById('catchBtn');
-  catchBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.loose && !W.loose.catching && !catchBtn.hidden) W.loose.catching = 0.001; });
+  catchBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.canCatch) W.loose.catching = 0.001; });
   // 抜けた首輪（リードの先にぶら下がる）
   const emptyCollar = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.014, 6, 16), new THREE.MeshStandardMaterial({ color: 0xb8372a, roughness: 0.6 }));
   emptyCollar.visible = false; scene.add(emptyCollar);
@@ -2602,7 +2613,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   };
   pickBtn.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation();
-    if (W.dung && !W.pick) { W.pick = { ph: 'down', t: 0, g: W.dung }; W.dung = null; }
+    if (W.canPick && W.dung && !W.pick) { W.pick = { ph: 'down', t: 0, g: W.dung }; W.dung = null; }
   });
   const ui = document.getElementById('walkui'), uiL = document.getElementById('wl'), uiBal = document.getElementById('wbal'), uiSt = document.getElementById('wst'), uiSl = document.getElementById('wsl'), flashEl = document.getElementById('flash');
   ui.hidden = false;
@@ -2611,7 +2622,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rand = Math.random;
 
   WALK = {
-    me, OTHERS, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return rst; }, get rdst() { return rdst; }, W, leashMat,
+    me, OTHERS, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return (W.tgt || OTHERS[0]).rst; }, get rdst() { return (W.tgt || OTHERS[0]).rdst; }, W, leashMat,
     start(x, z) {
       walker.x = x; walker.z = z;
       st.x = x + 1; st.z = z;
@@ -3242,19 +3253,25 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       uiBal.style.setProperty('--v', Math.min(W.bal, 1)); uiSt.style.setProperty('--v', W.stress); uiSl.style.setProperty('--v', W.slip);
       if (!W.sniff && !seq && !(W.ponder && W.ponder.ph !== 'want')) W.sbal = Math.max(0, (W.sbal || 0) - dt);
       else W.sbal = Math.max(0, (W.sbal || 0) - 0.15 * dt);   // 引くのをやめると踏ん張り直す
+      W.canPick = false;
       if (W.dung) {
         const dd2 = Math.hypot(W.dung.position.x - walker.x, W.dung.position.z - walker.z);
-        pickBtn.hidden = !(dd2 < 1.3 && !W.pick);
+        W.canPick = dd2 < 1.3 && !W.pick;
         if (dd2 > 15) { W.dung = null; W.leftT = 4; W.sat = Math.max(0, W.sat - 0.1); }   // 置き去りにした
-      } else pickBtn.hidden = true;
-      crouchBtn.hidden = !((W.mode === 'follow' || W.loose && W.loose.ph !== 'charge' && !W.loose.catching) && pickBtn.hidden && !W.pick && catchBtn.hidden && (W.crouch || walker.speed < 0.4));
-      crouchBtn.textContent = W.crouch ? '立つ' : 'しゃがむ'; crouchBtn.classList.toggle('on', W.crouch);
+      }
+      W.canCatch = !!(W.loose && !W.loose.catching && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.0 && (st.speed < 1.3 || W.loose.ph === 'charge'));
+      W.canCrouch = (W.mode === 'follow' || W.loose && W.loose.ph !== 'charge' && !W.loose.catching) && !W.canPick && !W.pick && !W.canCatch && !W.feed && (W.crouch || walker.speed < 0.4);
+      // ボタンは出したり消したりせず、使えない時は薄くするだけ（PCでも押しやすいように場所を固定）
+      pickBtn.hidden = !!W.loose; catchBtn.hidden = !W.loose; crouchBtn.hidden = false;
+      pickBtn.classList.toggle('off', !W.canPick); catchBtn.classList.toggle('off', !W.canCatch); crouchBtn.classList.toggle('off', !W.canCrouch);
+      treatBtn.classList.toggle('off', !!W.feed || !!W.pick || !!(W.loose && W.loose.catching));
+      const crouchLabel = W.crouch ? '立つ' : 'しゃがむ';
+      if (crouchBtn.dataset.l !== crouchLabel) { crouchBtn.dataset.l = crouchLabel; crouchBtn.innerHTML = crouchLabel + '<span class="key">C</span>'; }
+      crouchBtn.classList.toggle('on', W.crouch);
       W.leftT = Math.max(0, (W.leftT || 0) - dt);
       W.msgT = Math.max(0, W.msgT - dt);
-      catchBtn.hidden = !(W.loose && !W.loose.catching && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.0 && (st.speed < 1.3 || W.loose.ph === 'charge'));
       if (droppedT > 0 && (droppedT -= dt) <= 0) dropped.visible = false;
       if (dropped.visible) { const gy0 = H(dropped.position.x, dropped.position.z) + 0.018; if (dropped.position.y > gy0) { dropVy -= 9.8 * dt; dropped.position.y = Math.max(gy0, dropped.position.y + dropVy * dt); } }
-      treatBtn.style.opacity = W.feed ? 0.5 : 1;
       if (W.mode === 'follow' && W.pick) uiL.textContent = 'フンを拾う';
       else if (W.mode === 'follow' && W.crouch) uiL.textContent = S.lick ? 'うれしそうに顔を舐めてきた！' : W.sat > 0.5 ? 'しゃがんでいる' : 'しゃがんでいる（満足していないと寄ってこない）';
       else if (W.mode === 'follow' && W.smell) uiL.textContent = 'くんくん…飼い主のにおいを嗅いでいる';
@@ -3362,6 +3379,8 @@ function step(dt, t) {
   if (keys.KeyW || keys.ArrowUp) iy += 1;
   if (keys.KeyS || keys.ArrowDown) iy -= 1;
   let mag = Math.min(Math.hypot(ix, iy), 1);
+  // 散歩をキーで歩く時：ふだんは柴と同じ速さで歩き、Shift を押している間だけ走る（キーは全開か0なので、そのままだと常に全力疾走になる）
+  if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag *= keys.ShiftLeft || keys.ShiftRight ? 1 : 0.5; }
   const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
   let dx = fx * iy - fz * ix, dz = fz * iy + fx * ix;
   const user = mag > 0.08;
@@ -3483,7 +3502,7 @@ if (TOWN) {   // 町：中心に一番近い道路の上から
     if (d < best && townRoad(x, z) > 0.9 && !townBlocked(x, z)) { best = d; st.x = x; st.z = z; }
   }
   document.getElementById('credit').hidden = false;
-  if (WALK) { WALK.start(st.x, st.z); hintEl.textContent = '左側をなぞって散歩します'; }
+  if (WALK) { WALK.start(st.x, st.z); hintEl.textContent = WALK_HINT; }
 }
 step(0, 0);
 { const o = WALK ? walker : st;
