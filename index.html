@@ -97,7 +97,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v62 · -- fps</div>
+<div id="fps" class="ui">v63 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -131,7 +131,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v62';
+const VERSION = 'v63';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2801,9 +2801,18 @@ if (TOWN && /[?&]walk/.test(location.search)) {
 
       if (!townBlocked(nx, nz)) { walker.x = nx; walker.z = nz; }
       const moved = Math.hypot(sx - st.x, sz - st.z);
-      if (!townBlocked(sx, sz)) { st.x = sx; st.z = sz; }
+      // 柴の体（鼻先から尻まで・胴の幅）が塀・車・家にめり込まないように。進めなければ軸ごとに滑らせ、向きを変えて頭が当たるなら少し下がる
+      const dogHits = (x, z, yaw) => { const fx = Math.sin(yaw), fz = Math.cos(yaw); return [0.42, 0.25, 0, -0.25].some(d => townBlocked(x + fx * d, z + fz * d)) || townBlocked(x + fz * 0.13, z - fx * 0.13) || townBlocked(x - fz * 0.13, z + fx * 0.13); };
+      const stuckNow = dogHits(st.x, st.z, st.yaw);   // すでに当たっている時（置き直した直後など）は中心だけで判定
+      if (stuckNow ? !townBlocked(sx, sz) : !dogHits(sx, sz, st.yaw)) { st.x = sx; st.z = sz; }
+      else if (!stuckNow && !dogHits(sx, st.z, st.yaw)) st.x = sx;
+      else if (!stuckNow && !dogHits(st.x, sz, st.yaw)) st.z = sz;
       st.speed += (moved / Math.max(dt, 1e-4) - st.speed) * Math.min(1, dt * 8);
-      st.yaw += angDiff(st.yaw, dyaw) * Math.min(1, dt * (W.mode === 'lock' ? 9 : 5));
+      {
+        const ny = st.yaw + angDiff(st.yaw, dyaw) * Math.min(1, dt * (W.mode === 'lock' ? 9 : 5));
+        if (stuckNow || !dogHits(st.x, st.z, ny)) st.yaw = ny;
+        else for (let k = 0.04; k <= 0.3; k += 0.04) { const bx = st.x - Math.sin(ny) * k, bz = st.z - Math.cos(ny) * k; if (!dogHits(bx, bz, ny)) { st.x = bx; st.z = bz; st.yaw = ny; break; } }
+      }
 
       // --- 仕草
       dog.think(!(W.mode === 'follow' && (W.sniff || S.act === 'mark' || S.act === 'poop' || S.act === 'shake' || W.pick)), dt, t, st, camera.position);   // このコマで始まった段取りも止めない   // 嗅いでいる間は仕草を止めない
