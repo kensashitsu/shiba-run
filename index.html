@@ -94,7 +94,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v59 · -- fps</div>
+<div id="fps" class="ui">v60 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -127,7 +127,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v59';
+const VERSION = 'v60';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -243,6 +243,10 @@ const townCell = (x, z) => {
 };
 const townBlocked = (x, z) => {
   if (Math.abs(x) > TOWN.area || Math.abs(z) > TOWN.area) return true;   // 町の範囲の外へは出ない
+  const k = townCell(x, z); return k < 0 || townOcc[k] !== 0;
+};
+const townHigh = (x, z) => {   // 家・水・範囲外（低い塀や車は含まない）
+  if (Math.abs(x) > TOWN.area || Math.abs(z) > TOWN.area) return true;
   const k = townCell(x, z); return k < 0 || townOcc[k] === 1;
 };
 const isGrass = (x, z) => {
@@ -936,6 +940,201 @@ if (TOWN) {
     for (const t of tris) for (const i of t) pos.push(p[i][0], lvl - 0.25, p[i][1]);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     scene.add(new THREE.Mesh(g, water.material));
+  }
+
+  // 道ばたの物：白線・電柱と電線・ブロック塀・車庫の車（元データに無いので道路と建物から推定。乱数は別系統＝木や家は変えない）
+  // 塀と車と電柱は「入れない所」にも書き込む（犬・人・カメラがすり抜けない）
+  {
+    const r2 = rng(23), nStreet0 = scene.children.length;
+    const roads = TOWN.road.map(rd => ({ w: rd.w, p: ringOf(rd.p) }));
+    // 交差点の判定用：道路の辺を 10m 格子に振り分ける
+    const SG = 10, segGrid = new Map(), gk = (i, j) => i * 100003 + j;
+    roads.forEach((rd, ri) => { for (let s = 0; s + 1 < rd.p.length; s++) {
+      const [ax, az] = rd.p[s], [bx, bz] = rd.p[s + 1], m = rd.w / 2 + 2;
+      for (let i = Math.floor((Math.min(ax, bx) - m) / SG); i <= Math.floor((Math.max(ax, bx) + m) / SG); i++)
+        for (let j = Math.floor((Math.min(az, bz) - m) / SG); j <= Math.floor((Math.max(az, bz) + m) / SG); j++) {
+          const k = gk(i, j); (segGrid.get(k) || segGrid.set(k, []).get(k)).push([ri, ax, az, bx, bz, rd.w]);
+        }
+    } });
+    const segDist = (x, z, ax, az, bx, bz) => { const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1e-9, u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)); return Math.hypot(x - ax - dx * u, z - az - dz * u); };
+    // ほかの道路（交差・合流する道）の上、またはその縁から margin 以内か
+    const onOtherRoad = (x, z, ri, margin) => {
+      const l = segGrid.get(gk(Math.floor(x / SG), Math.floor(z / SG)));
+      if (l) for (const [rj, ax, az, bx, bz, w] of l) if (rj !== ri && segDist(x, z, ax, az, bx, bz) < w / 2 + margin) return true;
+      return false;
+    };
+    const inArea = (x, z) => Math.abs(x) < TOWN.area - 2 && Math.abs(z) < TOWN.area - 2;
+    const blockCell = (x, z) => { const k = townCell(x, z); if (k >= 0 && !townOcc[k]) townOcc[k] = 2; };
+    // 道路に沿って step ごとに点を取る：{x, z, ux, uz（進む向き）, nx, nz（左の向き）}
+    const walkRoad = (rd, step, fn) => {
+      let carry = 0;
+      for (let s = 0; s + 1 < rd.p.length; s++) {
+        const [ax, az] = rd.p[s], [bx, bz] = rd.p[s + 1], L = Math.hypot(bx - ax, bz - az); if (L < 1e-3) continue;
+        const ux = (bx - ax) / L, uz = (bz - az) / L;
+        for (let d = carry; d < L; d += step) fn(ax + ux * d, az + uz * d, ux, uz, -uz, ux);
+        carry = (carry - L) % step; if (carry < 0) carry += step;
+      }
+    };
+
+    // --- 白線：幅4.5m以上の道は両端に外側線、広い道は中央線も。交差点の中では切る
+    const LN = { pos: [] };
+    const ribbon = (pts, hw) => {   // 点の列に沿った細い帯（地面の少し上）
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const [x0, z0, nx0, nz0] = pts[i], [x1, z1, nx1, nz1] = pts[i + 1];
+        const y0 = H(x0, z0) + 0.025, y1 = H(x1, z1) + 0.025;
+        LN.pos.push(x0 + nx0 * hw, y0, z0 + nz0 * hw, x1 + nx1 * hw, y1, z1 + nz1 * hw, x1 - nx1 * hw, y1, z1 - nz1 * hw,
+                    x0 + nx0 * hw, y0, z0 + nz0 * hw, x1 - nx1 * hw, y1, z1 - nz1 * hw, x0 - nx0 * hw, y0, z0 - nz0 * hw);
+      }
+    };
+    roads.forEach((rd, ri) => {
+      if (rd.w < 4) return;
+      const offs = rd.w > 8 ? [rd.w / 2 - 0.5, 0, -(rd.w / 2 - 0.5)] : [rd.w / 2 - 0.3, -(rd.w / 2 - 0.3)];
+      for (const o of offs) {
+        let run = [];
+        const flush = () => { if (run.length > 1) ribbon(run, o === 0 ? 0.075 : 0.06); run = []; };
+        walkRoad(rd, 0.8, (x, z, ux, uz, nx, nz) => {
+          const px = x + nx * o, pz = z + nz * o;
+          if (!inArea(px, pz) || onOtherRoad(px, pz, ri, 0.6)) { flush(); return; }
+          run.push([px, pz, nx, nz]);
+        });
+        flush();
+      }
+    });
+    if (LN.pos.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(LN.pos, 3)); g.computeVertexNormals();
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0xe8e6df, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+      m.receiveShadow = true; scene.add(m);
+    }
+
+    // --- 電柱：道の片側に約30mおき。隣どうしを電線（3本、少したるむ）でつなぐ
+    const poles = [];
+    roads.forEach((rd, ri) => {
+      const side = ri % 2 ? 1 : -1, o = side * (rd.w / 2 + 0.35);
+      let next = 6 + r2() * 20, dist = 0, prev = null;
+      walkRoad(rd, 1, (x, z, ux, uz, nx, nz) => {
+        dist += 1; if (dist < next) return;
+        const px = x + nx * o, pz = z + nz * o;
+        if (!inArea(px, pz) || townBlocked(px, pz) || onOtherRoad(px, pz, ri, 0.8) || townRoad(px, pz) > 0.5 && rd.w < 8) return;   // 置けなければ次の1mで
+        const pole = { x: px, z: pz, y: H(px, pz), yaw: Math.atan2(nx, nz), prev, tr: r2() < 0.25 };
+        poles.push(pole); prev = pole; dist = 0; next = 26 + r2() * 10;
+      });
+    });
+    if (poles.length) {
+      const POLE_H = 9;
+      const conc = new THREE.MeshStandardMaterial({ color: 0x9d9a94, roughness: 0.9 });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x55575a, roughness: 0.6 });
+      const shaft = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.17, POLE_H, 10).translate(0, POLE_H / 2, 0), conc, poles.length);
+      const arm = new THREE.InstancedMesh(new THREE.BoxGeometry(1.5, 0.09, 0.09).translate(0, POLE_H - 0.9, 0), dark, poles.length);
+      const nTr = poles.filter(p => p.tr).length;
+      const trans = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.28, 0.8, 12).translate(0, POLE_H - 2.2, 0.38), dark, Math.max(1, nTr));
+      const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), ONE = new THREE.Vector3(1, 1, 1), T = new THREE.Vector3();
+      let ti = 0;
+      poles.forEach((p, i) => {
+        Q.setFromAxisAngle(UP, p.yaw); M4.compose(T.set(p.x, p.y - 0.05, p.z), Q, ONE);
+        shaft.setMatrixAt(i, M4); arm.setMatrixAt(i, M4); if (p.tr) trans.setMatrixAt(ti++, M4);
+        blockCell(p.x, p.z);
+      });
+      trans.count = ti;
+      for (const m of [shaft, arm, trans]) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; scene.add(m); }
+      // 電線：腕木の両端と真ん中から、前の電柱へ。真ん中ほど下がる
+      const wp = [];
+      for (const p of poles) {
+        const q = p.prev; if (!q) continue;
+        const d = Math.hypot(p.x - q.x, p.z - q.z); if (d > 45) continue;
+        for (const k of [-0.65, 0, 0.65]) {
+          const a = [p.x + Math.cos(p.yaw) * k, p.y + POLE_H - 0.85, p.z - Math.sin(p.yaw) * k], b = [q.x + Math.cos(q.yaw) * k, q.y + POLE_H - 0.85, q.z - Math.sin(q.yaw) * k];
+          for (let s = 0; s < 8; s++) {
+            const u0 = s / 8, u1 = (s + 1) / 8, sag = u => 4 * u * (1 - u) * d * 0.012;
+            wp.push(a[0] + (b[0] - a[0]) * u0, a[1] + (b[1] - a[1]) * u0 - sag(u0), a[2] + (b[2] - a[2]) * u0,
+                    a[0] + (b[0] - a[0]) * u1, a[1] + (b[1] - a[1]) * u1 - sag(u1), a[2] + (b[2] - a[2]) * u1);
+          }
+        }
+      }
+      const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+      scene.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x2a2b2d })));
+    }
+
+    // --- ブロック塀：家が道のすぐ奥（1.5〜7m）にある所だけ、道の縁に沿って。ところどころ車庫・門の切れ目、車庫には車
+    const WL = { pos: [], uv: [], col: [] }, cars = [];
+    const wallCol = new THREE.Color();
+    const houseBehind = (x, z, nx, nz) => { for (let d = 1.5; d <= 7; d += 0.5) if (townHigh(x + nx * d, z + nz * d)) return d; return 0; };
+    const wallSeg = (x0, z0, x1, z1, h, c, nx, nz) => {   // 厚さ0.12mの塀の一区切り（表・裏・天端）
+      const t = 0.06, y0a = H(x0, z0) - 0.1, y0b = H(x1, z1) - 0.1, top0 = H(x0, z0) + h, top1 = H(x1, z1) + h, L = Math.hypot(x1 - x0, z1 - z0);
+      for (const s of [1, -1]) {
+        const ox = nx * t * s, oz = nz * t * s;
+        WL.pos.push(x0 + ox, y0a, z0 + oz, x1 + ox, y0b, z1 + oz, x1 + ox, top1, z1 + oz, x0 + ox, y0a, z0 + oz, x1 + ox, top1, z1 + oz, x0 + ox, top0, z0 + oz);
+        WL.uv.push(0, 0, L / 0.4, 0, L / 0.4, h / 0.2, 0, 0, L / 0.4, h / 0.2, 0, h / 0.2);
+      }
+      WL.pos.push(x0 + nx * t, top0, z0 + nz * t, x1 + nx * t, top1, z1 + nz * t, x1 - nx * t, top1, z1 - nz * t, x0 + nx * t, top0, z0 + nz * t, x1 - nx * t, top1, z1 - nz * t, x0 - nx * t, top0, z0 - nz * t);
+      for (let i = 0; i < 6; i++) WL.uv.push(0.02, 0.5);
+      for (let i = 0; i < 18; i++) WL.col.push(c.r, c.g, c.b);
+    };
+    roads.forEach((rd, ri) => {
+      for (const side of [1, -1]) {
+        const o = side * (rd.w / 2 + 0.2);
+        let state = 'gap', left = 1 + r2() * 3, h = 1.1, c = wallCol, last = null, carDone = false;
+        walkRoad(rd, 0.5, (x, z, ux, uz, nx, nz) => {
+          const px = x + nx * o, pz = z + nz * o, onx = nx * side, onz = nz * side;   // on：道から家の方へ
+          const ok = inArea(px, pz) && !townBlocked(px, pz) && townRoad(px, pz) < 0.5 && !onOtherRoad(px, pz, ri, 1.2) && houseBehind(px, pz, onx, onz);
+          left -= 0.5;
+          if (state === 'wall') {
+            if (!ok || left <= 0) {   // 塀が切れる：車庫・門
+              state = 'gap'; last = null; left = 2.6 + r2() * 1.6; carDone = false;
+            } else {
+              if (last) { wallSeg(last[0], last[1], px, pz, h, c, ux, uz); for (let u = 0; u <= 1; u += 0.2) for (const b of [-0.18, 0, 0.18]) blockCell(last[0] + (px - last[0]) * u + onx * b, last[1] + (pz - last[1]) * u + onz * b); }
+              last = [px, pz];
+            }
+          } else {
+            // 切れ目に車を置く（家と塀の間に入る広さがあれば）
+            if (ok && !carDone && left < 1.4 && r2() < 0.5) {
+              carDone = true;
+              const back = houseBehind(px, pz, onx, onz), len = 4.1;
+              if (back > len + 0.6) {
+                const cx = px + onx * (0.6 + len / 2), cz = pz + onz * (0.6 + len / 2);
+                let free = true;
+                for (let a = -len / 2; a <= len / 2 && free; a += 0.5) for (const b of [-0.8, 0, 0.8]) if (townBlocked(cx + onx * a + ux * b, cz + onz * a + uz * b)) { free = false; break; }
+                if (free) cars.push({ x: cx, z: cz, yaw: Math.atan2(-onx, -onz) + (r2() < 0.5 ? Math.PI : 0), ux, uz, onx, onz, len });
+              }
+            }
+            if (ok && left <= 0) { state = 'wall'; left = 5 + r2() * 9; h = 1.0 + r2() * 0.5; wallCol.setHSL(0.08 + r2() * 0.06, 0.03 + r2() * 0.06, 0.42 + r2() * 0.16).convertSRGBToLinear(); c = wallCol.clone(); last = [px, pz]; blockCell(px, pz); }
+          }
+        });
+      }
+    });
+    if (WL.pos.length) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+      const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 64, 64);
+      x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(0, 0, 64, 3); x.fillRect(0, 32, 64, 3); x.fillRect(0, 0, 3, 32); x.fillRect(32, 32, 3, 32);   // ブロックの目地
+      x.fillRect(0, 0, 4, 64); x.fillStyle = '#fff'; x.fillRect(0, 3, 4, 29); x.fillRect(0, 35, 4, 29); x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(0, 3, 3, 29);
+      const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(WL.pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(WL.uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(WL.col, 3));
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }));
+      m.castShadow = m.receiveShadow = true; scene.add(m);
+    }
+    // --- 車：箱を組み合わせた乗用車・軽自動車
+    if (cars.length) {
+      const CAR_COLS = [0xf2f2ef, 0xf2f2ef, 0xe9e9e6, 0xb9bcc0, 0xb9bcc0, 0x2a2c30, 0x1f2a44, 0x7a1f22, 0x8a8d8f, 0xd8cdb4];
+      const paint = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.3 });
+      const glass = new THREE.MeshStandardMaterial({ color: 0x1d2228, roughness: 0.15, metalness: 0.4 });
+      const tire = new THREE.MeshStandardMaterial({ color: 0x18181a, roughness: 0.9 });
+      const bodyG = new THREE.BoxGeometry(1.7, 0.62, 4.1).translate(0, 0.62, 0);
+      const cabG = new THREE.BoxGeometry(1.42, 0.16, 2.0).translate(0, 1.43, -0.25);   // 屋根
+      const winG = new THREE.BoxGeometry(1.48, 0.42, 2.2).translate(0, 1.14, -0.25);   // 窓の帯
+      const wheelG = new THREE.CylinderGeometry(0.31, 0.31, 0.22, 14).rotateZ(Math.PI / 2);
+      const body = new THREE.InstancedMesh(bodyG, paint, cars.length), cab = new THREE.InstancedMesh(cabG, paint, cars.length), win = new THREE.InstancedMesh(winG, glass, cars.length), wheels = new THREE.InstancedMesh(wheelG, tire, cars.length * 4);
+      const M4 = new THREE.Matrix4(), W4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), S = new THREE.Vector3(), T = new THREE.Vector3(), C = new THREE.Color();
+      cars.forEach((c, i) => {
+        const kei = r2() < 0.4, sc = kei ? 0.82 : 1;   // 軽自動車は小さく背が高め
+        Q.setFromAxisAngle(UP, c.yaw); M4.compose(T.set(c.x, H(c.x, c.z) - 0.02, c.z), Q, S.set(sc * (kei ? 0.95 : 1), kei ? 1.05 : 1, sc));
+        body.setMatrixAt(i, M4); cab.setMatrixAt(i, M4); win.setMatrixAt(i, M4); C.set(CAR_COLS[Math.floor(r2() * CAR_COLS.length)]); body.setColorAt(i, C); cab.setColorAt(i, C);
+        let k = 0; for (const wx of [-0.78, 0.78]) for (const wz of [-1.35, 1.35]) wheels.setMatrixAt(i * 4 + k++, W4.copy(M4).multiply(new THREE.Matrix4().makeTranslation(wx, 0.31, wz)));
+        for (let a = -c.len / 2; a <= c.len / 2; a += 0.4) for (const b of [-0.8, -0.4, 0, 0.4, 0.8]) blockCell(c.x + c.onx * a + c.ux * b, c.z + c.onz * a + c.uz * b);
+      });
+      for (const m of [body, cab, win, wheels]) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; scene.add(m); }
+    }
+    window.__street = { meshes: scene.children.slice(nStreet0), poles: poles.length, cars: cars.length, wallTris: WL.pos.length / 9, lineTris: LN.pos.length / 9 };
   }
 
   // 木：林の中に多め、残りは家の庭（建物・道路・水の上には立てない）
@@ -2735,7 +2934,7 @@ function step(dt, t) {
   // 町：追う相手からカメラまでの線（肩越しのずれも含む）が家に掛からない割合。壁の手前0.4mで止める
   const camClear = yaw => {
     const [ox, oz] = camOff(yaw), len = Math.hypot(ox, oz);
-    for (let d = 0.3; d < len + 0.4; d += 0.2) if (townBlocked(fol.x + ox * d / len, fol.z + oz * d / len)) return Math.max(0, (d - 0.4) / len);
+    for (let d = 0.3; d < len + 0.4; d += 0.2) if (townHigh(fol.x + ox * d / len, fol.z + oz * d / len)) return Math.max(0, (d - 0.4) / len);
     return 1;
   };
   let camK = 1;
@@ -2752,7 +2951,7 @@ function step(dt, t) {
   const cx = fol.x + ox, cz = fol.z + oz;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
-  if (TOWN && townBlocked(camera.position.x, camera.position.z)) camera.position.copy(camGoal);   // 追いかける途中で家の中に入ったら目標へ跳ぶ
+  if (TOWN && townHigh(camera.position.x, camera.position.z)) camera.position.copy(camGoal);   // 追いかける途中で家の中に入ったら目標へ跳ぶ
   camSnap = false;
   if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
