@@ -100,7 +100,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v70 · -- fps</div>
+<div id="fps" class="ui">v71 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -135,7 +135,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v70';
+const VERSION = 'v71';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2941,7 +2941,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           else { gx = p[0]; gz = p[1]; dspd = 1.4; if (Math.hypot(p[0] - st.x, p[1] - st.z) < 0.25) D.i--; if (D.i < D.j) W.detour = null; W.sniff = null; }
         } else W.detour = null;
       }
-      let dyaw = W.mode === 'follow' && W.smell && W.smell.face !== undefined && Math.hypot(walker.x - st.x, walker.z - st.z) < 0.9 ? W.smell.face : W.mode === 'follow' && (S.lick || W.feed && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.2) ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.mode === 'follow' && W.ponder && W.ponder.ph !== 'want' ? (W.ponder.ph === 'think' ? W.ponder.look : W.ponder.pref) : W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
+      let dyaw = W.mode === 'follow' && W.smell && W.smell.face !== undefined && Math.hypot(walker.x - st.x, walker.z - st.z) < 0.9 ? W.smell.face : W.mode === 'follow' && (S.lick || W.feed && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.2) ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.mode === 'follow' && W.ponder && W.ponder.ph !== 'want' ? (W.ponder.ph === 'think' ? W.ponder.look : W.ponder.ph === 'refuse' ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.ponder.pref) : W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
       let sx = st.x, sz = st.z;
       if (W.mode === 'lock' && W.facePull > 0.5) { sx -= Math.sin(st.yaw) * 0.9 * dt; sz -= Math.cos(st.yaw) * 0.9 * dt; }   // 顔の側から引かれている：相手を見たまま後ずさりして抜けようとする
       else if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
@@ -2993,8 +2993,10 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             // 嗅いでいる間は踏ん張るが、ロックオンほど頑固ではない：引けば崩しがたまり、横から引くほど早い。満タンで嗅ぐのをやめてついてくる
             const fX = Math.sin(st.yaw), fZ = Math.cos(st.yaw);
             const lat = Math.sqrt(Math.max(0, 1 - (ux * fX + uz * fZ) ** 2));
-            W.sbal = Math.min(1, (W.sbal || 0) + e * (0.15 + 0.8 * lat * lat) * (1 + W.sat) * (S.act === 'poop' ? 0.6 : S.act === 'mark' ? 0.85 : W.sniff && W.sniff.heat ? 0.35 : balking ? 0.55 : 1));   // 執着している時はなかなか崩れない
-            const give = 0.1 + 0.35 * lat * lat;
+            const faceP = balking ? -(fX * ux + fZ * uz) : 0;   // 正＝顔の側から引かれている
+            if (faceP > 0.3) W.slip = Math.min(1, W.slip + Math.min(e, 4.5 * dt) * faceP * 0.28 * (1.5 - W.sat));   // 拒否柴は腰を引いて踏ん張るので、前から引くと首輪が抜けやすい（満足していないほど）
+            W.sbal = Math.min(1, (W.sbal || 0) + e * (0.15 + 0.8 * lat * lat) * (1 + W.sat) * (S.act === 'poop' ? 0.6 : S.act === 'mark' ? 0.85 : W.sniff && W.sniff.heat ? 0.35 : balking ? (faceP > 0.3 ? 0.9 : 0.55) : 1));   // 執着している時はなかなか崩れない
+            const give = faceP > 0.3 ? 0.03 : 0.1 + 0.35 * lat * lat;   // 前から引かれた拒否柴はほとんど動かない
             sx -= ux * e * give; sz -= uz * e * give; nx += ux * e * (1 - give); nz += uz * e * (1 - give);
             if (W.sbal >= 1) {                       // 崩れた：においから離れて飼い主の方へ
               if (S.act === 'poop') W.poopT = Math.max(0, W.poopAt - 15);   // 途中でやめさせたうんちは、しばらくしてまたしたくなる
@@ -3017,7 +3019,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         W.sat = Math.max(0, W.sat - (W.mode === 'lock' ? 0.02 : 0.004) * dt);   // 満足は少しずつ薄れる。ロックオン中は早く
       }
       W.slip = Math.max(0, W.slip - 0.2 * dt);   // 引くのをやめれば首輪は戻る
-      if (W.mode === 'lock' && (W.stress >= 0.97 || W.slip >= 0.97) && !W.ev) {   // 限界：首輪が抜ける／振り返って咬みつく
+      if ((W.mode === 'lock' && W.stress >= 0.97 || W.slip >= 0.97) && !W.ev) {   // 限界：首輪が抜ける／振り返って咬みつく
         W.ev = W.slip >= 0.97 ? 'loose' : 'bite'; W.evT = 0; W.sat *= 0.5;
         if (W.ev === 'loose') { W.loose = { ph: sees && rd < 15 ? 'charge' : 'puzzle', t: 0, roamT: 0, flee: 0, lure: 0, orbit: rand() * 6, puzzle: 1.2 + rand() * 1 }; W.feed = null; W.ponder = null; W.sniff = null; W.smell = null; }
         if (W.ev === 'bite') { W.stress = 0.4; flashEl.classList.add('on'); setTimeout(() => flashEl.classList.remove('on'), 350); dog.command('bark', st); }
@@ -3149,9 +3151,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'follow' && W.smell) uiL.textContent = 'くんくん…飼い主のにおいを嗅いでいる';
       else if (W.mode === 'follow' && W.feed) uiL.textContent = W.feed.ph === 'show' ? 'おやつを見せる' : W.feed.ph === 'give' ? 'おやつをあげる' : W.feed.ph === 'doubt' ? '食べようか、食べまいか…' : W.feed.ph === 'spit' ? '…' : 'もぐもぐ';
       else if (W.mode === 'follow' && W.ponder && W.ponder.beg) uiL.textContent = W.ponder.ph === 'beg' ? '立ち止まって、こちらの顔を見上げている（おやつの催促？）'
-        : '拒否柴！ おやつが足りないらしい' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
+        : '拒否柴！ おやつが足りないらしい' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '') + (W.slip > 0.02 ? '　首輪 ' + '●'.repeat(Math.round(W.slip * 5)) + '○'.repeat(5 - Math.round(W.slip * 5)) : '');
       else if (W.mode === 'follow' && W.ponder) uiL.textContent = W.ponder.ph === 'think' ? '立ち止まって、どっちへ行こうか考えている' : W.ponder.ph === 'want' ? 'こっちへ行きたいらしい'
-        : '拒否柴！ 踏ん張って動かない' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
+        : '拒否柴！ 踏ん張って動かない' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '') + (W.slip > 0.02 ? '　首輪 ' + '●'.repeat(Math.round(W.slip * 5)) + '○'.repeat(5 - Math.round(W.slip * 5)) : '');
       else if (W.mode === 'follow' && W.leftT > 0 && !S.act) uiL.textContent = 'フンを置き去りにしてしまった…';
       else if (W.mode === 'follow' && W.dung && !S.act && !W.sniff) uiL.textContent = Math.hypot(W.dung.position.x - walker.x, W.dung.position.z - walker.z) < 1.3 ? '「拾う」を押してフンを拾う' : 'フンを拾おう（近づくと「拾う」が出る）';
       else if (W.mode === 'follow' && S.act === 'shake') uiL.textContent = 'ブルブル…（身震いして落ち着く）';
