@@ -100,7 +100,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v68 · -- fps</div>
+<div id="fps" class="ui">v69 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -135,7 +135,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v68';
+const VERSION = 'v69';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3049,7 +3049,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // 興奮が最高潮で前へ突っ込みたいのに、張りきったリードに止められると前足が浮いて二足立ちになる。
       // 飼い主が柴の方へ歩いてリードがゆるめば、すぐ前足を下ろして四つ足で突っ込む（ゆるむ速さに応じて）
       const giveW = walker.speed * Math.cos(angDiff(walker.yaw, Math.atan2(st.x - walker.x, st.z - walker.z)));   // 飼い主が柴の方へ寄る速さ
-      const rearT = W.ev === 'loose' ? (W.mode === 'lock' && rd < 2.2 ? 1 : 0) : frenzy && W.tension > 0.6 && !W.ev ? Math.max(0, Math.min(1, 1 - giveW / 0.8)) : 0;
+      // リードが後ろから引いている時だけ（前や横から引かれても前足は浮かない。前からなら後ずさりして首輪が抜けそうになる）
+      const behind = -(Math.sin(st.yaw) * (walker.x - st.x) + Math.cos(st.yaw) * (walker.z - st.z)) / Math.max(0.01, Math.hypot(walker.x - st.x, walker.z - st.z));   // 1＝飼い主が真後ろ
+      const rearT = W.ev === 'loose' ? (W.mode === 'lock' && rd < 2.2 ? 1 : 0) : frenzy && W.tension > 0.6 && !W.ev ? Math.max(0, Math.min(1, 1 - giveW / 0.8)) * smooth(0.25, 0.75, behind) : 0;
       S.rage = (S.rage || 0) + (rearT - (S.rage || 0)) * Math.min(1, dt * (rearT > (S.rage || 0) ? 4 : 9));   // 浮くのは少し遅れて、下ろすのは早く
       S.strain = (S.strain || 0) + ((W.mode === 'lock' || W.mode === 'stare' ? 1 : pulling ? 0.45 : 0) - (S.strain || 0)) * Math.min(1, dt * 6);
       S.gaze = W.mode === 'lock' || W.mode === 'stare' ? Math.max(-1.3, Math.min(1.3, angDiff(st.yaw, toRival))) : 0;
