@@ -114,7 +114,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v86 · -- fps</div>
+<div id="fps" class="ui">v87 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -152,7 +152,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v86';
+const VERSION = 'v87';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -292,6 +292,22 @@ const lowNear = (x, z, R) => {
     }
   }
   return best;
+};
+// 2点を結ぶ線（リード）が塀をまたぐか。電柱・車はリードが巻きつく・越えるので見ない
+const lowCross = (ax, az, bx, bz) => {
+  if (!lowGrid) return false;
+  const seen = new Set();
+  for (let i = Math.floor(Math.min(ax, bx) / LOWG); i <= Math.floor(Math.max(ax, bx) / LOWG); i++) for (let j = Math.floor(Math.min(az, bz) / LOWG); j <= Math.floor(Math.max(az, bz) / LOWG); j++) {
+    const l = lowGrid.get(lowKey(i, j)); if (!l) continue;
+    for (const o of l) {
+      if (o.t !== 0 || seen.has(o)) continue; seen.add(o);
+      const rx = bx - ax, rz = bz - az, sx = o.x1 - o.x0, sz = o.z1 - o.z0, den = rx * sz - rz * sx;
+      if (Math.abs(den) < 1e-9) continue;
+      const qx = o.x0 - ax, qz = o.z0 - az, u = (qx * sz - qz * sx) / den, v = (qx * rz - qz * rx) / den;
+      if (u > 0 && u < 1 && v > -0.02 && v < 1.02) return true;
+    }
+  }
+  return false;
 };
 const lowHit = (x, z) => {
   if (!lowGrid) return false;
@@ -3295,16 +3311,23 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.ev === 'loose' && W.mode === 'free') dyaw = W.loose.catching || W.loose.ph === 'look' || dspd < 0.2 && (W.loose.lure > 0 || W.loose.ph === 'come') ? Math.atan2(walker.x - st.x, walker.z - st.z) : dspd > 0.1 ? gyaw : st.yaw;
       if (W.ev === 'bite') dyaw = Math.atan2(walker.x - st.x, walker.z - st.z);
 
-      const manHits = (x, z) => townBlocked(x, z) || [0, 1.57, 3.14, 4.71].some(a => lowHit(x + Math.sin(a) * 0.17, z + Math.cos(a) * 0.17));
+      const tied = W.ev !== 'loose', cross0 = tied && lowCross(walker.x, walker.z, st.x, st.z);   // すでにまたいでいる時（置き直した直後など）は、それ以上は止めない
+      const manHits = (x, z) => townBlocked(x, z) || [0, 1.57, 3.14, 4.71].some(a => lowHit(x + Math.sin(a) * 0.17, z + Math.cos(a) * 0.17)) || tied && !cross0 && lowCross(x, z, st.x, st.z);   // リードが塀に掛かって、塀の向こうとこちらには分かれられない
       if (!manHits(nx, nz)) { walker.x = nx; walker.z = nz; }
       else if (!manHits(nx, walker.z)) walker.x = nx;
       else if (!manHits(walker.x, nz)) walker.z = nz;
+      if (tied && !cross0 && Math.hypot(nx - walker.x, nz - walker.z) > 0.004 && lowCross(nx, nz, st.x, st.z)) {   // リードが塀に掛かって進めない：たぐって柴を手元へ寄せる（塀の切れ目を回ってくる）
+        const ux = walker.x - st.x, uz = walker.z - st.z, ul = Math.hypot(ux, uz) || 1;
+        sx = st.x + ux / ul * 1.6 * dt; sz = st.z + uz / ul * 1.6 * dt; W.snagT = (W.snagT || 0) + dt;
+        if (TEST) W.dbgLB = (W.dbgLB || 0) + 1;
+      } else W.snagT = 0;
       const moved = Math.hypot(sx - st.x, sz - st.z);
       // 柴の体（鼻先から尻まで・胴の幅）が塀・車・家にめり込まないように。進めなければ軸ごとに滑らせ、向きを変えて頭が当たるなら少し下がる
       // 当たっている点の数（0＝どこも当たっていない）。鼻先から尻まで7cmおき＋胴の幅
       const dogHits = (x, z, yaw) => { const fx = Math.sin(yaw), fz = Math.cos(yaw); let n = 0; for (let d = -0.27; d <= 0.43; d += 0.07) if (townBlocked(x + fx * d, z + fz * d)) n++; for (const d of [0.15, -0.1]) for (const w of [0.13, -0.13]) if (townBlocked(x + fx * d + fz * w, z + fz * d - fx * w)) n++; return n; };
       const h0 = dogHits(st.x, st.z, st.yaw);   // すでに当たっている時（置き直した直後など）は、当たりが増えない動きだけ許す
-      const okAt = (x, z, yaw) => { const n = dogHits(x, z, yaw); return h0 ? n < h0 || n === h0 && !townBlocked(x, z) && n <= 1 : n === 0; };
+      const cross1 = tied && lowCross(walker.x, walker.z, st.x, st.z);
+      const okAt = (x, z, yaw) => { if (tied && !cross1 && lowCross(walker.x, walker.z, x, z)) return false; const n = dogHits(x, z, yaw); return h0 ? n < h0 || n === h0 && !townBlocked(x, z) && n <= 1 : n === 0; };
       if (okAt(sx, sz, st.yaw)) { st.x = sx; st.z = sz; }
       else if (okAt(sx, st.z, st.yaw)) st.x = sx;
       else if (okAt(st.x, sz, st.yaw)) st.z = sz;
@@ -3738,7 +3761,7 @@ function frame(ts) {
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
 window.__V = THREE.Vector3; window.__isGrass = (x, z) => isGrass(x, z); window.__gy = (x, z) => H(x, z);
-window.__shiba = { privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
