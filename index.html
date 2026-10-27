@@ -106,7 +106,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v75 · -- fps</div>
+<div id="fps" class="ui">v76 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -142,7 +142,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v75';
+const VERSION = 'v76';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3052,7 +3052,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
       let dyaw = W.mode === 'follow' && W.smell && W.smell.face !== undefined && Math.hypot(walker.x - st.x, walker.z - st.z) < 0.9 ? W.smell.face : W.mode === 'follow' && (S.lick || W.feed && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.2) ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.mode === 'follow' && W.ponder && W.ponder.ph !== 'want' ? (W.ponder.ph === 'think' ? W.ponder.look : W.ponder.ph === 'refuse' ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.ponder.pref) : W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
       let sx = st.x, sz = st.z;
-      if (W.mode === 'lock' && W.facePull > 0.5) { sx -= Math.sin(st.yaw) * 0.9 * dt; sz -= Math.cos(st.yaw) * 0.9 * dt; }   // 顔の側から引かれている：相手を見たまま後ずさりして抜けようとする
+      if (W.ev) W.facePull = 0;   // 首輪が抜けた・咬んだ後は、もう引かれていない（残っていると後ろへ滑り続けた）
+      if (W.mode === 'lock' && !W.ev && W.facePull > 0.5) { sx -= Math.sin(st.yaw) * 0.9 * dt; sz -= Math.cos(st.yaw) * 0.9 * dt; }   // 顔の側から引かれている：相手を見たまま後ずさりして抜けようとする
       else if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
 
       // --- リード：張ったら長さを超えた分を、人と犬に振り分けて戻す
@@ -3136,6 +3137,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // 体のねじれ：横から引かれるほど体が回る（首から上は相手を見たまま）
       W.twist += ((W.mode === 'lock' ? W.side * Math.min(W.bal, 1) * 1.1 : 0) - W.twist) * Math.min(1, dt * 5);
       if (W.mode === 'lock') dyaw = toRival - W.twist;
+      if (W.ev === 'loose' && W.mode === 'lock' && Math.hypot(sx - st.x, sz - st.z) > 0.6 * dt) dyaw = Math.atan2(sx - st.x, sz - st.z) + angDiff(Math.atan2(sx - st.x, sz - st.z), toRival) * 0.35;   // 放されて相手のまわりを回る時は進む方を向き、顔だけ相手へ（横滑りしない）
       if (W.ev === 'loose' && W.mode === 'free') dyaw = W.loose.catching || W.loose.ph === 'look' || dspd < 0.2 && (W.loose.lure > 0 || W.loose.ph === 'come') ? Math.atan2(walker.x - st.x, walker.z - st.z) : dspd > 0.1 ? gyaw : st.yaw;
       if (W.ev === 'bite') dyaw = Math.atan2(walker.x - st.x, walker.z - st.z);
 
