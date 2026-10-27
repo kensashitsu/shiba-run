@@ -110,7 +110,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v83 · -- fps</div>
+<div id="fps" class="ui">v84 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -147,7 +147,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v83';
+const VERSION = 'v84';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -292,6 +292,7 @@ const isGrass = (x, z) => {
   return townMaskData[k * 4] < 30 && townMaskData[k * 4 + 1] < 30 && townMaskData[k * 4 + 2] < 30;
 };
 let privC = null;
+const headV = new THREE.Vector3();
 const privateLand = (x, z) => {
   if (!TOWN) return false;
   const k = townCell(x, z); if (k < 0) return false;
@@ -2737,6 +2738,18 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         let best = null, bd = 1e9;
         for (const o of OTHERS) { const d = Math.hypot(o.rdst.x - st.x, o.rdst.z - st.z), sc = d < 24 && visible(st.x, st.z, o.rdst.x, o.rdst.z) ? d : d + 1000; if (sc < bd) { bd = sc; best = o; } }
         W.tgt = best;
+      } else if (!W.ev) {   // 夢中な相手がいても、別の犬がずっと近くに現れたら、そちらへ気を移す（すれ違った直後の2頭目も無視しない）
+        const cd = Math.hypot(W.tgt.rdst.x - st.x, W.tgt.rdst.z - st.z);
+        for (const o of OTHERS) {
+          if (o === W.tgt) continue;
+          const d = Math.hypot(o.rdst.x - st.x, o.rdst.z - st.z);
+          if (d < 16 && d < cd - 4 && visible(st.x, st.z, o.rdst.x, o.rdst.z)) {
+            W.tgt = o;
+            if (W.mode === 'leave') { W.mode = 'stare'; W.exc = Math.max(W.exc, 0.55); W.lostT = 0; }   // 興奮が残っているので、すぐ固まる
+            else if (W.mode === 'lock') { W.lostT = 0; W.bal = 0; }
+            break;
+          }
+        }
       }
       rst = W.tgt.rst; rdst = W.tgt.rdst;
 
@@ -2937,13 +2950,19 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           }
           if (dd < 0.3 && S.act !== 'sniff' && !(W.sniff.gz > 1.2)) dog.__start('sniff');
           W.sniff.len = W.sniff.len ?? W.sniff.t;
+          {   // リードを軽く引く（飼い主が離れる向きに動いて張る）＝「ここではしないで」の合図。嗅ぐのは続けるが、7割はマーキングをやめる
+            const away = walker.speed * Math.cos(angDiff(walker.yaw, Math.atan2(walker.x - st.x, walker.z - st.z)));
+            if (dd < 0.3 && !W.sniff.grass && !W.sniff.tug && W.tension > 0.85 && away > 0.2) { W.sniff.tug = true; W.sniff.noMark = rand() < 0.7; W.msg = 'リードを軽く引いた（ここではしないで）'; W.msgT = 1.8; }
+          }
           W.sniff.pull = (W.sniff.pull || 0) + (dd < 0.3 && W.tension > 0.9 && walker.speed > 0.3 ? dt : 0);   // 嗅いでいる最中に引っ張って邪魔した時間
           const giveUp = !W.sniff.heat && W.sat > 0.45 && W.sniff.pull > 1.6 - W.sat;   // 満足していれば、飼い主が歩き出すと切り上げる
           if (W.sniff.t <= 0 || giveUp) {
             if (!giveUp) W.sat = Math.min(1, W.sat + 0.035 * W.sniff.len * Math.max(0, 1 - W.sniff.pull / 2));   // 待ってもらえた分だけ満足
-            W.wasHeat = !!W.sniff.heat; W.sniff_grass = !!W.sniff.grass; W.sniff = null; W.nextSniff = 6 + rand() * 10; if (S.act === 'sniff') S.act = null;
+            W.wasHeat = !!W.sniff.heat; W.sniff_grass = !!W.sniff.grass; W.sniff_noMark = !!W.sniff.noMark; W.sniff = null; W.nextSniff = 6 + rand() * 10; if (S.act === 'sniff') S.act = null;
             const heat = W.sniff === null && W.wasHeat; W.wasHeat = false;
-            if (!giveUp && !W.sniff_grass && (heat || (rand() < 0.55 && S.clock - S.lastMark > 10))) {   // 嗅いだ後はマーキングすることが多い（執着した後は必ず）。散歩では素早く（脚を上げているのは1秒以内）
+            const wants = !giveUp && !W.sniff_grass && (heat || (rand() < 0.55 && S.clock - S.lastMark > 10));
+            if (wants && W.sniff_noMark) { W.msg = 'マーキングせずに歩き出した'; W.msgT = 2; }
+            if (wants && !W.sniff_noMark) {   // 嗅いだ後はマーキングすることが多い（執着した後は必ず）。散歩では素早く（脚を上げているのは1秒以内）
               if (heat) W.after = 'shake';
               dog.__startSeq('mark', st); S.actData.dur = { approach: 2, sniff: 0.5, turn: 0.5, lift: 0.15, pee: 0.5, lower: 0.15, kick: 0.8 };
             }
@@ -3246,6 +3265,24 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         if (dogHits(st.x, st.z, ny) <= (h1 ? h1 : 0)) st.yaw = ny;
         else for (let k = 0.04; k <= 0.3; k += 0.04) { const bx = st.x - Math.sin(ny) * k, bz = st.z - Math.cos(ny) * k; if (dogHits(bx, bz, ny) <= (h1 ? h1 - 1 : 0)) { st.x = bx; st.z = bz; st.yaw = ny; break; } }
       }
+      {   // 頭そのもの：嗅ぐ・草を食べる時は首を下げて前へ突き出すので、立っている時の鼻先より遠くへ届く。前のコマの姿勢で鼻先と頭の位置を測り、塀・車・家に入るなら入らない所まで下がる
+        const r = dog.object; dog.__head.updateWorldMatrix(true, false);
+        const hp = dog.__head.localToWorld(headV.set(0, -0.03, 0.15)), ox = hp.x - r.position.x, oz = hp.z - r.position.z, py = r.rotation.y;
+        const hf = ox * Math.sin(py) + oz * Math.cos(py), hl = ox * Math.cos(py) - oz * Math.sin(py);
+        const fx = Math.sin(st.yaw), fz = Math.cos(st.yaw);
+        const headIn = (x, z) => [1, 0.75, 0.5].some(u => townBlocked(x + (fx * hf + fz * hl) * u, z + (fz * hf - fx * hl) * u));
+        if (hf > 0.3 && headIn(st.x, st.z)) {
+          const h2 = dogHits(st.x, st.z, st.yaw);
+          for (let k = 0.03; k <= 0.45; k += 0.03) {
+            const bx = st.x - fx * k, bz = st.z - fz * k;
+            if (!headIn(bx, bz) && dogHits(bx, bz, st.yaw) <= h2) {
+              st.x = bx; st.z = bz;
+              if (W.sniff && Math.hypot(W.sniff.x - st.x, W.sniff.z - st.z) < 0.6) { W.sniff.x = st.x + fx * 0.05; W.sniff.z = st.z + fz * 0.05; }   // 嗅ぐ場所もそこ（塀ぎわ）にする
+              break;
+            }
+          }
+        }
+      }
 
       // --- 仕草
       dog.think(!(W.loose && W.loose.sniffT > 0 && dspd === 0) && !(W.mode === 'follow' && (W.sniff || S.act === 'mark' || S.act === 'poop' || S.act === 'shake' || W.pick)), dt, t, st, camera.position);   // このコマで始まった段取りも止めない   // 嗅いでいる間は仕草を止めない
@@ -3387,7 +3424,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'follow' && W.heat) uiL.textContent = 'いきなり走り出した！';
       else if (W.mode === 'follow' && W.sniff && W.sniff.heat) uiL.textContent = 'くんくんくんくん！ 異様に執着している' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.sniff && W.sniff.grass && W.sniff.gz > 1.2) uiL.textContent = 'むしゃむしゃ…草を食べている（待つ／引いてやめさせる）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
-      else if (W.mode === 'follow' && W.sniff) uiL.textContent = 'くんくん…（待つ／引いて崩す）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
+      else if (W.mode === 'follow' && W.sniff) uiL.textContent = 'くんくん…（待つ／軽く引くとマーキングしにくい／引いて崩す）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && (S.act === 'mark' || S.act === 'poop')) uiL.textContent = (S.act === 'mark' ? 'マーキング中…（待つ／引いて崩す）' : 'うんち中…（待つ／引いて崩す）') + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.rush) uiL.textContent = W.rush.ph === 'seek' ? 'うんちしたい！ ぐんぐん引っ張る' : 'くんくん…場所を探している';
       else if (W.mode === 'follow' && !W.ev) uiL.textContent = (W.harm > 0.95 ? '歩調ぴったり' : '歩調 ' + '●'.repeat(Math.round(W.harm * 5)) + '○'.repeat(5 - Math.round(W.harm * 5))) + '　満足 ' + '★'.repeat(Math.round(W.sat * 5)) + '☆'.repeat(5 - Math.round(W.sat * 5));
