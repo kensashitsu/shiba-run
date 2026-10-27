@@ -106,7 +106,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v76 · -- fps</div>
+<div id="fps" class="ui">v77 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -142,7 +142,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v76';
+const VERSION = 'v77';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2996,7 +2996,13 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           L.lure -= dt; const fx = walker.x + Math.sin(walker.yaw) * 0.7, fz = walker.z + Math.cos(walker.yaw) * 0.7, dd = Math.hypot(fx - st.x, fz - st.z);
           gx = fx; gz = fz; dspd = dd > 0.1 ? Math.min(3, dd * 3) : 0;
         } else if (L.ph === 'charge') {
-          L.orbit += dt * 0.9; gx = rdst.x + Math.sin(L.orbit) * 1.4; gz = rdst.z + Math.cos(L.orbit) * 1.4; dspd = rd > 3 ? 6 : 2.2;
+          if (rd > 2.4) { gx = rdst.x; gz = rdst.z; dspd = 6; L.dartT = 1 + Math.random(); L.orbit = Math.atan2(st.x - rdst.x, st.z - rdst.z); }   // まず相手へ突っ込む
+          else {   // 1.4m の所で踏ん張って吠え、ときどき横へさっと回り込む
+            L.dartT = (L.dartT ?? 1.5) - dt;
+            if (L.dartT <= 0) { L.orbit += (Math.random() < 0.5 ? -1 : 1) * (0.7 + Math.random() * 0.8); L.dartT = 1.5 + Math.random() * 1.8; }
+            const ox = rdst.x + Math.sin(L.orbit) * 1.4, oz = rdst.z + Math.cos(L.orbit) * 1.4, dd = Math.hypot(ox - st.x, oz - st.z);
+            gx = ox; gz = oz; dspd = dd > 0.15 ? Math.min(3.2, dd * 4) : 0;
+          }
         } else if (L.ph === 'puzzle') { gx = st.x; gz = st.z; dspd = 0; }
         else if (L.ph === 'flee') {   // 跳ねるように走って逃げる（壁に当たったら曲がる）
           const ahead = (a2) => !townBlocked(st.x + Math.sin(a2) * 1.5, st.z + Math.cos(a2) * 1.5);
@@ -3194,7 +3200,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       const giveW = walker.speed * Math.cos(angDiff(walker.yaw, Math.atan2(st.x - walker.x, st.z - walker.z)));   // 飼い主が柴の方へ寄る速さ
       // リードが後ろから引いている時だけ（前や横から引かれても前足は浮かない。前からなら後ずさりして首輪が抜けそうになる）
       const behind = -(Math.sin(st.yaw) * (walker.x - st.x) + Math.cos(st.yaw) * (walker.z - st.z)) / Math.max(0.01, Math.hypot(walker.x - st.x, walker.z - st.z));   // 1＝飼い主が真後ろ
-      const rearT = W.ev === 'loose' ? (W.mode === 'lock' && rd < 2.2 ? 1 : 0) : frenzy && W.tension > 0.6 && !W.ev ? Math.max(0, Math.min(1, 1 - giveW / 0.8)) * smooth(0.25, 0.75, behind) : 0;
+      const rearT = W.ev === 'loose' ? 0 :   // 放されている時はリードに止められないので四つ足のまま
+        frenzy && W.tension > 0.6 && !W.ev ? Math.max(0, Math.min(1, 1 - giveW / 0.8)) * smooth(0.25, 0.75, behind) : 0;
       S.rage = (S.rage || 0) + (rearT - (S.rage || 0)) * Math.min(1, dt * (rearT > (S.rage || 0) ? 4 : 9));   // 浮くのは少し遅れて、下ろすのは早く
       S.strain = (S.strain || 0) + ((W.mode === 'lock' || W.mode === 'stare' ? 1 : pulling ? 0.45 : 0) - (S.strain || 0)) * Math.min(1, dt * 6);
       S.gaze = W.mode === 'lock' || W.mode === 'stare' ? Math.max(-1.3, Math.min(1.3, angDiff(st.yaw, toRival))) : 0;
