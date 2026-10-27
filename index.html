@@ -29,6 +29,13 @@
   #ecoBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
   #ecoBtn.on { background: rgba(120,190,110,.55); opacity: .95; }
+  #fpvBtn { top: calc(env(safe-area-inset-top, 0px) + 84px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
+    background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
+  #fpvBtn.on { background: rgba(240,180,106,.6); opacity: .95; }
+  #dogArrow { position: fixed; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: rgba(240,180,106,.75); color: #2b2118;
+    font: 700 12px var(--font-ui); display: grid; place-items: center; pointer-events: none; }
+  #dogArrow::after { content: ''; position: absolute; left: 50%; top: 50%; border: 7px solid transparent; border-left: 10px solid rgba(240,180,106,.9); transform: translate(13px, -7px); transform-origin: -13px 7px; rotate: var(--a, 0rad); }
+  #dogArrow[hidden] { display: none; }
   #credit { position: fixed; right: 8px; bottom: 4px; font-size: 9px; color: rgba(255,255,255,.75); text-shadow: 0 0 3px rgba(0,0,0,.6); }
   #map { top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(10px, env(safe-area-inset-right, 0px));
     width: 104px; height: 104px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
@@ -114,8 +121,10 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v88 · -- fps</div>
+<div id="fps" class="ui">v89 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
+<button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
+<div id="dogArrow" class="ui" hidden>柴</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う<span class="key">E</span></button>
@@ -152,7 +161,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v88';
+const VERSION = 'v89';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2251,7 +2260,7 @@ scene.add(contact);
 // ---------- 入力 ----------
 const input = { x: 0, y: 0 };
 const keys = {};
-let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camDragT = -99;
+let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY = 0, camDragT = -99, fpv = false, camPitch = -0.38;
 const stickEl = document.getElementById('stick'), knobEl = document.getElementById('knob');
 const hintEl = document.getElementById('hint');
 let jumpReq = false;
@@ -2264,7 +2273,7 @@ canvas.addEventListener('pointerdown', e => {
     stickEl.style.left = stickX + 'px'; stickEl.style.top = stickY + 'px';
     knobEl.style.transform = ''; stickEl.hidden = false;
   } else if (camId === null) {
-    camId = e.pointerId; camLastX = e.clientX;
+    camId = e.pointerId; camLastX = e.clientX; camLastY = e.clientY;
   }
   canvas.setPointerCapture(e.pointerId);
 });
@@ -2277,6 +2286,7 @@ canvas.addEventListener('pointermove', e => {
     input.x = dx / STICK_R; input.y = -dy / STICK_R;
   } else if (e.pointerId === camId) {
     camYaw -= (e.clientX - camLastX) * 0.006; camLastX = e.clientX; camDragT = clock.elapsedTime;
+    if (fpv) camPitch = Math.max(-1.35, Math.min(0.5, camPitch - (e.clientY - camLastY) * 0.005)); camLastY = e.clientY;
   }
 });
 const endPointer = e => {
@@ -2293,7 +2303,7 @@ document.querySelectorAll('#acts [data-cmd]').forEach(b => {
   b.addEventListener('pointerdown', e => { e.preventDefault(); run(); });
   b.addEventListener('click', e => { if (e.detail === 0) run(); });   // キーボード操作
 });
-addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') { jumpReq = true; e.preventDefault(); } });
+addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'KeyV' && WALK && !e.repeat) setFpv(!fpv); if (e.code === 'Space') { jumpReq = true; e.preventDefault(); } });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ---------- 状態 ----------
@@ -2304,7 +2314,7 @@ let camYaw = 0;
 const fpsEl = document.getElementById('fps');
 let fpsN = 0, fpsT = 0, hinted = false, slowN = 0;
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
-const camGoal = new THREE.Vector3();
+const fpvV = new THREE.Vector3(), camGoal = new THREE.Vector3();
 const shTmpX = new THREE.Vector3(), shTmpY = new THREE.Vector3(), shTmpP = new THREE.Vector3();
 
 function resize() {
@@ -2628,7 +2638,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
 }
 
 let WALK = null;
-const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WASD／矢印キーで歩く（Shiftで走る）・E 拾う／捕まえる・C しゃがむ・T おやつ（1 砂肝・2 カワハギ・3 煮干し）・R 短く" : "左側をなぞって散歩します";
+const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WASD／矢印キーで歩く（Shiftで走る）・E 拾う／捕まえる・C しゃがむ・T おやつ（1 砂肝・2 カワハギ・3 煮干し）・R 短く・V 一人称" : "左側をなぞって散歩します（右側をなぞると見回す）";
 if (TOWN && /[?&]walk/.test(location.search)) {
   const me = makeHuman({ shirt: 0x3d5a80, pants: 0x2b2d33, hair: 0x2a1f1a });
   scene.add(me.object);
@@ -3452,6 +3462,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         const mx = walker.x - (W.lastX ?? walker.x), mz = walker.z - (W.lastZ ?? walker.z), av = Math.min(7, Math.hypot(mx, mz) / Math.max(dt, 1e-4));
         W.animSpd = (W.animSpd || 0) + (av - (W.animSpd || 0)) * Math.min(1, dt * 10);
         if (mag < 0.1 && av > 0.15 && !W.pick && !W.feed && !W.crouch) walker.yaw += angDiff(walker.yaw, Math.atan2(mx, mz)) * Math.min(1, dt * 6);
+        else if (fpv && mag < 0.1 && !W.pick && !W.feed && !W.grab && !(W.loose && W.loose.catching) && Math.abs(angDiff(walker.yaw, camYaw)) > 0.7) walker.yaw += angDiff(walker.yaw, camYaw) * Math.min(1, dt * 5);   // 一人称で見回したら、体ごとそちらへ向く
         W.lastX = walker.x; W.lastZ = walker.z;
       }
       me.update(dt, walker.x, walker.z, walker.yaw, W.animSpd, collar, W.tension, W.loose && W.loose.catching ? { crouch: Math.min(1, W.loose.catching * 2.5), hand: dog.__head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(-Math.sin(st.yaw) * 0.1, -0.06, -Math.cos(st.yaw) * 0.1)), tired: W.tired } : W.pickPose ? { ...W.pickPose, tired: W.tired }
@@ -3683,7 +3694,7 @@ function step(dt, t) {
   if (WALK && WALK.W.mode === 'lock') { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
   else if (fol.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, fol.yaw) * Math.min(1, dt * 1.6);
   const dash = smooth(5.5, 8.5, st.speed);
-  camera.fov += ((innerWidth < innerHeight ? 62 : 50) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
+  camera.fov += ((innerWidth < innerHeight ? (fpv ? 74 : 62) : (fpv ? 62 : 50)) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
   camera.updateProjectionMatrix();
   let dist = WALK ? 4.6 : 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
   const ch = WALK ? 3.0 : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
@@ -3696,7 +3707,7 @@ function step(dt, t) {
     return 1;
   };
   let camK = 1;
-  if (TOWN) {
+  if (TOWN && !fpv) {
     camK = camClear(camYaw);
     if (camK < 0.6) {   // 背中が壁で、近寄せても人が隠れる：空いている向きへカメラを回り込ませる
       let best = null;
@@ -3710,8 +3721,32 @@ function step(dt, t) {
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
   if (TOWN && townHigh(camera.position.x, camera.position.z)) camera.position.copy(camGoal);   // 追いかける途中で家の中に入ったら目標へ跳ぶ
+  if (fpv) {   // 一人称：目の位置から。リードを引く・拾う・おやつ・なでる時は、柴の方へ目を落とす
+    const W = WALK.W, eye = WALK.me.__head.localToWorld(fpvV.set(0, 0.035, 0.11));
+    camera.position.copy(eye);
+    const busy = W.grab && W.grab.ph !== 'let' || W.pick || W.feed || W.crouch && dog.state.lick || W.loose && W.loose.catching;
+    if (busy && t - camDragT > 1.5) {
+      const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.35 - eye.y;
+      camYaw += angDiff(camYaw, Math.atan2(tx, tz)) * Math.min(1, dt * 4);
+      camPitch += (Math.max(-1.3, Math.atan2(ty, Math.hypot(tx, tz))) - camPitch) * Math.min(1, dt * 4);
+    } else if (t - camDragT > 2.5) camPitch += (-0.38 - camPitch) * Math.min(1, dt * 1.5);
+    camera.lookAt(eye.x + Math.sin(camYaw) * Math.cos(camPitch), eye.y + Math.sin(camPitch), eye.z + Math.cos(camYaw) * Math.cos(camPitch));
+    // 柴が画面の外にいる時は、画面の縁に向きを出す
+    camera.updateMatrixWorld();
+    const p = fpvV.set(st.x, gy + 0.3, st.z).applyMatrix4(camera.matrixWorldInverse), behind = p.z > 0;
+    p.applyMatrix4(camera.projectionMatrix);
+    let px = behind ? -p.x : p.x, py = behind ? -p.y : p.y;
+    const out = behind || Math.abs(px) > 0.95 || Math.abs(py) > 0.95;
+    dogArrow.hidden = !out;
+    if (out) {
+      const m = Math.max(Math.abs(px), Math.abs(py)) || 1; px = px / m * 0.86; py = py / m * 0.86;
+      dogArrow.style.transform = `translate(${(px + 1) / 2 * innerWidth}px, ${(1 - py) / 2 * innerHeight}px)`;
+      dogArrow.style.setProperty('--a', Math.atan2(-py, px) + 'rad');
+    }
+  }
   camSnap = false;
-  if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
+  if (fpv) { /* 上で */ }
+  else if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
   // 周りの物を犬に合わせて巻き戻す
@@ -3753,6 +3788,14 @@ step(0, 0);
   camera.position.set(o.x - Math.sin(camYaw) * 2.7, H(o.x, o.z) + 1.0, o.z - Math.cos(camYaw) * 2.7);
   camera.lookAt(o.x, H(o.x, o.z) + 0.42, o.z); }
 
+const fpvBtn = document.getElementById('fpvBtn'), dogArrow = document.getElementById('dogArrow');
+function setFpv(v) {
+  fpv = v; camPitch = -0.38; camSnap = true;
+  fpvBtn.classList.toggle('on', fpv); fpvBtn.innerHTML = (fpv ? '後ろから' : '一人称') + '<span class="key">V</span>';
+  if (WALK) WALK.me.__head.visible = !fpv;   // 自分の頭は描かない（目の前に髪が来ないように）
+  if (!fpv) dogArrow.hidden = true;
+}
+if (WALK) { fpvBtn.hidden = false; fpvBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); setFpv(!fpv); }); }
 const ecoBtn = document.getElementById('ecoBtn');
 const showEco = () => { ecoBtn.textContent = eco ? '省電力 入' : '省電力 切'; ecoBtn.classList.toggle('on', eco); };
 showEco();
@@ -3791,7 +3834,7 @@ function frame(ts) {
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
 window.__V = THREE.Vector3; window.__isGrass = (x, z) => isGrass(x, z); window.__gy = (x, z) => H(x, z);
-window.__shiba = { lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; }, setFpv: v => setFpv(v), getFpv: () => ({ fpv, camPitch }) };
 </script>
 </body>
 </html>
