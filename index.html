@@ -94,7 +94,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v55 · -- fps</div>
+<div id="fps" class="ui">v56 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -127,7 +127,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v55';
+const VERSION = 'v56';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2397,7 +2397,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       const gyaw = Math.atan2(gx - st.x, gz - st.z);
       let dyaw = W.mode === 'follow' && S.lick ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.mode === 'follow' && W.ponder && W.ponder.ph !== 'want' ? (W.ponder.ph === 'think' ? W.ponder.look : W.ponder.pref) : W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
       let sx = st.x, sz = st.z;
-      if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
+      if (W.mode === 'lock' && W.facePull > 0.5) { sx -= Math.sin(st.yaw) * 0.9 * dt; sz -= Math.cos(st.yaw) * 0.9 * dt; }   // 顔の側から引かれている：相手を見たまま後ずさりして抜けようとする
+      else if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
 
       // --- リード：張ったら長さを超えた分を、人と犬に振り分けて戻す
       let vx = sx - nx, vz = sz - nz, d = Math.hypot(vx, vz);
@@ -2413,6 +2414,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           else { sx = st.x; sz = st.z; }
         }
         // ② 人が引く：犬から離れる向きに踏み出した分だけが「引いた」こと
+        W.facePull = 0;
         vx = sx - nx; vz = sz - nz; d = Math.hypot(vx, vz);
         if (d > LEASH) {
           const e = d - LEASH, ux = vx / d, uz = vz / d;   // u：人→犬
@@ -2420,19 +2422,20 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           // 引く向き（犬→人）を、犬の視線（犬→相手）に対して分ける：真後ろの成分は受け止め、横の成分だけ効く
           const gX = Math.sin(toRival), gZ = Math.cos(toRival);
           const back = ux * gX + uz * gZ;                // 1＝真後ろへ引いている
+          const front = -(Math.sin(st.yaw) * ux + Math.cos(st.yaw) * uz);   // 犬の向き・(犬→人)：正＝顔の側（相手の方）から引かれている
+          W.facePull = front > 0.2 && walker.speed > 0.3 ? 1 : 0;   // 人が引き続けている間だけ後ずさりする
           const lat = Math.sqrt(Math.max(0, 1 - back * back)) * (back > -0.2 ? 1 : 0.5);
           W.side = Math.sign(gX * uz - gZ * ux) || 1;   // どちら側から引いているか
           W.bal = Math.min(1.2, W.bal + lat * lat * ep * (frenzy ? 0.8 : 1.6) * (1 + W.sat));   // 突っ込んでいる時は崩しにくい。満足していると崩しやすい
           // 力まかせに引いた時：犬の顔の側（前方）へ引かれると後ずさりして首輪が頭から抜けそうになる。
           // 後ろ側から引いても首輪は抜けないが、首が締まってストレスがたまり（真後ろほど・相手が近いほど）、限界で飼い主に咬みつく
-          const front = -(Math.sin(st.yaw) * ux + Math.cos(st.yaw) * uz);   // 犬の向き・(犬→人)：正＝顔の側から引かれている
           if (front > 0.2) W.slip = Math.min(1, W.slip + ep * front * 0.3);
           else W.stress = Math.min(1, W.stress + ep * (0.03 + 0.12 * (1 - lat * lat)) * (frenzy ? 1.6 : 1));
           const give = 0.04 + 0.4 * lat * lat;         // 真後ろならほぼ動かず、横からなら体ごと持っていかれる
           sx -= ux * e * give; sz -= uz * e * give;
           nx += ux * e * (1 - give); nz += uz * e * (1 - give);
           if (W.bal >= 1) {                            // 崩れた：よろけて人の方へ向く
-            W.mode = 'leave'; W.leaveT = 0; W.lostT = 0; W.exc = 0.4;
+            W.facePull = 0; W.mode = 'leave'; W.leaveT = 0; W.lostT = 0; W.exc = 0.4;
             sx -= ux * 0.25; sz -= uz * 0.25; dyaw = Math.atan2(-ux, -uz);
           }
         }
@@ -2487,7 +2490,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       dog.think(!(W.mode === 'follow' && (W.sniff || S.act === 'mark' || S.act === 'poop' || S.act === 'shake' || W.pick)), dt, t, st, camera.position);   // このコマで始まった段取りも止めない   // 嗅いでいる間は仕草を止めない
       const pulling = W.mode === 'follow' && !W.sniff && !seq && W.tension > 0.8;      // リードの端で前へ引っ張っている
       S.ponderLook = W.mode === 'follow' && W.ponder && W.ponder.ph === 'think' ? 1 : 0;
-      S.refuse = (S.refuse || 0) + ((W.mode === 'follow' && W.ponder && W.ponder.ph === 'refuse' ? 1 : 0) - (S.refuse || 0)) * Math.min(1, dt * 6);
+      S.refuse = (S.refuse || 0) + ((W.mode === 'follow' && W.ponder && W.ponder.ph === 'refuse' || W.mode === 'lock' && W.facePull ? 1 : 0) - (S.refuse || 0)) * Math.min(1, dt * 6);
       S.frantic = (S.frantic || 0) + ((W.sniff && W.sniff.heat && W.mode === 'follow' ? 1 : 0) - (S.frantic || 0)) * Math.min(1, dt * 6);
       if (W.prevAct !== S.act && W.mode === 'follow') {
         if (W.prevAct === 'poop' && !S.act) dog.__start('shake');   // うんちの後：身震い
