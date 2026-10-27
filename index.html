@@ -106,7 +106,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v79 · -- fps</div>
+<div id="fps" class="ui">v80 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -142,7 +142,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v79';
+const VERSION = 'v80';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -286,17 +286,33 @@ const isGrass = (x, z) => {
   const k = townCell(x, z); if (k < 0) return false;
   return townMaskData[k * 4] < 30 && townMaskData[k * 4 + 1] < 30 && townMaskData[k * 4 + 2] < 30;
 };
+let privC = null;
+const privateLand = (x, z) => {
+  if (!TOWN) return false;
+  const k = townCell(x, z); if (k < 0) return false;
+  privC = privC || new Uint8Array(townMaskN * townMaskN);   // 0＝まだ調べていない 1＝公道・空き地 2＝よその敷地
+  if (!privC[k]) {
+    let v = 1;
+    if (townRoad(x, z) < 0.3) {
+      let edge = false;
+      for (let i = 0; i < 8 && !edge; i++) { const a = i * 0.785; if (townRoad(x + Math.sin(a) * 1.2, z + Math.cos(a) * 1.2) > 0.5) edge = true; }
+      if (!edge) for (let r = 1.5; r <= 7 && v === 1; r += 1.5) for (let i = 0; i < 12; i++) { const a = i * 0.5236, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r, kk = townCell(px, pz); if (kk >= 0 && townOcc[kk] === 1 && townMaskData[kk * 4 + 2] < 128) { v = 2; break; } }
+    }
+    privC[k] = v;
+  }
+  return privC[k] === 2;
+};
 const findGrass = (x, z) => {   // 近い草むら（周り1mも草むらの所）
   for (let r = 2; r <= 22; r += 1) for (let i = 0; i < 24; i++) {
     const a = i / 24 * Math.PI * 2, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
-    if (isGrass(px, pz) && isGrass(px + 1, pz) && isGrass(px - 1, pz) && isGrass(px, pz + 1) && isGrass(px, pz - 1)) return [px, pz];
+    if (isGrass(px, pz) && isGrass(px + 1, pz) && isGrass(px - 1, pz) && isGrass(px, pz + 1) && isGrass(px, pz - 1) && !privateLand(px, pz)) return [px, pz];
   }
   return null;
 };
 const findSpot = (x, z, dir) => {
   for (let r = 7; r <= 14; r += 1) for (const da of [0, 0.3, -0.3, 0.6, -0.6, 0.9, -0.9]) {
     const a = dir + da, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
-    if (!townBlocked(px, pz) && townRoad(px, pz) < 0.4 && Math.abs(px) < TOWN.area - 5 && Math.abs(pz) < TOWN.area - 5) return [px, pz];
+    if (!townBlocked(px, pz) && townRoad(px, pz) < 0.4 && !privateLand(px, pz) && Math.abs(px) < TOWN.area - 5 && Math.abs(pz) < TOWN.area - 5) return [px, pz];
   }
   return null;
 };
@@ -679,8 +695,8 @@ grassFar.frustumCulled = false;
 grassFar.visible = FAR_BLADES > 0;
 scene.add(grassFar);
 if (TOWN) {   // 町は草むらが狭く家や塀で隠れるので、草を減らして（その分少し太く）軽くする。見た目はほとんど変わらない
-  grass.geometry.instanceCount = Math.round(BLADES * 0.7); grassU.uWide.value = 1.15;
-  grassFar.geometry.instanceCount = Math.round(Math.max(FAR_BLADES, 1) * 0.5); farU.uWide.value *= 1.2;
+  grass.geometry.instanceCount = Math.round(BLADES * 0.5); grassU.uWide.value = 1.3;
+  grassFar.geometry.instanceCount = Math.round(Math.max(FAR_BLADES, 1) * 0.35); farU.uWide.value *= 1.35;
 }
 
 // ---------- 木（幹と枝をコードで生やし、葉は「葉の束を描いた板」を枝先に付ける） ----------
@@ -2907,7 +2923,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           }
         } else {
           if (walker.speed > 0.3) W.dh += angDiff(W.dh, walker.yaw) * Math.min(1, dt * (2.5 + 4 * W.sat));   // 満足しているほど飼い主の向きにすぐ合わせる
-          const probe = a => !townBlocked(st.x + Math.sin(a) * 1.4, st.z + Math.cos(a) * 1.4);   // 前が塞がっていたら空いている方へ曲がる
+          const probe = a => !townBlocked(st.x + Math.sin(a) * 1.4, st.z + Math.cos(a) * 1.4) && (privateLand(st.x, st.z) || !privateLand(st.x + Math.sin(a) * 1.4, st.z + Math.cos(a) * 1.4));   // 前が塞がっていたら空いている方へ曲がる
           if (!probe(W.dh)) for (const k of [0.4, -0.4, 0.8, -0.8, 1.3, -1.3, 2, -2, Math.PI]) if (probe(W.dh + k)) { W.dh += k * Math.min(1, dt * 6); break; }
           // うんちをしたくなると、ぐんぐん引っ張って草むらへ向かい（seek）、草むらの中を嗅ぎながら進んで（search）、
           // だんだん腰が引けてきて、場所が決まったらする
@@ -2995,7 +3011,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           W.nextSniff = (W.nextSniff ?? 5) - dt;
           if (W.nextSniff <= 0 && !W.rush && !W.heat && !W.ponder) {
             const spots = [1, -1].map(sd => { const a = W.dh + sd * Math.PI / 2; return [st.x + Math.sin(a) * 0.9 + Math.sin(W.dh) * 0.6, st.z + Math.cos(a) * 0.9 + Math.cos(W.dh) * 0.6]; })
-              .filter(([x, z]) => townRoad(x, z) < 0.5 && !townBlocked(x, z));
+              .filter(([x, z]) => townRoad(x, z) < 0.5 && !townBlocked(x, z) && !privateLand(x, z));   // 道ばた（塀ぎわ・草むら）。よその庭には入らない
             if (spots.length) { const [x, z] = spots[Math.floor(rand() * spots.length)]; W.sniff = { x, z, t: 3.5 + rand() * 6 }; }
             else W.nextSniff = 1.5;
           }
@@ -3027,7 +3043,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         } else {   // 気ままに：ゆっくり歩いて嗅いだり、急に走り出したり
           L.roamT -= dt;
           if (L.roamT <= 0 || !L.goal) {
-            for (let k = 0; k < 12; k++) { const an = rand() * 6.283, r = 3 + rand() * 9, x = st.x + Math.sin(an) * r, z = st.z + Math.cos(an) * r; if (!townBlocked(x, z)) { L.goal = [x, z]; break; } }
+            for (let k = 0; k < 12; k++) { const an = rand() * 6.283, r = 3 + rand() * 9, x = st.x + Math.sin(an) * r, z = st.z + Math.cos(an) * r; if (!townBlocked(x, z) && !privateLand(x, z)) { L.goal = [x, z]; break; } }
             L.roamT = 3 + rand() * 4; L.sniffT = rand() < 0.5 ? 1.5 + rand() * 2 : 0; L.pace = rand() < 0.3 ? 3.5 + rand() * 1.5 : 1.1 + rand() * 0.6;
           }
           const dd = Math.hypot(L.goal[0] - st.x, L.goal[1] - st.z);
@@ -3072,7 +3088,13 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       let sx = st.x, sz = st.z;
       if (W.ev) W.facePull = 0;   // 首輪が抜けた・咬んだ後は、もう引かれていない（残っていると後ろへ滑り続けた）
       if (W.mode === 'lock' && !W.ev && W.facePull > 0.5) { sx -= Math.sin(st.yaw) * 0.9 * dt; sz -= Math.cos(st.yaw) * 0.9 * dt; }   // 顔の側から引かれている：相手を見たまま後ずさりして抜けようとする
-      else if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
+      else if (dspd > 0.05) {
+        sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt;
+        const toOwner = Math.hypot(gx - walker.x, gz - walker.z) < 1.5;
+        if (!(W.mode === 'lock' || W.ev === 'loose' && W.loose.ph === 'charge' || toOwner) && privateLand(sx, sz) && !privateLand(st.x, st.z)) {   // 敷地の手前で止まり、縁に沿って進む
+          if (!privateLand(sx, st.z)) sz = st.z; else if (!privateLand(st.x, sz)) sx = st.x; else { sx = st.x; sz = st.z; }
+        }
+      }
 
       // --- リード：張ったら長さを超えた分を、人と犬に振り分けて戻す
       let vx = sx - nx, vz = sz - nz, d = Math.hypot(vx, vz);
@@ -3575,7 +3597,7 @@ function frame(ts) {
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
 window.__V = THREE.Vector3; window.__isGrass = (x, z) => isGrass(x, z); window.__gy = (x, z) => H(x, z);
-window.__shiba = { scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
+window.__shiba = { privateLand, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; } };
 </script>
 </body>
 </html>
