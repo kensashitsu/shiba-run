@@ -94,7 +94,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v57 · -- fps</div>
+<div id="fps" class="ui">v58 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -127,7 +127,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v57';
+const VERSION = 'v58';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2708,13 +2708,29 @@ function step(dt, t) {
   camera.updateProjectionMatrix();
   let dist = WALK ? 4.6 : 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
   const ch = WALK ? 3.0 : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
-  if (TOWN) for (let d = 0.5; d < dist; d += 0.25) {   // 町：カメラが家の壁の向こうへ回り込まないよう手前で止める
-    if (townBlocked(fol.x - Math.sin(camYaw) * d, fol.z - Math.cos(camYaw) * d)) { dist = Math.max(0.8, d - 0.35); break; }
-  }
   const side = WALK ? -1.1 : 0;   // 散歩は左肩越し（犬は左前を歩くので、人の体で隠れないように）
-  const cx = fol.x - Math.sin(camYaw) * dist - Math.cos(camYaw) * side, cz = fol.z - Math.cos(camYaw) * dist + Math.sin(camYaw) * side;
+  const camOff = yaw => [-Math.sin(yaw) * dist - Math.cos(yaw) * side, -Math.cos(yaw) * dist + Math.sin(yaw) * side];   // 追う相手からカメラまで
+  // 町：追う相手からカメラまでの線（肩越しのずれも含む）が家に掛からない割合。壁の手前0.4mで止める
+  const camClear = yaw => {
+    const [ox, oz] = camOff(yaw), len = Math.hypot(ox, oz);
+    for (let d = 0.3; d < len + 0.4; d += 0.2) if (townBlocked(fol.x + ox * d / len, fol.z + oz * d / len)) return Math.max(0, (d - 0.4) / len);
+    return 1;
+  };
+  let camK = 1;
+  if (TOWN) {
+    camK = camClear(camYaw);
+    if (camK < 0.6) {   // 背中が壁で、近寄せても人が隠れる：空いている向きへカメラを回り込ませる
+      let best = null;
+      for (let a = 0.3; a <= Math.PI + 0.01 && !best; a += 0.3) for (const sg of [1, -1]) if (!best && camClear(camYaw + sg * a) >= 0.85) best = camYaw + sg * a;
+      if (best !== null) { camYaw += angDiff(camYaw, best) * Math.min(1, dt * 5); camK = camClear(camYaw); }
+    }
+  }
+  let [ox, oz] = camOff(camYaw);
+  const camLow = Math.max(0.15, camK); ox *= camLow; oz *= camLow;
+  const cx = fol.x + ox, cz = fol.z + oz;
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
+  if (TOWN && townBlocked(camera.position.x, camera.position.z)) camera.position.copy(camGoal);   // 追いかける途中で家の中に入ったら目標へ跳ぶ
   camSnap = false;
   if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
