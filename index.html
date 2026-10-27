@@ -110,7 +110,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v84 · -- fps</div>
+<div id="fps" class="ui">v85 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -147,7 +147,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v84';
+const VERSION = 'v85';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -271,6 +271,22 @@ const LOWG = 2, lowKey = (i, j) => i * 100003 + j;
 const lowAdd = (o, x0, z0, x1, z1) => {
   lowGrid = lowGrid || new Map();
   for (let i = Math.floor(x0 / LOWG); i <= Math.floor(x1 / LOWG); i++) for (let j = Math.floor(z0 / LOWG); j <= Math.floor(z1 / LOWG); j++) { const k = lowKey(i, j); (lowGrid.get(k) || lowGrid.set(k, []).get(k)).push(o); }
+};
+const lowNear = (x, z, R) => {
+  if (!lowGrid) return null;
+  let best = null, bd = R;
+  for (let i = Math.floor((x - R) / LOWG); i <= Math.floor((x + R) / LOWG); i++) for (let j = Math.floor((z - R) / LOWG); j <= Math.floor((z + R) / LOWG); j++) {
+    const l = lowGrid.get(lowKey(i, j)); if (!l) continue;
+    for (const o of l) {
+      let px, pz;
+      if (o.t === 0) { const dx = o.x1 - o.x0, dz = o.z1 - o.z0, L2 = dx * dx + dz * dz || 1e-9, u = Math.max(0, Math.min(1, ((x - o.x0) * dx + (z - o.z0) * dz) / L2)); px = o.x0 + dx * u; pz = o.z0 + dz * u; }
+      else if (o.t === 1) { px = o.x; pz = o.z; }
+      else continue;   // 車にはしない
+      const d = Math.hypot(x - px, z - pz) - o.r;
+      if (d < bd) { bd = d; best = { x: px, z: pz, r: o.r, d, kind: o.t === 1 ? 'pole' : 'wall' }; }
+    }
+  }
+  return best;
 };
 const lowHit = (x, z) => {
   if (!lowGrid) return false;
@@ -1762,8 +1778,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     else if (!ACTIONS[name].head) S.posture = 'stand';
   };
   // マーキング・排便を始める（段取りの最初から）
-  const startSeq = (name, st) => {
-    const tree = name === 'mark' ? nearestTree(st.x, st.z, 7) : null;
+  const startSeq = (name, st, at = null) => {
+    const tree = name === 'mark' ? at || nearestTree(st.x, st.z, 7) : null;
     start(name, { ph: 0, pt: 0, tree, side: Math.random() < 0.5 ? 1 : -1, lookYaw: 0,
       heading: st.yaw, turn: Math.random() < 0.5 ? 1 : -1, kick: Math.random() < 0.4 });
     if (name === 'mark') S.lastMark = S.clock; else S.lastPoop = S.clock;
@@ -1794,7 +1810,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       if (tr) {
         // 木が真横に来るように向き直る。上げる脚は木の側
         if (d.pt <= dt) d.side = d.lookYaw >= 0 ? 1 : -1;
-        S.faceYaw = toTree - d.side * Math.PI / 2;
+        S.faceYaw = toTree - d.side * (Math.PI / 2 + 0.5);   // 少し後ろ寄り：腰（上げる後ろ脚）を目印へ寄せる
       } else d.pt = PH_DUR.turn;
     } else if (ph === 'pee') {
       d.emit = 'pee';
@@ -2940,6 +2956,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           W.sniff.t -= dt;
           const dd = Math.hypot(W.sniff.x - st.x, W.sniff.z - st.z);
           gx = W.sniff.x; gz = W.sniff.z; dspd = dd > 0.15 ? Math.min(1.2, dd * 3) : 0;
+          if (W.sniff.site && dd < 0.3) { gx = W.sniff.ax; gz = W.sniff.az; dspd = 0; }   // 電柱・塀の根もとへ鼻を向ける
           if (dd > 0.3) {   // 近づけていない（塀・車に阻まれた）：0.8秒進めなければ、そこで嗅ぐ
             if (dd < (W.sniff.best ?? 99) - 0.05) { W.sniff.best = dd; W.sniff.stall = 0; } else W.sniff.stall = (W.sniff.stall || 0) + dt;
             if (W.sniff.stall > 0.8) { const ux = (W.sniff.x - st.x) / dd, uz = (W.sniff.z - st.z) / dd; W.sniff.x = st.x + ux * 0.1; W.sniff.z = st.z + uz * 0.1; W.sniff.best = 0.1; W.sniff.stall = 0; gx = W.sniff.x; gz = W.sniff.z; dspd = 0; }
@@ -2958,13 +2975,14 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           const giveUp = !W.sniff.heat && W.sat > 0.45 && W.sniff.pull > 1.6 - W.sat;   // 満足していれば、飼い主が歩き出すと切り上げる
           if (W.sniff.t <= 0 || giveUp) {
             if (!giveUp) W.sat = Math.min(1, W.sat + 0.035 * W.sniff.len * Math.max(0, 1 - W.sniff.pull / 2));   // 待ってもらえた分だけ満足
-            W.wasHeat = !!W.sniff.heat; W.sniff_grass = !!W.sniff.grass; W.sniff_noMark = !!W.sniff.noMark; W.sniff = null; W.nextSniff = 6 + rand() * 10; if (S.act === 'sniff') S.act = null;
+            W.wasHeat = !!W.sniff.heat; W.sniff_grass = !!W.sniff.grass; W.sniff_noMark = !!W.sniff.noMark; W.sniff_site = W.sniff.site ? { kind: W.sniff.site, position: { x: W.sniff.ax, z: W.sniff.az } } : null; W.sniff = null; W.nextSniff = 6 + rand() * 10; if (S.act === 'sniff') S.act = null;
             const heat = W.sniff === null && W.wasHeat; W.wasHeat = false;
-            const wants = !giveUp && !W.sniff_grass && (heat || (rand() < 0.55 && S.clock - S.lastMark > 10));
+            const pm = W.sniff_site ? (W.sniff_site.kind === 'pole' ? 0.85 : 0.7) : 0.3;   // ほかの犬のおしっこのにおいがする電柱・塀には、たいていかける
+            const wants = !giveUp && !W.sniff_grass && (heat || (rand() < pm && S.clock - S.lastMark > 6));
             if (wants && W.sniff_noMark) { W.msg = 'マーキングせずに歩き出した'; W.msgT = 2; }
             if (wants && !W.sniff_noMark) {   // 嗅いだ後はマーキングすることが多い（執着した後は必ず）。散歩では素早く（脚を上げているのは1秒以内）
               if (heat) W.after = 'shake';
-              dog.__startSeq('mark', st); S.actData.dur = { approach: 2, sniff: 0.5, turn: 0.5, lift: 0.15, pee: 0.5, lower: 0.15, kick: 0.8 };
+              dog.__startSeq('mark', st, W.sniff_site); S.actData.dur = { approach: 2, sniff: 0.5, turn: 0.5, lift: 0.15, pee: 0.5, lower: 0.15, kick: 0.8 };
             }
           }
         } else {
@@ -3066,6 +3084,13 @@ if (TOWN && /[?&]walk/.test(location.search)) {
               .filter(([x, z]) => isGrass(x, z) && !privateLand(x, z) && reach(x, z));
             if (g.length) { const [x, z] = g[Math.floor(rand() * g.length)]; W.sniff = { x, z, t: 5 + rand() * 5, grass: true }; W.nextGraze = 40 + rand() * 60; W.nextSniff = Math.max(W.nextSniff, 6); }
             else W.nextGraze = 2;
+          }
+          const site = !W.sniff && !W.rush && !W.heat && !W.ponder && W.nextSniff < 5 ? lowNear(st.x + Math.sin(W.dh) * 1.2, st.z + Math.cos(W.dh) * 1.2, 2) : null;   // 少し先の電柱・塀
+          if (site && (W.nextSniff <= 0 || site.kind === 'pole' && Math.hypot(site.x - st.x, site.z - st.z) < 2.6) && rand() < (site.kind === 'pole' ? 0.85 : 0.6)) {
+            const ux = st.x - site.x, uz = st.z - site.z, ul = Math.hypot(ux, uz) || 1, off = site.r + 0.5;   // 鼻先が当たる所に立つ（犬のいる側）
+            const x = site.x + ux / ul * off, z = site.z + uz / ul * off;
+            if (!townBlocked(x, z) && !privateLand(x, z) && reach(x, z)) { W.sniff = { x, z, t: 3 + rand() * 4, site: site.kind, ax: site.x, az: site.z }; }
+            else W.nextSniff = Math.max(W.nextSniff, 1.5);
           }
           if (W.nextSniff <= 0 && !W.sniff && !W.rush && !W.heat && !W.ponder) {
             const spots = [1, -1].map(sd => { const a = W.dh + sd * Math.PI / 2; return [st.x + Math.sin(a) * 0.9 + Math.sin(W.dh) * 0.6, st.z + Math.cos(a) * 0.9 + Math.cos(W.dh) * 0.6]; })
