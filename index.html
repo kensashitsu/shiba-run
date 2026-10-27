@@ -97,7 +97,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v63 · -- fps</div>
+<div id="fps" class="ui">v64 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -131,7 +131,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v63';
+const VERSION = 'v64';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2851,7 +2851,14 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 人とリードの形
       if (W.ev === 'slip') collar.set(walker.x + Math.sin(walker.yaw + 0.6) * 1.0, H(walker.x, walker.z) + 0.03, walker.z + Math.cos(walker.yaw + 0.6) * 1.0);
       else collar.set(st.x + Math.sin(st.yaw) * 0.25, H(st.x, st.z) + 0.43, st.z + Math.cos(st.yaw) * 0.25);
-      me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension, W.pickPose ? { ...W.pickPose, tired: W.tired }
+      // 足の運びは実際に動いた速さで（柴に引き寄せられた分も歩く）。操作していない時に引かれたら、その向きへ向き直って歩く
+      {
+        const mx = walker.x - (W.lastX ?? walker.x), mz = walker.z - (W.lastZ ?? walker.z), av = Math.min(7, Math.hypot(mx, mz) / Math.max(dt, 1e-4));
+        W.animSpd = (W.animSpd || 0) + (av - (W.animSpd || 0)) * Math.min(1, dt * 10);
+        if (mag < 0.1 && av > 0.15 && !W.pick && !W.feed && !W.crouch) walker.yaw += angDiff(walker.yaw, Math.atan2(mx, mz)) * Math.min(1, dt * 6);
+        W.lastX = walker.x; W.lastZ = walker.z;
+      }
+      me.update(dt, walker.x, walker.z, walker.yaw, W.animSpd, collar, W.tension, W.pickPose ? { ...W.pickPose, tired: W.tired }
         : W.feed ? (() => { const F = W.feed;
           const mouth = dog.__head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(Math.sin(st.yaw) * 0.16, -0.04, Math.cos(st.yaw) * 0.16));   // 口の前
           const show = new THREE.Vector3(walker.x + Math.sin(walker.yaw) * 0.32, H(walker.x, walker.z) + 1.0, walker.z + Math.cos(walker.yaw) * 0.32);   // 胸の前で見せる
