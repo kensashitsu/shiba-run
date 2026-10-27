@@ -26,6 +26,9 @@
     top: calc(env(safe-area-inset-top, 0px) + 10px); left: max(12px, env(safe-area-inset-left, 0px));
     font-size: 13px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0,0,0,.5); opacity: .85;
   }
+  #ecoBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
+    background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
+  #ecoBtn.on { background: rgba(120,190,110,.55); opacity: .95; }
   #credit { position: fixed; right: 8px; bottom: 4px; font-size: 9px; color: rgba(255,255,255,.75); text-shadow: 0 0 3px rgba(0,0,0,.6); }
   #map { top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(10px, env(safe-area-inset-right, 0px));
     width: 104px; height: 104px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
@@ -103,7 +106,8 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v74 · -- fps</div>
+<div id="fps" class="ui">v75 · -- fps</div>
+<button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う<span class="key">E</span></button>
@@ -138,7 +142,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v74';
+const VERSION = 'v75';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -301,7 +305,10 @@ const townRoad = (x, z) => { const k = townCell(x, z); return k < 0 ? 0 : townMa
 // ---------- renderer / scene ----------
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
-let pixelRatio = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5);
+const PR_FULL = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5), PR_ECO = Math.min(PR_FULL, 1.2);
+let eco = true;
+try { eco = localStorage.getItem('shiba-eco') !== '0'; } catch (e) { /* 保存できない環境では毎回「入」 */ }
+let pixelRatio = eco ? PR_ECO : PR_FULL;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -3509,7 +3516,23 @@ step(0, 0);
   camera.position.set(o.x - Math.sin(camYaw) * 2.7, H(o.x, o.z) + 1.0, o.z - Math.cos(camYaw) * 2.7);
   camera.lookAt(o.x, H(o.x, o.z) + 0.42, o.z); }
 
-function frame() {
+const ecoBtn = document.getElementById('ecoBtn');
+const showEco = () => { ecoBtn.textContent = eco ? '省電力 入' : '省電力 切'; ecoBtn.classList.toggle('on', eco); };
+showEco();
+ecoBtn.addEventListener('pointerdown', e => {
+  e.preventDefault(); e.stopPropagation();
+  eco = !eco; showEco();
+  try { localStorage.setItem('shiba-eco', eco ? '1' : '0'); } catch (err) { /* 覚えられなくても切り替えは効く */ }
+  pixelRatio = eco ? PR_ECO : PR_FULL; renderer.setPixelRatio(pixelRatio); resize(); renderer.render(scene, camera); slowN = 0;
+});
+let lastDraw = 0;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (eco && !TEST) {   // 省電力：描く回数を間引く（画面の書き換え回数がそのまま電池の減りになる）
+    const o = WALK ? walker : st, still = o.speed < 0.1 && st.speed < 0.1 && !dog.state.act;
+    if (ts - lastDraw < (still ? 1000 / 20 : 1000 / 30) - 4) return;
+  }
+  lastDraw = ts; window.__draws = (window.__draws || 0) + 1;   // 描いた回数（確認用）
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   if (!TEST) step(dt, t);   // 確認用（?test）は時間を手で進める
   renderer.render(scene, camera);
@@ -3520,14 +3543,13 @@ function frame() {
   if (now - fpsT >= 500) {
     const fps = Math.round(fpsN * 1000 / (now - fpsT));
     // 60に届かない端末では解像度を少しずつ下げる（2秒続けて遅いとき。上げ直すと行ったり来たりするので下げるだけ）
-    slowN = fps < 56 && t > 4 && !TEST ? slowN + 1 : 0;
+    slowN = fps < 56 && t > 4 && !TEST && !eco ? slowN + 1 : 0;   // 省電力の時は30回でよいので下げない
     if (slowN >= 4 && pixelRatio > 1.15) { pixelRatio = Math.max(1.1, pixelRatio - 0.1); renderer.setPixelRatio(pixelRatio); resize(); slowN = 0;
       renderer.render(scene, camera);   // 大きさを変えると画面が空になるので、その場で描き直す（しないと背景色が一瞬白く光る）
     }
-    fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + fps + ' fps' + (pixelRatio < Math.min(window.devicePixelRatio || 1, 1.5) ? ' ×' + pixelRatio.toFixed(1) : '');
+    fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + fps + ' fps' + (pixelRatio < PR_FULL ? ' ×' + pixelRatio.toFixed(1) : '');
     fpsN = 0; fpsT = now;
   }
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
