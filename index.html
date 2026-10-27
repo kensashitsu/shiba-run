@@ -106,7 +106,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v78 · -- fps</div>
+<div id="fps" class="ui">v79 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -142,7 +142,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v78';
+const VERSION = 'v79';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -604,8 +604,13 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMate
       float ang = r * 6.2831;
       vec2 face = vec2(cos(ang), sin(ang));
       vec2 side = vec2(-face.y, face.x);
-      float wv = sin(uTime*1.6 + base.x*0.21 + base.y*0.13)*0.6 + sin(uTime*2.7 + base.x*0.53 - base.y*0.41)*0.3;
-      vec2 bend = vec2(0.85, 0.45) * (wv*0.16 + 0.1) + face * (fract(r*13.1) - 0.5) * 0.7;
+      // 風：ふだんはほぼ凪いで細かく震える程度。ときどき突風が波になって草原を横切る（風下へ 4m/s で進む帯）。風の強さ自体もゆっくり変わる
+      float calm = 0.35 + 0.65 * smoothstep(0.2, 0.9, 0.5 + 0.5*sin(uTime*0.07) * sin(uTime*0.043 + 1.7));   // 数十秒単位で風のある時・ない時
+      float along = dot(base, vec2(0.88, 0.47)) - uTime*4.0;                 // 風の進む向きに沿った位置
+      float gust = pow(max(0.0, sin(along*0.045 + sin(along*0.011)*2.0)), 6.0) * calm;   // 細い帯の突風が間をあけて通る
+      float flutter = sin(uTime*7.3 + r*40.0) * 0.08 * (0.3 + gust);         // 葉先の小さな震え
+      float wv = gust * (0.8 + 0.4*sin(uTime*5.0 + base.x*0.7)) + flutter;
+      vec2 bend = vec2(0.85, 0.45) * (wv*0.28 + 0.03) + face * (fract(r*13.1) - 0.5) * 0.7;
       vec2 dd = base - uDog.xz; float dl = length(dd);
       float push = (1.0 - smoothstep(0.16*uDogR, 1.1*uDogR, dl)) * (1.0 - smoothstep(0.1, 0.6, uDog.y));
       bend += (dd / max(dl, 0.001)) * push * 1.4;
