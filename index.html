@@ -2515,7 +2515,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           if (W.ponder && !W.ponder.beg) W.ponder = null;
           const doubtP = W.ponder && W.ponder.beg ? 0 : 0.12 + 0.4 * (1 - W.sat) + (W.calmT > 0 ? 0.15 : 0);
           const mood = rand() < doubtP ? 'doubt' : 'eager';
-          W.crouch = false; W.feed = { t: 0, pt: 0, seen: 0, ph: 'show', mood, spit: rand() < (mood === 'doubt' ? 0.25 : 0.03) }; W.msgT = 0;
+          W.crouch = false; W.feed = { t: 0, pt: 0, seen: 0, ph: 'show', mood, spit: !(W.ponder && W.ponder.beg) && rand() < (mood === 'doubt' ? 0.25 : 0.03) }; W.msgT = 0;
         }
       }
       // --- 柴の気持ち
