@@ -97,7 +97,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v65 · -- fps</div>
+<div id="fps" class="ui">v66 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -131,7 +131,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v65';
+const VERSION = 'v66';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1140,27 +1140,71 @@ if (TOWN) {
       const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }));
       m.castShadow = m.receiveShadow = true; scene.add(m);
     }
-    // --- 車：箱を組み合わせた乗用車・軽自動車
+    // --- 車：横から見た形を押し出して作る（ハッチバックの乗用車と、背の高い軽自動車）。窓は暗いガラスの箱、屋根は車体色
     if (cars.length) {
-      const CAR_COLS = [0xf2f2ef, 0xf2f2ef, 0xe9e9e6, 0xb9bcc0, 0xb9bcc0, 0x2a2c30, 0x1f2a44, 0x7a1f22, 0x8a8d8f, 0xd8cdb4];
-      const paint = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.3 });
-      const glass = new THREE.MeshStandardMaterial({ color: 0x1d2228, roughness: 0.15, metalness: 0.4 });
+      const CAR_COLS = [0xf2f2ef, 0xf2f2ef, 0xe9e9e6, 0xb9bcc0, 0xb9bcc0, 0x2a2c30, 0x1f2a44, 0x7a1f22, 0x8a8d8f, 0xd8cdb4, 0x5d7d94, 0xc9b27a];
+      const paint = new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.35 });
+      const glass = new THREE.MeshStandardMaterial({ color: 0x141a20, roughness: 0.08, metalness: 0.6 });
       const tire = new THREE.MeshStandardMaterial({ color: 0x18181a, roughness: 0.9 });
-      const bodyG = new THREE.BoxGeometry(1.7, 0.62, 4.1).translate(0, 0.62, 0);
-      const cabG = new THREE.BoxGeometry(1.42, 0.16, 2.0).translate(0, 1.43, -0.25);   // 屋根
-      const winG = new THREE.BoxGeometry(1.48, 0.42, 2.2).translate(0, 1.14, -0.25);   // 窓の帯
-      const wheelG = new THREE.CylinderGeometry(0.31, 0.31, 0.22, 14).rotateZ(Math.PI / 2);
-      const body = new THREE.InstancedMesh(bodyG, paint, cars.length), cab = new THREE.InstancedMesh(cabG, paint, cars.length), win = new THREE.InstancedMesh(winG, glass, cars.length), wheels = new THREE.InstancedMesh(wheelG, tire, cars.length * 4);
-      const M4 = new THREE.Matrix4(), W4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), S = new THREE.Vector3(), T = new THREE.Vector3(), C = new THREE.Color();
-      cars.forEach((c, i) => {
-        const kei = r2() < 0.4, sc = kei ? 0.82 : 1;   // 軽自動車は小さく背が高め
-        Q.setFromAxisAngle(UP, c.yaw); M4.compose(T.set(c.x, H(c.x, c.z) - 0.02, c.z), Q, S.set(sc * (kei ? 0.95 : 1), kei ? 1.05 : 1, sc));
-        body.setMatrixAt(i, M4); cab.setMatrixAt(i, M4); win.setMatrixAt(i, M4); C.set(CAR_COLS[Math.floor(r2() * CAR_COLS.length)]); body.setColorAt(i, C); cab.setColorAt(i, C);
-        let k = 0; for (const wx of [-0.78, 0.78]) for (const wz of [-1.35, 1.35]) wheels.setMatrixAt(i * 4 + k++, W4.copy(M4).multiply(new THREE.Matrix4().makeTranslation(wx, 0.31, wz)));
-        lowAdd({ t: 2, x: c.x, z: c.z, ax: c.onx, az: c.onz, a: 2.1 * sc, b: 0.88 * sc * (kei ? 0.95 : 1) }, c.x - 2.5, c.z - 2.5, c.x + 2.5, c.z + 2.5);
-      });
-      for (const m of [body, cab, win, wheels]) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; scene.add(m); }
+      const hubM = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, roughness: 0.35, metalness: 0.6 });
+      const headM = new THREE.MeshStandardMaterial({ color: 0xd9dde0, roughness: 0.1, metalness: 0.5, emissive: 0x1a1a18 });
+      const tailM = new THREE.MeshStandardMaterial({ color: 0xa3141a, roughness: 0.3, emissive: 0x2a0204 });
+      const blackM = new THREE.MeshStandardMaterial({ color: 0x222326, roughness: 0.7 });
+      // 横から見た輪郭（x＝前後・前が＋、y＝高さ）を幅 w に押し出し、角を丸める。前後の向きを z に直し、幅の真ん中を原点に
+      const side = (pts, w, bevel, arches) => {
+        const sh = new THREE.Shape();
+        sh.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) {
+          const [x, y, arch] = pts[i];
+          if (arch) { const [cx, r] = arch; sh.lineTo(cx + r, y); sh.absarc(cx, 0.32, r, 0.05, Math.PI - 0.05, false); sh.lineTo(x, y); }   // 車輪のアーチ
+          else sh.lineTo(x, y);
+        }
+        sh.closePath();
+        const g = new THREE.ExtrudeGeometry(sh, { depth: w - 2 * bevel, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 8 });
+        g.translate(0, 0, -(w - 2 * bevel) / 2); g.rotateY(-Math.PI / 2);
+        return g;
+      };
+      const TYPES = {
+        hatch: {   // 乗用車（ハッチバック）：全長 4.2m
+          len: 4.2, w: 1.72, wb: 1.35, a: 2.12, b: 0.86,
+          body: side([[2.08, 0.3], [0, 0.3, [1.35, 0.38]], [-2.08, 0.3, [-1.35, 0.38]], [-2.1, 0.78], [-1.9, 0.93], [0.95, 0.9], [2.06, 0.74], [2.14, 0.52]], 1.72, 0.06),
+          glass: side([[0.98, 0.86], [0.12, 1.38], [-1.28, 1.41], [-1.98, 0.88]], 1.56, 0.03),
+          roof: side([[0.18, 1.36], [0.1, 1.45], [-1.32, 1.47], [-1.36, 1.38]], 1.5, 0.03),
+          head: [2.16, 0.62, 0.58], tail: [-2.17, 0.7, 0.6],
+        },
+        kei: {     // 軽自動車（背の高いワゴン）：全長 3.4m
+          len: 3.4, w: 1.48, wb: 1.15, a: 1.72, b: 0.74,
+          body: side([[1.68, 0.3], [0, 0.3, [1.15, 0.33]], [-1.68, 0.3, [-1.15, 0.33]], [-1.72, 0.9], [-1.66, 0.98], [1.25, 0.98], [1.62, 0.86], [1.72, 0.58]], 1.48, 0.06),
+          glass: side([[1.3, 0.94], [0.88, 1.66], [-1.64, 1.7], [-1.7, 0.94]], 1.34, 0.03),
+          roof: side([[0.92, 1.62], [0.86, 1.72], [-1.68, 1.76], [-1.72, 1.66]], 1.3, 0.03),
+          head: [1.72, 0.74, 0.5], tail: [-1.79, 0.8, 0.55],
+        },
+      };
+      const wheelG = new THREE.CylinderGeometry(0.31, 0.31, 0.2, 16).rotateZ(Math.PI / 2), hubG = new THREE.CylinderGeometry(0.19, 0.19, 0.205, 12).rotateZ(Math.PI / 2);
+      const lampG = new THREE.BoxGeometry(0.28, 0.1, 0.06), bumperG = new THREE.BoxGeometry(1, 0.14, 0.08);
+      const M4 = new THREE.Matrix4(), P4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), ONE = new THREE.Vector3(1, 1, 1), T = new THREE.Vector3(), C = new THREE.Color();
+      const byType = { hatch: [], kei: [] };
+      cars.forEach(c => { c.type = r2() < 0.4 ? 'kei' : 'hatch'; c.col = CAR_COLS[Math.floor(r2() * CAR_COLS.length)]; byType[c.type].push(c); });
+      for (const [tn, list] of Object.entries(byType)) {
+        if (!list.length) continue;
+        const D = TYPES[tn], n = list.length;
+        const mk = (g, m, k) => { const im = new THREE.InstancedMesh(g, m, n * k); im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; scene.add(im); return im; };
+        const body = mk(D.body, paint, 1), roof = mk(D.roof, paint, 1), gl = mk(D.glass, glass, 1), tires = mk(wheelG, tire, 4), hubs = mk(hubG, hubM, 4), heads = mk(lampG, headM, 2), tails = mk(lampG, tailM, 2), bump = mk(bumperG, blackM, 2);
+        list.forEach((c, i) => {
+          Q.setFromAxisAngle(UP, c.yaw); M4.compose(T.set(c.x, H(c.x, c.z) - 0.02, c.z), Q, ONE);
+          body.setMatrixAt(i, M4); roof.setMatrixAt(i, M4); gl.setMatrixAt(i, M4); C.set(c.col); body.setColorAt(i, C); roof.setColorAt(i, C);
+          let k = 0; for (const wx of [-1, 1]) for (const wz of [-D.wb, D.wb]) { P4.makeTranslation(wx * (D.w / 2 - 0.09), 0.32, wz); tires.setMatrixAt(i * 4 + k, P4.premultiply(M4)); P4.makeTranslation(wx * (D.w / 2 - 0.085), 0.32, wz); hubs.setMatrixAt(i * 4 + k++, P4.premultiply(M4)); }
+          for (const [j, sx] of [[0, -1], [1, 1]]) {
+            P4.makeTranslation(sx * D.head[2], D.head[1], D.head[0]); heads.setMatrixAt(i * 2 + j, P4.premultiply(M4));
+            P4.makeTranslation(sx * D.tail[2], D.tail[1], D.tail[0]); tails.setMatrixAt(i * 2 + j, P4.premultiply(M4));
+          }
+          P4.compose(T.set(0, 0.36, D.len / 2 + 0.02), new THREE.Quaternion(), new THREE.Vector3(D.w - 0.1, 1, 1)); bump.setMatrixAt(i * 2, P4.premultiply(M4));
+          P4.compose(T.set(0, 0.36, -D.len / 2 - 0.02), new THREE.Quaternion(), new THREE.Vector3(D.w - 0.1, 1, 1)); bump.setMatrixAt(i * 2 + 1, P4.premultiply(M4));
+          lowAdd({ t: 2, x: c.x, z: c.z, ax: c.onx, az: c.onz, a: D.a, b: D.b }, c.x - 2.5, c.z - 2.5, c.x + 2.5, c.z + 2.5);
+        });
+      }
     }
+    window.__cars = cars;
     window.__street = { meshes: scene.children.slice(nStreet0), poles: poles.length, cars: cars.length, wallTris: WL.pos.length / 9, lineTris: LN.pos.length / 9 };
   }
 
@@ -1900,6 +1944,11 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8 } = {}) =>
       P.neck += (0.95 - P.neck) * k; P.headPitch += (0.25 + Math.sin(t * 95) * 0.035 + Math.sin(t * 9) * 0.06) * k;
       P.headYaw += Math.sin(t * 5.3) * 0.35 * k; P.wag = Math.max(P.wag, 0.2 * k); P.wagHz = Math.max(P.wagHz, 9 * k); P.tailDown = Math.min(P.tailDown, -0.3 * k);
     }
+    if (S.smell) {   // 飼い主のにおいを嗅ぐ：鼻を当てる高さまで首を伸ばし、鼻をひくつかせる
+      const h = S.smell, up = Math.max(0, (h - 0.45) / 0.4);   // 0＝脚（ひざの高さ）… 1＝尻
+      P.pitch += 0.28 * up; P.y += 0.05 * up; P.neck += 0.1 - 0.75 * up; P.headPitch += 0.15 - 0.6 * up + sniffTwitch(t) * 1.4;
+      P.look = 0; P.headYaw = Math.sin(t * 1.7) * 0.15; P.wag = Math.max(P.wag, 0.15); P.earsBack = Math.max(P.earsBack, 0.1);
+    }
     if (S.nose > 0.01) {   // 地面を嗅ぎながら歩く
       const k = S.nose;
       P.neck += (0.85 - P.neck) * k; P.headPitch += (0.22 + sniffTwitch(t)) * k; P.wag *= 1 - 0.6 * k;
@@ -2452,7 +2501,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rival = makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b });
   scene.add(rival.object);
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
-  const W = { mode: 'follow', crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
+  const W = { mode: 'follow', smell: null, smellT: 0, smellAt: 40, crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   const rst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 }, rdst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
   // 道路の線を一本選んで行き来させる（自分の出発地点の近くを通る、長い道）
   const routeOf = r => { const p = ringOf(r.p), cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return { p, cum, len: cum[cum.length - 1] }; };
@@ -2611,7 +2660,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
 
       // --- 柴の行きたい所
       const seq = S.act === 'mark' || S.act === 'poop' || S.act === 'shake' || !!W.pick;
-      S.lick = 0;
+      S.lick = 0; S.smell = 0;
       let gx, gz, dspd;
       const fwx = Math.sin(walker.yaw), fwz = Math.cos(walker.yaw);
       const frenzy = W.mode === 'lock' && rd < 5;                                                       // 相手が5m以内：全速力で突っ込む
@@ -2620,7 +2669,27 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'leave') { gx = walker.x + fwx * 0.8; gz = walker.z + fwz * 0.8; dspd = Math.min(3.2, Math.hypot(gx - st.x, gz - st.z) * 2); }
       else {   // 落ち着いている時：柴が自分のペースで常に前へ歩き、人はそれについていく。人の歩く向きには合わせて曲がり、人が走れば一緒に走る
         if (W.dh === undefined) W.dh = st.yaw;
-        if (W.feed) {   // おやつ：見せる→柴が見たのを確かめる→ひざを少しかがめて差し出す→（気分しだいで迷う）→食べる（たまに吐き出す）
+        const idleOk = !seq && !W.sniff && !W.ponder && !W.rush && !W.heat && !W.feed && !W.crouch && !W.pick && W.calmT <= 0;
+        W.smellT += idleOk && !W.smell ? dt * (walker.speed < 0.3 ? 1 : 0.25) : 0;   // 止まっていると早くその気になる
+        if (!W.smell && idleOk && W.smellT > W.smellAt) {
+          const all = [['leg', 1], ['leg', -1], ['butt', 0], ['crotch', 0]], n = 2 + Math.floor(rand() * 2), spots = [];
+          while (spots.length < n) { const c = all[Math.floor(rand() * all.length)]; if (!spots.length || spots[spots.length - 1] !== c) spots.push(c); }
+          W.smell = { spots, i: 0, t: 0, dur: 0.9 + rand() * 0.9 };
+          W.smellT = 0; W.smellAt = 45 + rand() * 90;
+        }
+        if (W.smell && (!idleOk || walker.speed > 1.0)) W.smell = null;   // 飼い主が歩き出したら、やめてついていく
+        if (W.smell) {   // 鼻を飼い主の体へ：脚（横から）・尻（後ろから）・股間（前から）
+          const M = W.smell, [kind, sd] = M.spots[M.i];
+          const fx = Math.sin(walker.yaw), fz = Math.cos(walker.yaw), lx = Math.cos(walker.yaw), lz = -Math.sin(walker.yaw);
+          const [ox, oz, h] = kind === 'leg' ? [lx * sd * 0.5 + fx * 0.05, lz * sd * 0.5 + fz * 0.05, 0.42] : kind === 'butt' ? [-fx * 0.5, -fz * 0.5, 0.82] : [fx * 0.5, fz * 0.5, 0.74];
+          const px = walker.x + ox, pz = walker.z + oz, dd = Math.hypot(px - st.x, pz - st.z);
+          gx = px; gz = pz; dspd = dd > 0.06 ? Math.min(1.5, dd * 3) : 0;
+          M.face = Math.atan2(walker.x - st.x, walker.z - st.z);
+          if (dd < 0.15) { M.t += dt; S.smell = h; }
+          if (M.t > M.dur) { M.i++; M.t = 0; M.dur = 0.9 + rand() * 0.9; if (M.i >= M.spots.length) { W.smell = null; W.msg = 'ひと通り嗅いで満足したらしい'; W.msgT = 1.6; } }
+        }
+        if (W.smell) { /* 上で行き先を決めた */ }
+        else if (W.feed) {   // おやつ：見せる→柴が見たのを確かめる→ひざを少しかがめて差し出す→（気分しだいで迷う）→食べる（たまに吐き出す）
           const F = W.feed; F.t += dt; F.pt += dt;
           const fx = walker.x + Math.sin(walker.yaw) * 0.75, fz = walker.z + Math.cos(walker.yaw) * 0.75, dd = Math.hypot(fx - st.x, fz - st.z);
           gx = fx; gz = fz; dspd = dd > 0.08 ? Math.min(1.8, dd * 3) : 0;
@@ -2797,7 +2866,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           else { gx = p[0]; gz = p[1]; dspd = 1.4; if (Math.hypot(p[0] - st.x, p[1] - st.z) < 0.25) D.i--; if (D.i < D.j) W.detour = null; W.sniff = null; }
         } else W.detour = null;
       }
-      let dyaw = W.mode === 'follow' && (S.lick || W.feed && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.2) ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.mode === 'follow' && W.ponder && W.ponder.ph !== 'want' ? (W.ponder.ph === 'think' ? W.ponder.look : W.ponder.pref) : W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
+      let dyaw = W.mode === 'follow' && W.smell && W.smell.face !== undefined && Math.hypot(walker.x - st.x, walker.z - st.z) < 0.9 ? W.smell.face : W.mode === 'follow' && (S.lick || W.feed && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.2) ? Math.atan2(walker.x - st.x, walker.z - st.z) : W.mode === 'follow' && W.ponder && W.ponder.ph !== 'want' ? (W.ponder.ph === 'think' ? W.ponder.look : W.ponder.pref) : W.mode === 'lock' || W.mode === 'stare' ? toRival : W.mode === 'follow' && seq ? (S.faceYaw ?? (S.auto ? S.auto.yaw : st.yaw)) : W.mode === 'follow' && dspd < 0.3 ? (W.sniff ? gyaw : st.yaw) : (dspd > 0.1 ? gyaw : st.yaw);
       let sx = st.x, sz = st.z;
       if (W.mode === 'lock' && W.facePull > 0.5) { sx -= Math.sin(st.yaw) * 0.9 * dt; sz -= Math.cos(st.yaw) * 0.9 * dt; }   // 顔の側から引かれている：相手を見たまま後ずさりして抜けようとする
       else if (dspd > 0.05) { sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt; }
@@ -2989,6 +3058,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       treatBtn.style.opacity = W.feed ? 0.5 : 1;
       if (W.mode === 'follow' && W.pick) uiL.textContent = 'フンを拾う';
       else if (W.mode === 'follow' && W.crouch) uiL.textContent = S.lick ? 'うれしそうに顔を舐めてきた！' : W.sat > 0.5 ? 'しゃがんでいる' : 'しゃがんでいる（満足していないと寄ってこない）';
+      else if (W.mode === 'follow' && W.smell) uiL.textContent = 'くんくん…飼い主のにおいを嗅いでいる';
       else if (W.mode === 'follow' && W.feed) uiL.textContent = W.feed.ph === 'show' ? 'おやつを見せる' : W.feed.ph === 'give' ? 'おやつをあげる' : W.feed.ph === 'doubt' ? '食べようか、食べまいか…' : W.feed.ph === 'spit' ? '…' : 'もぐもぐ';
       else if (W.mode === 'follow' && W.ponder && W.ponder.beg) uiL.textContent = W.ponder.ph === 'beg' ? '立ち止まって、こちらの顔を見上げている（おやつの催促？）'
         : '拒否柴！ おやつが足りないらしい' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
