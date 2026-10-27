@@ -82,7 +82,11 @@
   @media (hover: hover) and (pointer: fine) { .key { display: block; } }
   #treatBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 170px);
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 13px var(--font-ui); }
-  #treatBtn:active { background: rgba(240,180,106,.8); }
+  #treatBtn:active, #treatBtn.on { background: rgba(240,180,106,.8); }
+  #treatTray { right: max(88px, calc(env(safe-area-inset-right, 0px) + 88px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 180px); display: flex; gap: 6px; }
+  #treatTray[hidden] { display: none; }
+  #treatTray button { min-width: 58px; height: 44px; padding: 0 9px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 13px var(--font-ui); }
+  #treatTray button:active { background: rgba(240,180,106,.8); }
   #shortBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 318px);
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 13px var(--font-ui); }
   #shortBtn.on { background: rgba(240,180,106,.6); }
@@ -110,13 +114,14 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v85 · -- fps</div>
+<div id="fps" class="ui">v86 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う<span class="key">E</span></button>
 <button type="button" id="crouchBtn" class="ui" hidden>しゃがむ</button>
 <button type="button" id="treatBtn" class="ui" hidden>おやつ<span class="key">T</span></button>
+<div id="treatTray" class="ui" hidden><button type="button" id="treat0">砂肝<span class="key">1</span></button><button type="button" id="treat1">カワハギ<span class="key">2</span></button><button type="button" id="treat2">煮干し<span class="key">3</span></button></div>
 <button type="button" id="shortBtn" class="ui" hidden>短く<span class="key">R</span></button>
 <button type="button" id="catchBtn" class="ui" hidden>捕まえる<span class="key">E</span></button>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
@@ -147,7 +152,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v85';
+const VERSION = 'v86';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2607,7 +2612,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
 }
 
 let WALK = null;
-const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WASD／矢印キーで歩く（Shiftで走る）・E 拾う／捕まえる・C しゃがむ・T おやつ" : "左側をなぞって散歩します";
+const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WASD／矢印キーで歩く（Shiftで走る）・E 拾う／捕まえる・C しゃがむ・T おやつ（1 砂肝・2 カワハギ・3 煮干し）・R 短く" : "左側をなぞって散歩します";
 if (TOWN && /[?&]walk/.test(location.search)) {
   const me = makeHuman({ shirt: 0x3d5a80, pants: 0x2b2d33, hair: 0x2a1f1a });
   scene.add(me.object);
@@ -2656,7 +2661,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
     if (e.repeat) return;
     if (e.code === 'KeyE') { if (W.canCatch) W.loose.catching = 0.001; else if (W.canPick && W.dung && !W.pick) { W.pick = { ph: 'down', t: 0, g: W.dung }; W.dung = null; } }
     else if (e.code === 'KeyC') { if (W.canCrouch) W.crouch = !W.crouch; }
-    else if (e.code === 'KeyT') W.treatReq = true;
+    else if (e.code === 'KeyT') { W.tray = !W.tray; W.trayT = 0; }
+    else if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') { W.treatReq = { k: +e.code.slice(5) - 1 }; W.tray = false; }
     else if (e.code === 'KeyR') { if (W.canShort) W.short = !W.short; }
   });
   const treatBtn = document.getElementById('treatBtn'); treatBtn.hidden = false;
@@ -2667,16 +2673,25 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   // 抜けた首輪（リードの先にぶら下がる）
   const emptyCollar = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.014, 6, 16), new THREE.MeshStandardMaterial({ color: 0xb8372a, roughness: 0.6 }));
   emptyCollar.visible = false; scene.add(emptyCollar);
-  treatBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.treatReq = true; });
+  treatBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.tray = !W.tray; W.trayT = 0; });
+  const treatTray = document.getElementById('treatTray');
+  [0, 1, 2].forEach(k => document.getElementById('treat' + k).addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.treatReq = { k }; W.tray = false; }));
+  treatTray.addEventListener('pointerdown', e => e.stopPropagation());
   // おやつ（手に持った小さな粒）
-  const treatMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.07), new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.8 }));
-  treatMesh.visible = false; scene.add(treatMesh);
-  const dropped = new THREE.Mesh(treatMesh.geometry, treatMesh.material); dropped.visible = false; scene.add(dropped);
+  const TREATS = [
+    { name: '砂肝', color: 0x6e2f22, size: [0.05, 0.035, 0.06], rough: 0.75, metal: 0 },
+    { name: 'カワハギ', color: 0xe0cfa2, size: [0.075, 0.008, 0.045], rough: 0.85, metal: 0 },
+    { name: '煮干し', color: 0xa7adb3, size: [0.018, 0.016, 0.085], rough: 0.45, metal: 0.35 },
+  ];
+  const treatMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.8 }));
+  const dressTreat = (m, k) => { const T = TREATS[k]; m.scale.set(...T.size); m.material.color.setHex(T.color); m.material.roughness = T.rough; m.material.metalness = T.metal; };
+  treatMesh.visible = false; treatMesh.name = 'treat'; scene.add(treatMesh);
+  const dropped = new THREE.Mesh(treatMesh.geometry, treatMesh.material.clone()); dropped.visible = false; scene.add(dropped);
   let droppedT = 0;
   let dropVy = 0;
   const dropTreat = () => {   // 口元から真下へ落とす
     dog.__head.getWorldPosition(dropped.position).add(new THREE.Vector3(Math.sin(st.yaw) * 0.03, -0.09, Math.cos(st.yaw) * 0.03));
-    dropped.rotation.y = Math.random() * 3; dropped.visible = true; droppedT = 12; dropVy = 0;
+    dressTreat(dropped, W.feed ? W.feed.k : 0); dropped.rotation.y = Math.random() * 3; dropped.visible = true; droppedT = 12; dropVy = 0;
   };
   pickBtn.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation();
@@ -2810,7 +2825,10 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
       // --- おやつ：リラックスしている時はいつでも食べる。気をそらしたい時にも使える（嗅ぐのをやめる・見つめ始めた相手から目を離す）。
       //     緊張している時（ロックオン・見つめて固まりかけ）や、メスのにおいに夢中な時、用を足している最中は見向きもしない
+      if (!W.taste && TEST) W.taste = { want: -1, t: 1e9 };   // 確かめる時は、決めるまで「なんでも」
+      if (!W.taste || (W.taste.t -= dt) <= 0) W.taste = { want: rand() < 0.45 ? -1 : Math.floor(rand() * 3), t: 60 + rand() * 90 };   // -1＝なんでも
       if (W.treatReq) {
+        const k = W.treatReq.k ?? 0;
         W.treatReq = false;
         const say = (t, d = 2.2) => { W.msg = t; W.msgT = d; };
         if (W.ev === 'loose') {
@@ -2826,9 +2844,16 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           if (W.sniff) { W.sniff = null; W.nextSniff = 6 + rand() * 8; if (S.act === 'sniff') S.act = null; }
           if (W.rush && W.rush.ph === 'search') { W.rush = null; W.poopT = Math.max(0, W.poopAt - 15); S.nose = S.hunch = 0; }
           if (W.ponder && !W.ponder.beg) W.ponder = null;
-          const doubtP = W.ponder && W.ponder.beg ? 0 : 0.12 + 0.4 * (1 - W.sat) + (W.calmT > 0 ? 0.15 : 0);
-          const mood = rand() < doubtP ? 'doubt' : 'eager';
-          W.crouch = false; W.feed = { t: 0, pt: 0, seen: 0, ph: 'show', mood, spit: !(W.ponder && W.ponder.beg) && rand() < (mood === 'doubt' ? 0.25 : 0.03) }; W.msgT = 0;
+          const want = W.taste.want;
+          let mood, spit, refuse = false;
+          if (want === k) { mood = 'eager'; spit = false; }   // 食べたかったもの
+          else if (want >= 0) { mood = 'doubt'; refuse = rand() < 0.5; spit = !refuse; }   // 違う：嗅いでそっぽを向くか、くわえてから落とす
+          else {   // なんでも食べる気分
+            const doubtP = W.ponder && W.ponder.beg ? 0 : 0.12 + 0.4 * (1 - W.sat) + (W.calmT > 0 ? 0.15 : 0);
+            mood = rand() < doubtP ? 'doubt' : 'eager'; spit = !(W.ponder && W.ponder.beg) && rand() < (mood === 'doubt' ? 0.25 : 0.03);
+          }
+          W.crouch = false; W.feed = { t: 0, pt: 0, seen: 0, ph: 'show', mood, spit, refuse, k, fav: want === k }; W.msgT = 0;
+          dressTreat(treatMesh, k);
         }
       }
       // --- 柴の気持ち
@@ -2925,7 +2950,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           } else if (F.ph === 'give') {   // ひざを少しかがめて口元へ
             if (F.pt > 0.9) { F.ph = F.mood === 'eager' ? 'eat' : 'doubt'; F.pt = 0; F.doubt = 1.6 + rand() * 2.2; }
           } else if (F.ph === 'doubt') {   // 食べようか食べまいか：においを嗅いでは顔をそむける
-            if (F.pt > F.doubt) { F.ph = 'eat'; F.pt = 0; }
+            if (F.pt > F.doubt) { if (F.refuse) { W.feed = null; W.msg = TREATS[F.k].name + 'は、嗅いだだけでぷいっ（食べない）'; W.msgT = 2.4; } else { F.ph = 'eat'; F.pt = 0; } }
           } else if (F.ph === 'eat') {
             const slow = F.mood !== 'eager';
             if (!F.bit && F.pt > 0.25) F.bit = true;   // ぱくっ
@@ -2934,11 +2959,11 @@ if (TOWN && /[?&]walk/.test(location.search)) {
               W.treats++; W.sat = Math.min(1, W.sat + (slow ? 0.02 : 0.05));
               const Pn = W.ponder;
               if (Pn && Pn.beg) { Pn.got++; if (Pn.got >= Pn.need) { W.ponder = null; W.sat = Math.min(1, W.sat + 0.1); W.msg = '満足して、また歩き出した'; W.msgT = 2.5; } else { Pn.ph = 'beg'; Pn.t = 0; W.msg = 'もっと欲しそうに見上げている'; W.msgT = 2.5; } }
-              else { W.msg = slow ? '渋々食べた' : 'おやつをぱくっ！'; W.msgT = 1.8; }
+              else { W.msg = F.fav ? TREATS[F.k].name + 'をぱくっ！ これが食べたかった' : slow ? TREATS[F.k].name + 'を渋々食べた' : TREATS[F.k].name + 'をぱくっ！'; W.msgT = 1.8; }
               W.feed = null;
             }
           } else if (F.ph === 'spit') {   // ぺっ：おやつが口から落ちる
-            if (!F.dropped && F.pt > 0.5) { F.dropped = true; dropTreat(); W.msg = '下を向いて、ぽとりと落とした…'; W.msgT = 2.4; }
+            if (!F.dropped && F.pt > 0.5) { F.dropped = true; dropTreat(); W.msg = TREATS[F.k].name + 'をくわえたけど、下を向いてぽとりと落とした…'; W.msgT = 2.4; }
             if (F.pt > 1.4) W.feed = null;
           }
         } else if (W.crouch && !seq && !W.sniff) {   // しゃがむと：満足していれば、うれしそうに寄ってきて顔を舐める
@@ -3428,6 +3453,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       pickBtn.hidden = !!W.loose; catchBtn.hidden = !W.loose; crouchBtn.hidden = false;
       pickBtn.classList.toggle('off', !W.canPick); catchBtn.classList.toggle('off', !W.canCatch); crouchBtn.classList.toggle('off', !W.canCrouch);
       treatBtn.classList.toggle('off', !!W.feed || !!W.pick || !!(W.loose && W.loose.catching));
+      if (treatBtn.classList.contains('off') || (W.trayT = (W.trayT || 0) + dt) > 6) W.tray = false;
+      treatTray.hidden = !W.tray; treatBtn.classList.toggle('on', !!W.tray);
       const crouchLabel = W.crouch ? '立つ' : 'しゃがむ';
       if (crouchBtn.dataset.l !== crouchLabel) { crouchBtn.dataset.l = crouchLabel; crouchBtn.innerHTML = crouchLabel + '<span class="key">C</span>'; }
       crouchBtn.classList.toggle('on', W.crouch);
