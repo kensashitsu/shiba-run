@@ -94,7 +94,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v54 · -- fps</div>
+<div id="fps" class="ui">v55 · -- fps</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う</button>
@@ -127,7 +127,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v54';
+const VERSION = 'v55';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1119,7 +1119,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8 } = {}) =>
   };
   const wave = (u, a, b) => smooth(0, a, u) * (1 - smooth(b, 1, u));   // 仕草の入りと抜け
   const sniffTwitch = t => Math.sin(t * 31) * 0.025 * (Math.sin(t * 3) > 0 ? 1 : 0);
-  // 用を足した後、後脚で交互に地面を蹴る
+  // マーキングの後、後脚で交互に地面を蹴る（うんちの後は蹴らない）
   const kickPose = (P, t) => {
     P.pitch = -0.08; P.tailDown = -0.2; P.wag = 0.1; P.wagHz = 6;
     for (let i = 0; i < 2; i++) {
@@ -1130,7 +1130,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8 } = {}) =>
   // 段取り表と各段の長さ（秒）
   const SEQ = {
     mark: ['approach', 'sniff', 'turn', 'lift', 'pee', 'lower', 'kick'],
-    poop: ['circle', 'sniff', 'squat', 'push', 'rise', 'kick'],
+    poop: ['circle', 'sniff', 'squat', 'push', 'rise'],
   };
   const PH_DUR = { approach: 5, sniff: 1.6, turn: 1.1, lift: 0.45, pee: 2.6, lower: 0.45, kick: 1.3, circle: 2.6, squat: 0.7, push: 3.4, rise: 0.6 };
   const ACTIONS = {
@@ -1371,7 +1371,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8 } = {}) =>
   const startSeq = (name, st) => {
     const tree = name === 'mark' ? nearestTree(st.x, st.z, 7) : null;
     start(name, { ph: 0, pt: 0, tree, side: Math.random() < 0.5 ? 1 : -1, lookYaw: 0,
-      heading: st.yaw, turn: Math.random() < 0.5 ? 1 : -1, kick: Math.random() < (name === 'poop' ? 0.75 : 0.4) });
+      heading: st.yaw, turn: Math.random() < 0.5 ? 1 : -1, kick: Math.random() < 0.4 });
     if (name === 'mark') S.lastMark = S.clock; else S.lastPoop = S.clock;
   };
   // 段取りを1段ずつ進める
@@ -1733,7 +1733,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8 } = {}) =>
   }
 
   const takePoop = g => { const k = poops.indexOf(g); if (k >= 0) { poops.splice(k, 1); extras.remove(g); } };
-  return { object: root, points, extras, radius: 0.5, think, command, update, state: S, __start: start, __startSeq: startSeq, __feet: feet, __legs: legs, poops, takePoop };
+  return { object: root, points, extras, radius: 0.5, think, command, update, state: S, __start: start, __startSeq: startSeq, __feet: feet, __legs: legs, __head: head, poops, takePoop };
 };
 const dog = makeDog();
 scene.add(dog.object, dog.points, dog.extras);
@@ -2014,7 +2014,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c }) {
     tmpV.copy(tip).sub(E).normalize().applyQuaternion(q.copy(A.sh.quaternion).invert());
     A.el.quaternion.setFromUnitVectors(DOWN, tmpV);
   }
-  return { object: root, hand, __legs: legs, update(dt, x, z, yaw, speed, aim, tension, act = null) {
+  return { object: root, hand, __legs: legs, __head: head, __chest: chest, update(dt, x, z, yaw, speed, aim, tension, act = null) {
     const crouch = act ? act.crouch || 0 : 0, tired = act ? act.tired || 0 : 0;
     breathPh += dt * (2 + 4 * tired);
     root.position.set(x, H(x, z), z); root.rotation.y = yaw;
@@ -2233,6 +2233,10 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       let nx = walker.x + Math.sin(walker.yaw) * walker.speed * dt, nz = walker.z + Math.cos(walker.yaw) * walker.speed * dt;
       if (townBlocked(nx, nz)) { nx = walker.x; nz = walker.z; }
 
+      if (S.act === 'poop' && S.actData.dropped && !S.actData.drop && W.dungOf !== S.actData) {   // フンが落ちたら、拾うかどうかは飼い主しだい（近づくと「拾う」が出る）
+        W.dungOf = S.actData; const g = dog.poops[dog.poops.length - 1];
+        if (g) { W.dung = g; W.leftT = 0; }
+      }
       // --- 柴の気持ち
       const rdx = rdst.x - st.x, rdz = rdst.z - st.z, rd = Math.hypot(rdx, rdz);
       const sees = rd < 24 && visible(st.x, st.z, rdst.x, rdst.z);
@@ -2271,7 +2275,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         if (W.dh === undefined) W.dh = st.yaw;
         if (W.crouch && !seq && !W.sniff) {   // しゃがむと：満足していれば、うれしそうに寄ってきて顔を舐める
           if (W.sat > 0.5) {
-            const fx = walker.x + Math.sin(walker.yaw) * 0.66, fz = walker.z + Math.cos(walker.yaw) * 0.66, dd = Math.hypot(fx - st.x, fz - st.z);
+            const fx = walker.x + Math.sin(walker.yaw) * 0.8, fz = walker.z + Math.cos(walker.yaw) * 0.8, dd = Math.hypot(fx - st.x, fz - st.z);
             gx = fx; gz = fz; dspd = dd > 0.08 ? Math.min(1.6, dd * 3) : 0;
             S.lick = dd < 0.25 ? 1 : 0;
             if (S.lick) W.sat = Math.min(1, W.sat + 0.01 * dt);
@@ -2412,17 +2416,18 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         vx = sx - nx; vz = sz - nz; d = Math.hypot(vx, vz);
         if (d > LEASH) {
           const e = d - LEASH, ux = vx / d, uz = vz / d;   // u：人→犬
+          const ep = Math.min(e, 4.5 * dt);              // 崩し・首輪・ストレスに効く引きは、全力で走っても4.5m/sぶんまで（腕の力には限りがある）
           // 引く向き（犬→人）を、犬の視線（犬→相手）に対して分ける：真後ろの成分は受け止め、横の成分だけ効く
           const gX = Math.sin(toRival), gZ = Math.cos(toRival);
           const back = ux * gX + uz * gZ;                // 1＝真後ろへ引いている
           const lat = Math.sqrt(Math.max(0, 1 - back * back)) * (back > -0.2 ? 1 : 0.5);
           W.side = Math.sign(gX * uz - gZ * ux) || 1;   // どちら側から引いているか
-          W.bal = Math.min(1.2, W.bal + lat * lat * e * (frenzy ? 0.8 : 1.6) * (1 + W.sat));   // 突っ込んでいる時は崩しにくい。満足していると崩しやすい
+          W.bal = Math.min(1.2, W.bal + lat * lat * ep * (frenzy ? 0.8 : 1.6) * (1 + W.sat));   // 突っ込んでいる時は崩しにくい。満足していると崩しやすい
           // 力まかせに引いた時：犬の顔の側（前方）へ引かれると後ずさりして首輪が頭から抜けそうになる。
           // 後ろ側から引いても首輪は抜けないが、首が締まってストレスがたまり（真後ろほど・相手が近いほど）、限界で飼い主に咬みつく
           const front = -(Math.sin(st.yaw) * ux + Math.cos(st.yaw) * uz);   // 犬の向き・(犬→人)：正＝顔の側から引かれている
-          if (front > 0.2) W.slip = Math.min(1, W.slip + e * front * 0.3);
-          else W.stress = Math.min(1, W.stress + e * (0.03 + 0.12 * (1 - lat * lat)) * (frenzy ? 1.6 : 1));
+          if (front > 0.2) W.slip = Math.min(1, W.slip + ep * front * 0.3);
+          else W.stress = Math.min(1, W.stress + ep * (0.03 + 0.12 * (1 - lat * lat)) * (frenzy ? 1.6 : 1));
           const give = 0.04 + 0.4 * lat * lat;         // 真後ろならほぼ動かず、横からなら体ごと持っていかれる
           sx -= ux * e * give; sz -= uz * e * give;
           nx += ux * e * (1 - give); nz += uz * e * (1 - give);
@@ -2485,10 +2490,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       S.refuse = (S.refuse || 0) + ((W.mode === 'follow' && W.ponder && W.ponder.ph === 'refuse' ? 1 : 0) - (S.refuse || 0)) * Math.min(1, dt * 6);
       S.frantic = (S.frantic || 0) + ((W.sniff && W.sniff.heat && W.mode === 'follow' ? 1 : 0) - (S.frantic || 0)) * Math.min(1, dt * 6);
       if (W.prevAct !== S.act && W.mode === 'follow') {
-        if (W.prevAct === 'poop' && !S.act) {                        // うんちの後：身震いして、飼い主がフンを拾う
-          dog.__start('shake'); const g = dog.poops[dog.poops.length - 1];
-          if (g) { W.dung = g; W.leftT = 0; }   // 拾うかどうかは飼い主しだい（近づくと「拾う」が出る）
-        } else if (W.prevAct === 'mark' && !S.act && W.after === 'shake') { W.after = null; dog.__start('shake'); }   // 高ぶった後は身震いして落ち着く
+        if (W.prevAct === 'poop' && !S.act) dog.__start('shake');   // うんちの後：身震い
+        else if (W.prevAct === 'mark' && !S.act && W.after === 'shake') { W.after = null; dog.__start('shake'); }   // 高ぶった後は身震いして落ち着く
       }
       W.prevAct = S.act;
       // ほかの犬と近づいた後は、気持ちを落ち着かせるために何度も身震いする
@@ -2512,7 +2515,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.ev === 'slip') collar.set(walker.x + Math.sin(walker.yaw + 0.6) * 1.0, H(walker.x, walker.z) + 0.03, walker.z + Math.cos(walker.yaw + 0.6) * 1.0);
       else collar.set(st.x + Math.sin(st.yaw) * 0.25, H(st.x, st.z) + 0.43, st.z + Math.cos(st.yaw) * 0.25);
       me.update(dt, walker.x, walker.z, walker.yaw, walker.speed, collar, W.tension, W.pickPose ? { ...W.pickPose, tired: W.tired }
-        : { crouch: W.crouchK, hand: W.crouchK > 0.6 && S.lick ? new THREE.Vector3(st.x - Math.sin(st.yaw) * 0.05, H(st.x, st.z) + 0.62, st.z - Math.cos(st.yaw) * 0.05) : null, tired: W.tired });   // しゃがむ・舐めに来た柴をなでる
+        : { crouch: W.crouchK, hand: W.crouchK > 0.6 && S.lick ? dog.__head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(-Math.sin(st.yaw) * 0.1, 0.11, -Math.cos(st.yaw) * 0.1)) : null, tired: W.tired });   // しゃがむ・舐めに来た柴をなでる
       const hd = me.hand.distanceTo(collar), sag = W.ev === 'slip' ? 0.3 : Math.sqrt(Math.max(0, LEASH * LEASH - hd * hd)) * 0.45 * (1 - W.tension) ** 2;   // 張っている時は一直線
       for (let i = 0; i < LN; i++) {
         const u = i / (LN - 1);
