@@ -163,7 +163,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v118 · -- fps</div>
+<div id="fps" class="ui">v119 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -208,7 +208,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v118';
+const VERSION = 'v119';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2800,7 +2800,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   ].map((man, k) => { scene.add(man.object); return { man, ped: true, persona: ['approach', 'yield', 'turner', 'avoid'][k], pace: [1.25, 1.1, 0.85, 1.2][k], route: null, rs: 0, rdir: 1, x: 0, z: 0, yaw: 0, speed: 0 }; });
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
   const W = { mode: 'follow', smell: null, smellT: 0, smellAt: 40, crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, ar: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
-  const addSat = (v, why = '') => { if (TEST) { W.satLog = W.satLog || {}; W.satLog[why] = (W.satLog[why] || 0) + v; } const b = W.sat; W.sat = Math.max(0, Math.min(1, W.sat + v)); if (Math.abs(W.sat - b) > 0.004) { W.satFx = v > 0 ? 1.6 : -1.6; } };   // satFx：星の横に ↑／↓ を少しの間出す
+  const addSat = (v, why = '') => { if (v > 0) v *= 0.4 * (1 - 0.6 * W.sat);   // 満足は散歩全体（15〜20分）でゆっくり満ちる。満たされているほど上がりにくい
+    if (TEST) { W.satLog = W.satLog || {}; W.satLog[why] = (W.satLog[why] || 0) + v; } const b = W.sat; W.sat = Math.max(0, Math.min(1, W.sat + v)); if (Math.abs(W.sat - b) > 0.004) { W.satFx = v > 0 ? 1.6 : -1.6; } };   // satFx：星の横に ↑／↓ を少しの間出す
   // 知らない道：道ごとに4m おきの点を8m 升目に入れておき、1秒ごとに今いる道を調べる
   let roadPts = null; const seenRoad = new Set();
   const roadNow = (x, z) => {
@@ -3353,7 +3354,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             gx = fx; gz = fz; dspd = dd > 0.08 ? Math.min(1.6, dd * 3) : 0;
             S.lick = dd < 0.25 ? 1 : 0;
             if (S.lick) {
-              W.sat = Math.min(1, W.sat + 0.01 * dt); W.licked = true;
+              W.sat = Math.min(1, W.sat + 0.004 * dt); W.licked = true;
               if (!W.lickT) W.lickMax = 3.5 + Math.random() * 2.5;   // 何秒舐めたら気が済むかは毎回少し違う
               W.lickT = (W.lickT || 0) + dt;
               if (W.lickT > W.lickMax) { W.lickDone = true; S.lick = 0; }   // ひとしきり舐めたら満足して離れる（しゃがんだままでも）
@@ -3385,7 +3386,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           W.sniff.pull = (W.sniff.pull || 0) + (dd < 0.3 && W.tension > 0.9 && walker.speed > 0.3 ? dt : 0);   // 嗅いでいる最中に引っ張って邪魔した時間
           const giveUp = !W.sniff.heat && W.sat > 0.45 && W.sniff.pull > 1.6 - W.sat;   // 満足していれば、飼い主が歩き出すと切り上げる
           if (W.sniff.t <= 0 || giveUp) {
-            if (!giveUp) addSat(0.035 * W.sniff.len * Math.max(0, 1 - W.sniff.pull / 2) + (W.sniff.grass ? 0.03 : 0), W.sniff.grass ? '草' : '嗅ぐ');   // 待ってもらえた分だけ満足（草は食べ終わるまで待つと少し多め）
+            if (!giveUp) addSat(0.02 * W.sniff.len * Math.max(0, 1 - W.sniff.pull / 2) + (W.sniff.grass ? 0.03 : 0), W.sniff.grass ? '草' : '嗅ぐ');   // 待ってもらえた分だけ満足（草は食べ終わるまで待つと少し多め）
             W.wasHeat = !!W.sniff.heat; W.sniff_grass = !!W.sniff.grass; W.sniff_noMark = !!W.sniff.noMark; W.sniff_site = W.sniff.site ? { kind: W.sniff.site, position: { x: W.sniff.ax, z: W.sniff.az } } : null; W.sniff = null; W.nextSniff = 6 + rand() * 10; if (S.act === 'sniff') S.act = null;
             const heat = W.sniff === null && W.wasHeat; W.wasHeat = false;
             const pm = W.sniff_site ? (W.sniff_site.kind === 'pole' ? 0.85 : 0.7) : 0.3;   // ほかの犬のおしっこのにおいがする電柱・塀には、たいていかける
@@ -3707,9 +3708,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         const inSync = W.mode === 'follow' && !W.sniff && !W.ev && walker.speed > 0.6 && st.speed > 0.6
           && ld > (W.shortK > 0.5 ? 0.3 : 0.8) && ld < LEASH - 0.08 + 0.1 * (W.shortK || 0) && Math.abs(walker.speed - st.speed) < 0.22 && Math.abs(angDiff(walker.yaw, st.yaw)) < 0.45;
         W.harm = Math.max(0, Math.min(1, W.harm + (inSync ? 0.22 * (1 + 1.2 * W.sat) : W.tension > 0.8 || W.mode !== 'follow' ? -0.9 : -0.3) * dt));
-        W.sat = Math.max(0, W.sat - (W.mode === 'lock' ? 0.02 : 0.004) * dt);   // 満足は少しずつ薄れる。ロックオン中は早く
-        if (TEST) { W.satLog = W.satLog || {}; W.satLog['薄れる'] = (W.satLog['薄れる'] || 0) - (W.mode === 'lock' ? 0.02 : 0.004) * dt; }
-        if (W.harm > 0.95 && W.mode === 'follow') { W.sat = Math.min(1, W.sat + 0.008 * dt); if (TEST) { W.satLog = W.satLog || {}; W.satLog['歩調'] = (W.satLog['歩調'] || 0) + 0.008 * dt; } }   // 歩調ぴったりで一緒に歩くのは楽しい
+        W.sat = Math.max(0, W.sat - (W.mode === 'lock' ? 0.02 : 0.0008) * dt);   // 満足は少しずつ薄れる。ロックオン中は早く
+        if (TEST) { W.satLog = W.satLog || {}; W.satLog['薄れる'] = (W.satLog['薄れる'] || 0) - (W.mode === 'lock' ? 0.02 : 0.0008) * dt; }
+        if (W.harm > 0.95 && W.mode === 'follow') { W.sat = Math.min(1, W.sat + 0.0032 * dt * (1 - 0.6 * W.sat)); if (TEST) { W.satLog = W.satLog || {}; W.satLog['歩調'] = (W.satLog['歩調'] || 0) + 0.0032 * dt * (1 - 0.6 * W.sat); } }   // 歩調ぴったりで一緒に歩くのは楽しい
         W.dragT = W.mode === 'follow' && !W.ev && W.tension > 0.9 && (W.animSpd || 0) > 0.5 && !W.sniff && !seq && (st.x - walker.x) * Math.sin(walker.yaw) + (st.z - walker.z) * Math.cos(walker.yaw) < 0 ? (W.dragT || 0) + dt : 0;   // 柴が後ろにいて引きずられている時だけ（興奮して前で引っ張っている時は数えない）
         if (W.dragT > 3) { W.sat = Math.max(0, W.sat - 0.008 * dt); if (TEST) { W.satLog = W.satLog || {}; W.satLog['引きずり'] = (W.satLog['引きずり'] || 0) - 0.008 * dt; } }   // リードがピンと張ったまま引きずられ続ける
         if ((W.roadT = (W.roadT || 0) - dt) <= 0 && W.mode === 'follow' && !W.ev) {
