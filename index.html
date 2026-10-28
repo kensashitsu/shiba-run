@@ -172,13 +172,13 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v123</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v124</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v123 · -- fps</div>
+<div id="fps" class="ui">v124 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
-<div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="hakodate">函館</button></div>
+<div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button></div>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
 <button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
 <button type="button" id="gyroBtn" class="ui" hidden>ジャイロ 切</button>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v123';
+const VERSION = 'v124';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -240,7 +240,7 @@ const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0),
 
 // 町（?town）：実在の住宅地の起伏・建物・道路・池。assets/town.json は中心からの距離(m)だけで、地名や緯度経度は持たない
 // 元データ：国土地理院（標高タイル・ベクトルタイル）、© OpenStreetMap contributors（林）
-const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, hakodate: { file: 'assets/town-hakodate.json', name: '函館' } };
+const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, hakodate: { file: 'assets/town-hakodate.json', name: '函館' }, tomo: { file: 'assets/town-tomo.json', name: '鞆の浦' } };
 let TOWN_ID = (location.search.match(/[?&]town=(\w+)/) || [])[1];
 if (!TOWN_ID && !/[?&]test/.test(location.search)) { try { TOWN_ID = localStorage.getItem('shiba-town'); } catch (e) { /* 覚えられない時はいつもの町 */ } }
 if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
