@@ -168,10 +168,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v121</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v122</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v121 · -- fps</div>
+<div id="fps" class="ui">v122 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -216,7 +216,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v121';
+const VERSION = 'v122';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3782,6 +3782,15 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (!manHits(nx, nz)) { walker.x = nx; walker.z = nz; }
       else if (!manHits(nx, walker.z)) walker.x = nx;
       else if (!manHits(walker.x, nz)) walker.z = nz;
+      {   // 万一、家・塀・車の中に入り込んだり、挟まって動けなくなったら、いちばん近い空いている所へ出す（出られないまま操作できなくならないように）
+        const hard = (x, z) => townBlocked(x, z) || [0, 1.57, 3.14, 4.71].some(a => lowHit(x + Math.sin(a) * 0.17, z + Math.cos(a) * 0.17));
+        const want = Math.hypot(nx - walker.x, nz - walker.z) > 0.002, inside = townBlocked(walker.x, walker.z);
+        W.wedgeT = inside ? (W.wedgeT || 0) + dt * 3.3 : want && hard(walker.x, walker.z) ? (W.wedgeT || 0) + dt : 0;
+        if (W.wedgeT > 1) {
+          W.wedgeT = 0;
+          out: for (let rr = 0.25; rr <= 20; rr += rr < 5 ? 0.25 : 0.5) for (let i = 0; i < 24; i++) { const a = i * 0.2618, px = walker.x + Math.sin(a) * rr, pz = walker.z + Math.cos(a) * rr; if (!hard(px, pz)) { walker.x = px; walker.z = pz; if (TEST) W.unwedged = (W.unwedged || 0) + 1; break out; } }
+        }
+      }
       if (tied && !cross0 && Math.hypot(nx - walker.x, nz - walker.z) > 0.004 && lowCross(nx, nz, st.x, st.z)) {   // リードが塀に掛かって進めない：たぐって柴を手元へ寄せる（塀の切れ目を回ってくる）
         const ux = walker.x - st.x, uz = walker.z - st.z, ul = Math.hypot(ux, uz) || 1;
         sx = st.x + ux / ul * 1.6 * dt; sz = st.z + uz / ul * 1.6 * dt; W.snagT = (W.snagT || 0) + dt;
