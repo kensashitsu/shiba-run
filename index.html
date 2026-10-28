@@ -52,13 +52,10 @@
     #title button { width: min(190px, 28vw); height: 46px; font-size: 15px; }
   }
   body.titling .ui:not(#title) { visibility: hidden; }
-  #ecoBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: calc(max(12px, env(safe-area-inset-left, 0px)) + 74px); padding: 3px 9px; border-radius: 12px;
-    background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
-  #ecoBtn.on { background: rgba(120,190,110,.55); opacity: .95; }
-  #fpvBtn { top: calc(env(safe-area-inset-top, 0px) + 84px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
+  #fpvBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: calc(max(12px, env(safe-area-inset-left, 0px)) + 74px); padding: 3px 9px; border-radius: 12px;
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
   #fpvBtn.on, #gyroBtn.on { background: rgba(240,180,106,.6); opacity: .95; }
-  #gyroBtn { top: calc(env(safe-area-inset-top, 0px) + 114px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
+  #gyroBtn { top: calc(env(safe-area-inset-top, 0px) + 84px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
   #gyroBtn[hidden] { display: none; }
   #dogArrow { position: fixed; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: rgba(240,180,106,.75); color: #2b2118;
@@ -160,9 +157,8 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v101 · -- fps</div>
+<div id="fps" class="ui">v102 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
-<button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
 <button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
@@ -205,7 +201,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v101';
+const VERSION = 'v102';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -418,8 +414,7 @@ const townRoad = (x, z) => { const k = townCell(x, z); return k < 0 ? 0 : townMa
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
 const PR_FULL = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5), PR_ECO = Math.min(PR_FULL, 1.2);
-let eco = true;
-try { eco = localStorage.getItem('shiba-eco') !== '0'; } catch (e) { /* 保存できない環境では毎回「入」 */ }
+const eco = true;   // いつも省電力（描く回数を30回/秒までに間引き、解像度も抑える）
 let pixelRatio = eco ? PR_ECO : PR_FULL;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -4053,15 +4048,6 @@ function gyroStep() {   // 前のコマからの向きの変化を足す（な�
   gyroPrev = gyroQ;
 }
 if (WALK) { fpvBtn.hidden = false; fpvBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); setFpv(!fpv); }); }
-const ecoBtn = document.getElementById('ecoBtn');
-const showEco = () => { ecoBtn.textContent = eco ? '省電力 入' : '省電力 切'; ecoBtn.classList.toggle('on', eco); };
-showEco();
-ecoBtn.addEventListener('pointerdown', e => {
-  e.preventDefault(); e.stopPropagation();
-  eco = !eco; showEco();
-  try { localStorage.setItem('shiba-eco', eco ? '1' : '0'); } catch (err) { /* 覚えられなくても切り替えは効く */ }
-  pixelRatio = eco ? PR_ECO : PR_FULL; renderer.setPixelRatio(pixelRatio); resize(); renderer.render(scene, camera); slowN = 0;
-});
 let lastDraw = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
