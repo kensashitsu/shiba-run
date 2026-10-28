@@ -162,7 +162,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v115 · -- fps</div>
+<div id="fps" class="ui">v116 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -207,7 +207,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v115';
+const VERSION = 'v116';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3350,10 +3350,10 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             else if (F.ph === 'grab' && F.t > 0.45) { W.fetch = null; W.carry = { toy: F.toy, t: 0, bore: 35 + rand() * 45, dash: 0, dist: 0 }; W.msg = F.toy.name + 'をくわえた。離さない…'; W.msgT = 2; addSat(0.02, 'くわえた'); }
           }
           if (W.fetch || W.carry) W.begT = W.ponderT = 0;   // 拾いに行く・くわえている間は、立ち止まって考えたり、おやつをねだったりしない
-          if (W.carry) { W.nextSniff = Math.max(W.nextSniff ?? 0, 3); W.nextGraze = Math.max(W.nextGraze || 0, 3); W.heatT = Math.min(W.heatT || 0, (W.heatAt ?? 80) - 5); W.poopT = Math.min(W.poopT || 0, (W.poopAt ?? 50) - 5);
+          if (W.carry) { W.nextSniff = Math.max(W.nextSniff ?? 0, 3); W.nextGraze = Math.max(W.nextGraze || 0, 3); W.heatT = Math.min(W.heatT || 0, (W.heatAt ?? 80) - 5); W.poopT = Math.min(W.poopT || 0, (W.poopAt ?? 300) - 5);
             if (Math.hypot(walker.x - st.x, walker.z - st.z) < 1.0 && walker.speed < 1.5) W.dh = Math.atan2(st.x - walker.x, st.z - walker.z) + 0.5;   // 飼い主が寄ると、顔をそむけて離れる
           }
-          if (!W.rush && W.poopT > (W.poopAt ??= 50 + rand() * 60)) {
+          if (!W.rush && W.poopT > (W.poopAt ??= 300 + rand() * 300)) {   // 最初は5〜10分歩いたころ
             const g = findGrass(st.x, st.z);
             W.rush = { ph: g ? 'seek' : 'search', x: g ? g[0] : st.x, z: g ? g[1] : st.z, t: 0, need: 5 + rand() * 5, hunch: 0, dh: st.yaw };   // dh：草むらが見つからずにすぐ探し始める時の向き（無いと位置が NaN になって画面が真っ白になった）
           }
@@ -3373,7 +3373,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
               R.hunch = settle;
               R.spd = R.sniffT > 0 ? 0.35 : (2.6 + 0.5 * Math.sin(t * 7)) * (1 - settle) + 0.5 * settle;
               if (R.t >= R.need) {
-                W.rush = null; W.poopT = 0; W.poopAt = 70 + rand() * 90; W.nextSniff = 8;
+                W.rush = null; W.poopT = 0; W.poopAt = 1200 + rand() * 900;   // 2回目は20〜35分後（ふつうの散歩なら1回）
+                W.nextSniff = 8;
                 dog.__startSeq('poop', st); S.actData.dur = { circle: 1.1, sniff: 0.4, squat: 0.6 };
               }
             }
