@@ -66,7 +66,7 @@
   #map { top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(10px, env(safe-area-inset-right, 0px));
     width: 104px; height: 104px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
   #map.compass { width: 64px; height: 64px; pointer-events: none; box-shadow: none; }
-  #map.big { width: min(92vw, 80vh); height: min(92vw, 80vh); border-radius: 14px; top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
+  #map.big { width: min(92vw, 80vh); height: min(92vw, 80vh); border-radius: 14px; top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; touch-action: none; cursor: grab; }
   #walkui { bottom: calc(env(safe-area-inset-bottom, 0px) + 26px); pointer-events: none; min-width: 200px; left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
     border-radius: 12px; font-size: 13px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0;
     width: max-content; max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); white-space: normal; text-align: center; line-height: 1.45; box-sizing: border-box; }   /* 長い文は画面の幅で折り返す（はみ出して先頭が切れないように） */
@@ -163,7 +163,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v117 · -- fps</div>
+<div id="fps" class="ui">v118 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -208,7 +208,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v117';
+const VERSION = 'v118';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -4064,6 +4064,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
 // 世界の向き：+x が東、+z が南（北は -z）
 const mapEl = document.getElementById('map'), mapCtx = mapEl.getContext('2d');
 let mapBase = null;
+const mapView = { z: 1, cx: 0, cz: 0, moved: 0, downT: 0 };   // 全体図の拡大率と中心（m）
 if (TOWN) {   // 町の地図は最初に一枚描いておく（1px = 1m）
   const M = TOWN.half, S = 2 * M, cv = document.createElement('canvas'); cv.width = cv.height = S;
   const c = cv.getContext('2d');
@@ -4082,7 +4083,39 @@ if (TOWN) {   // 町の地図は最初に一枚描いておく（1px = 1m）
   c.fillStyle = '#e3d6bf'; c.strokeStyle = '#9d907c'; c.lineWidth = 0.6;
   for (const b of TOWN.bld) { path(ringOf(b.p), true); c.fill(); c.stroke(); }
   mapBase = cv;
-  mapEl.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); mapEl.classList.toggle('big'); sizeMap(); });
+  const ptrs = new Map();
+  const cssScale = () => mapEl.clientWidth / (2 * TOWN.area + 40) * mapView.z;   // 画面1px（CSS）あたりの… 1m の幅
+  const clampView = () => { mapView.z = Math.max(1, Math.min(14, mapView.z)); const lim = TOWN.area * (1 - 1 / mapView.z); mapView.cx = Math.max(-lim, Math.min(lim, mapView.cx)); mapView.cz = Math.max(-lim, Math.min(lim, mapView.cz)); };
+  const zoomAt = (k, sx, sy) => {   // 画面の点 (sx, sy)（地図の中心から CSS px）の下の場所を動かさずに拡大
+    const s0 = cssScale(), wx = mapView.cx + sx / s0, wz = mapView.cz + sy / s0;
+    mapView.z *= k; clampView(); const s1 = cssScale(); mapView.cx = wx - sx / s1; mapView.cz = wz - sy / s1; clampView();
+  };
+  const rel = e => { const r = mapEl.getBoundingClientRect(); return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]; };
+  mapEl.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (!mapEl.classList.contains('big')) { mapEl.classList.add('big'); mapView.z = 1; mapView.cx = mapView.cz = 0; sizeMap(); return; }
+    try { mapEl.setPointerCapture(e.pointerId); } catch (err) { /* 指が外へ出ても追う */ }
+    ptrs.set(e.pointerId, rel(e)); if (ptrs.size === 1) { mapView.moved = 0; mapView.downT = performance.now(); } else mapView.moved = 99;
+  });
+  mapEl.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return;
+    const p0 = ptrs.get(e.pointerId), p1 = rel(e);
+    if (ptrs.size === 1) { const s1 = cssScale(); mapView.cx -= (p1[0] - p0[0]) / s1; mapView.cz -= (p1[1] - p0[1]) / s1; mapView.moved += Math.abs(p1[0] - p0[0]) + Math.abs(p1[1] - p0[1]); clampView(); }
+    else if (ptrs.size === 2) {   // つまんで広げる：2本の指の間隔の比で拡大し、真ん中の点の下を保つ。真ん中が動けば地図も動く
+      const [qa, qb] = [...ptrs.entries()].map(([id, q]) => id === e.pointerId ? p1 : q), [oa, ob] = [...ptrs.values()];
+      const d0 = Math.hypot(oa[0] - ob[0], oa[1] - ob[1]), d1 = Math.hypot(qa[0] - qb[0], qa[1] - qb[1]);
+      const m0 = [(oa[0] + ob[0]) / 2, (oa[1] + ob[1]) / 2], m1 = [(qa[0] + qb[0]) / 2, (qa[1] + qb[1]) / 2];
+      if (d0 > 10) zoomAt(d1 / d0, m1[0], m1[1]);
+      const s1 = cssScale(); mapView.cx -= (m1[0] - m0[0]) / s1; mapView.cz -= (m1[1] - m0[1]) / s1; clampView();
+    }
+    ptrs.set(e.pointerId, p1);
+  });
+  const up = e => {
+    if (!ptrs.delete(e.pointerId)) return;
+    if (!ptrs.size && mapView.moved < 8 && performance.now() - mapView.downT < 450) { mapEl.classList.remove('big'); sizeMap(); }   // 動かさずに軽くタップ：閉じる
+  };
+  mapEl.addEventListener('pointerup', up); mapEl.addEventListener('pointercancel', up);
+  mapEl.addEventListener('wheel', e => { if (!mapEl.classList.contains('big')) return; e.preventDefault(); const [sx, sy] = rel(e); zoomAt(Math.exp(-e.deltaY * 0.0015), sx, sy); }, { passive: false });
   hintEl.style.top = 'calc(env(safe-area-inset-top, 0px) + 124px)';   // 地図と重ならないように
 } else mapEl.classList.add('compass');
 function sizeMap() {
@@ -4106,15 +4139,28 @@ function drawMap() {
     return;
   }
   const big = mapEl.classList.contains('big'), M = TOWN.half;
-  const scale = big ? W / (2 * TOWN.area + 40) : W / 104 * 0.85;          // 1m あたりの px（小さい時は半径約60m）
+  const scale = big ? W / (2 * TOWN.area + 40) * mapView.z : W / 104 * 0.85;          // 1m あたりの px（小さい時は半径約60m）
   const me = WALK ? walker : st;                                          // 地図の中心と矢印＝自分（散歩では飼い主）
-  const cx = big ? 0 : me.x, cz = big ? 0 : me.z;
+  const cx = big ? mapView.cx : me.x, cz = big ? mapView.cz : me.z;
   c.save();
   if (!big) { c.beginPath(); c.arc(W / 2, Hh / 2, W / 2, 0, 7); c.clip(); }
   c.fillStyle = '#8fa97a'; c.fillRect(0, 0, W, Hh);
   c.translate(W / 2, Hh / 2); c.scale(scale, scale); c.translate(-cx - M, -cz - M);
   c.imageSmoothingEnabled = true;
   c.drawImage(mapBase, 0, 0);
+  if (big && scale > 1.4) {   // 拡大：見えている所の道と家を線で（くっきり）
+    c.translate(M, M);
+    const hw = W / 2 / scale, hh = Hh / 2 / scale, vis = F => F.x1 >= cx - hw && F.x0 <= cx + hw && F.z1 >= cz - hh && F.z0 <= cz + hh;
+    const path = (pts, close) => { c.beginPath(); pts.forEach(([x, z], i) => i ? c.lineTo(x, z) : c.moveTo(x, z)); if (close) c.closePath(); };
+    const L = townFeat.filter(vis);
+    c.lineCap = c.lineJoin = 'round';
+    c.fillStyle = '#7fb2db'; for (const F of L) if (F.k === 'w') { path(F.p, true); c.fill(); }
+    c.strokeStyle = '#7fb2db'; c.lineWidth = 2; for (const F of L) if (F.k === 'v') { path(F.p); c.stroke(); }
+    c.strokeStyle = '#8d8a84'; for (const F of L) if (F.k === 'r') { c.lineWidth = F.w + 1.6; path(F.p); c.stroke(); }
+    c.strokeStyle = '#fbfaf6'; for (const F of L) if (F.k === 'r') { c.lineWidth = F.w; path(F.p); c.stroke(); }
+    c.fillStyle = '#e3d6bf'; c.strokeStyle = '#9d907c'; c.lineWidth = Math.max(0.6, 1 / scale * u);
+    for (const F of L) if (F.k === 'b') { path(F.p, true); c.fill(); c.stroke(); }
+  }
   c.restore();
   // 見ている向き（扇）と犬
   if (WALK) {   // 散歩：ほかの犬は赤い点、自分の柴は小さな橙の点
@@ -4135,6 +4181,7 @@ function drawMap() {
   c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 3 * u; c.font = `700 ${11 * u}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'top';
   c.strokeText('N', W / 2, 15 * u); c.fillText('N', W / 2, 15 * u);
   if (!big) { c.strokeStyle = 'rgba(255,250,240,.8)'; c.lineWidth = 2 * u; c.beginPath(); c.arc(W / 2, Hh / 2, W / 2 - u, 0, 7); c.stroke(); }
+  else { c.font = `600 ${11 * u}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'bottom'; c.lineWidth = 3 * u; c.strokeStyle = 'rgba(0,0,0,.5)'; c.fillStyle = '#fff'; const tx = '2本指で拡大・ドラッグで移動・タップで閉じる'; c.strokeText(tx, W / 2, Hh - 6 * u); c.fillText(tx, W / 2, Hh - 6 * u); }
 }
 
 const lastGood = { st: null, walker: null, camYaw: 0, camPitch: -0.38 };
