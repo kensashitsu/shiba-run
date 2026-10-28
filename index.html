@@ -162,7 +162,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v107 · -- fps</div>
+<div id="fps" class="ui">v108 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -207,7 +207,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v107';
+const VERSION = 'v108';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3198,12 +3198,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             dspd = 0;
             if (F.pt > 0.9) W.feed = null;
           }
-        } else if (W.crouch && !seq && !W.sniff) {   // しゃがむと：満足していれば、うれしそうに寄ってきて顔を舐める
+        } else if (W.crouch && !W.lickDone && !seq && !W.sniff) {   // しゃがむと：満足していれば、うれしそうに寄ってきて顔を舐める
           if (W.sat > 0.5) {
             const fx = walker.x + Math.sin(walker.yaw) * 0.55, fz = walker.z + Math.cos(walker.yaw) * 0.55, dd = Math.hypot(fx - st.x, fz - st.z);
             gx = fx; gz = fz; dspd = dd > 0.08 ? Math.min(1.6, dd * 3) : 0;
             S.lick = dd < 0.25 ? 1 : 0;
-            if (S.lick) { W.sat = Math.min(1, W.sat + 0.01 * dt); W.licked = true; }
+            if (S.lick) {
+              W.sat = Math.min(1, W.sat + 0.01 * dt); W.licked = true;
+              if (!W.lickT) W.lickMax = 3.5 + Math.random() * 2.5;   // 何秒舐めたら気が済むかは毎回少し違う
+              W.lickT = (W.lickT || 0) + dt;
+              if (W.lickT > W.lickMax) { W.lickDone = true; S.lick = 0; }   // ひとしきり舐めたら満足して離れる（しゃがんだままでも）
+            }
           } else { dspd = 0; gx = st.x + Math.sin(st.yaw); gz = st.z + Math.cos(st.yaw); }
         } else if (seq) {   // マーキング・うんち：段取りが終わるまでその場で（木へ寄る・くるくる回るのは段取りの指示どおり）
           W.sniff = null;   // 段取りの前に決めていた嗅ぎ場所・草は忘れる
@@ -3603,7 +3608,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       S.doubt = W.feed && W.feed.ph === 'doubt' ? W.feed.pt : 0;
       S.refuse = (S.refuse || 0) + ((W.mode === 'follow' && W.ponder && W.ponder.ph === 'refuse' || W.mode === 'lock' && W.facePull ? 1 : 0) - (S.refuse || 0)) * Math.min(1, dt * 6);
       S.frantic = (S.frantic || 0) + ((W.sniff && W.sniff.heat && W.mode === 'follow' ? 1 : 0) - (S.frantic || 0)) * Math.min(1, dt * 6);
-      if (W.licked && !W.crouch && dog.state.lickK < 0.3) { W.licked = false; if (W.mode === 'follow' && !S.act) dog.__start('shake'); }   // 舐め終わると身震いして、また歩き出す
+      if (!W.crouch) { W.lickDone = false; W.lickT = 0; }   // 立ち上がったら、次にしゃがんだ時はまた舐めに来る
+      if (W.licked && (!W.crouch || W.lickDone) && dog.state.lickK < 0.3) { W.licked = false; if (W.mode === 'follow' && !S.act) dog.__start('shake'); }   // 舐め終わると身震いして、また歩き出す
       if (S.act === 'mark' || S.act === 'poop') W.seqPh = S.actData.ph;
       if (W.prevAct !== S.act && (W.prevAct === 'mark' && W.seqPh >= 5 || W.prevAct === 'poop' && W.seqPh >= 3)) addSat(W.prevAct === 'poop' ? 0.08 : 0.04, W.prevAct);   // やり切らせてもらえた
       if (W.prevAct !== S.act) W.seqPh = -1;
@@ -3755,7 +3761,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (droppedT > 0 && (droppedT -= dt) <= 0) dropped.visible = false;
       if (dropped.visible) { const gy0 = H(dropped.position.x, dropped.position.z) + 0.018; if (dropped.position.y > gy0) { dropVy -= 9.8 * dt; dropped.position.y = Math.max(gy0, dropped.position.y + dropVy * dt); } }
       if (W.mode === 'follow' && W.pick) uiL.textContent = 'フンを拾う';
-      else if (W.mode === 'follow' && W.crouch) uiL.textContent = S.lick ? 'うれしそうに顔を舐めてきた！' : W.sat > 0.5 ? 'しゃがんでいる' : 'しゃがんでいる（満足していないと寄ってこない）';
+      else if (W.mode === 'follow' && W.crouch) uiL.textContent = S.lick ? 'うれしそうに顔を舐めてきた！' : W.lickDone ? 'しゃがんでいる（舐めて満足したらしい）' : W.sat > 0.5 ? 'しゃがんでいる' : 'しゃがんでいる（満足していないと寄ってこない）';
       else if (W.mode === 'follow' && W.smell) uiL.textContent = 'くんくん…飼い主のにおいを嗅いでいる';
       else if (W.mode === 'follow' && W.feed) uiL.textContent = W.feed.ph === 'show' ? 'おやつを見せる' : W.feed.ph === 'give' ? 'おやつをあげる' : W.feed.ph === 'doubt' ? '食べようか、食べまいか…' : W.feed.ph === 'spit' ? '…' : 'もぐもぐ';
       else if (W.mode === 'follow' && W.ponder && W.ponder.beg) uiL.textContent = W.ponder.ph === 'beg' ? '立ち止まって、こちらの顔を見上げている（おやつの催促？）'
