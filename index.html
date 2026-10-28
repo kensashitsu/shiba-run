@@ -172,10 +172,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v125</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v126</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v125 · -- fps</div>
+<div id="fps" class="ui">v126 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button></div>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v125';
+const VERSION = 'v126';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -4241,6 +4241,7 @@ function drawMap() {
 }
 
 const lastGood = { st: null, walker: null, camYaw: 0, camPitch: -0.38 };
+let moveRef = null;   // 歩く向きの基準（スティックを倒している間のカメラの向き）
 function step(dt, t) {
   stepInner(dt, t);
   const ok = o => Number.isFinite(o.x) && Number.isFinite(o.z) && Number.isFinite(o.yaw);
@@ -4262,7 +4263,10 @@ function stepInner(dt, t) {
   let mag = Math.min(Math.hypot(ix, iy), 1);
   // 散歩をキーで歩く時：ふだんは柴と同じ速さで歩き、Shift を押している間だけ走る（キーは全開か0なので、そのままだと常に全力疾走になる）
   if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag *= keys.ShiftLeft || keys.ShiftRight ? 1 : 0.5; }
-  const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+  // 歩く向きの基準：倒し始めた時のカメラの向きを、離すまで使う（カメラが飼い主を追って回ると、横に倒したまま向きが回り続けて、ぐるぐる回ってしまう）。
+  // 自分でカメラを回した時だけ、基準をその向きに合わせる。一人称は見ている向きのまま
+  if (WALK && !fpv && mag > 0.08) { if (moveRef === null || t - camDragT < 0.25) moveRef = camYaw; } else moveRef = null;
+  const ref = moveRef ?? camYaw, fx = Math.sin(ref), fz = Math.cos(ref);
   let dx = fx * iy - fz * ix, dz = fz * iy + fx * ix;
   const user = mag > 0.08;
   if (user && !hinted) { hinted = true; setTimeout(() => hintEl.classList.add('off'), 2500); }
@@ -4542,7 +4546,7 @@ function frame(ts) {
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
 window.__V = THREE.Vector3; window.__isGrass = (x, z) => isGrass(x, z); window.__gy = (x, z) => H(x, z);
-window.__shiba = { townChunks, townTiles, get lowGridN() { return lowGrid ? lowGrid.size : 0; }, lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => { if (TOWN) { townWin(camera.position.x, camera.position.z); townCull(camera.position.x, camera.position.z); } renderer.render(scene, camera); }, snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; }, setFpv: v => setFpv(v), lookIn: () => lookIn, setGyro: (on, q) => { gyro = on; if (q) gyroQ = q; }, getFpv: () => ({ fpv, camPitch }) };
+window.__shiba = { townChunks, townTiles, get lowGridN() { return lowGrid ? lowGrid.size : 0; }, lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => { if (TOWN) { townWin(camera.position.x, camera.position.z); townCull(camera.position.x, camera.position.z); } renderer.render(scene, camera); }, snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; moveRef = null; }, setFpv: v => setFpv(v), lookIn: () => lookIn, setGyro: (on, q) => { gyro = on; if (q) gyroQ = q; }, getFpv: () => ({ fpv, camPitch }) };
 </script>
 </body>
 </html>
