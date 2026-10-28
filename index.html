@@ -172,10 +172,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v124</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v125</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v124 · -- fps</div>
+<div id="fps" class="ui">v125 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button></div>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v124';
+const VERSION = 'v125';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1436,7 +1436,7 @@ if (TOWN) {
   for (let tries = 0; tries < 120000 && k < trees.length; tries++) {
     const x = (r() * 2 - 1) * (TOWN.area - 5), z = (r() * 2 - 1) * (TOWN.area - 5);
     const inWood = woods.some(p => inPoly(x, z, p));
-    if (!free(x, z) || (!inWood && (k < trees.length * 0.55 || r() > 0.02))) continue;   // 庭木はまばらに
+    if (!free(x, z) || (!inWood && (woods.length && k < trees.length * 0.55 || r() > 0.02))) continue;   // 林が無い町は庭木だけ   // 庭木はまばらに
     trees[k].userData.bx = x; trees[k].userData.bz = z;
     trees[k].position.set(x, H(x, z) - 0.1, z); k++;
   }
