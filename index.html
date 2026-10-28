@@ -45,6 +45,11 @@
     font: 700 17px var(--font-ui); letter-spacing: .06em; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   #title button.main { background: rgba(240,180,106,.85); color: #2b2118; border-color: rgba(255,240,210,.7); }
   #title button[hidden] { display: none; }
+  @media (orientation: landscape) and (max-height: 520px) {   /* 横持ち：ボタンは下に横並び */
+    #title { flex-direction: row; align-items: flex-end; justify-content: center; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5vh); }
+    #title h1 { top: calc(env(safe-area-inset-top, 0px) + 5vh); font-size: clamp(36px, 9vh, 56px); }
+    #title button { width: min(190px, 28vw); height: 46px; font-size: 15px; }
+  }
   body.titling .ui:not(#title) { visibility: hidden; }
   #ecoBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: calc(max(12px, env(safe-area-inset-left, 0px)) + 74px); padding: 3px 9px; border-radius: 12px;
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
@@ -144,7 +149,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v91 · -- fps</div>
+<div id="fps" class="ui">v92 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
@@ -188,7 +193,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v91';
+const VERSION = 'v92';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2336,7 +2341,7 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 // ---------- 状態 ----------
 const st = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0, vy: 0 };
 const TEST = /[?&]test/.test(location.search);
-let camSnap = false, simT = 0, titleOn = !TEST && !/[?&]go(&|$)/.test(location.search), titleA = 0;
+let camSnap = false, simT = 0, titleOn = !TEST && !/[?&]go(&|$)/.test(location.search), titleFrames = 0;
 let camYaw = 0;
 const fpsEl = document.getElementById('fps');
 let fpsN = 0, fpsT = 0, hinted = false, slowN = 0;
@@ -2345,6 +2350,7 @@ const fpvV = new THREE.Vector3(), camGoal = new THREE.Vector3();
 const shTmpX = new THREE.Vector3(), shTmpY = new THREE.Vector3(), shTmpP = new THREE.Vector3();
 
 function resize() {
+  titleFrames = 0;   // タイトルで止めている絵を、新しい大きさで描き直す
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.fov = w < h ? 62 : 50; camera.updateProjectionMatrix();
@@ -3778,9 +3784,8 @@ function step(dt, t) {
   else if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
-  if (titleOn) {   // タイトル：柴のまわりをゆっくり回って眺める
-    titleA += dt * 0.12;
-    const a = st.yaw + 0.6 + Math.sin(titleA) * 0.9, hy = gy + 0.38;
+  if (titleOn) {   // タイトル：柴を斜め前の低い所から眺める（数コマ描いたら止める）
+    const a = st.yaw + 0.6, hy = gy + 0.38;
     let d = 2.6; while (d > 0.9 && TOWN && townHigh(st.x + Math.sin(a) * d, st.z + Math.cos(a) * d)) d -= 0.1;
     const px = st.x + Math.sin(a) * d, pz = st.z + Math.cos(a) * d;
     camera.position.set(px, Math.max(hy + 0.12, H(px, pz) + 0.3), pz); camera.lookAt(st.x, hy + 0.3, st.z);   // 低い所から見上げて、題字と人の顔が重ならないように
@@ -3826,7 +3831,7 @@ step(0, 0);
   camera.lookAt(o.x, H(o.x, o.z) + 0.42, o.z); }
 
 const titleEl = document.getElementById('title'), MODE = WALK ? 'walk' : TOWN ? 'town' : 'meadow';
-const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleEl.hidden = !on; document.body.classList.toggle('titling', on); if (again) { titleAgain = true; document.getElementById('tContinue').hidden = false; document.getElementById(MODE === 'walk' ? 'tWalk' : 'tMeadow').textContent = MODE === 'walk' ? 'はじめから散歩' : 'はじめから走る'; } };
+const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleFrames = 0; titleEl.hidden = !on; document.body.classList.toggle('titling', on); if (again) { titleAgain = true; document.getElementById('tContinue').hidden = false; document.getElementById(MODE === 'walk' ? 'tWalk' : 'tMeadow').textContent = MODE === 'walk' ? 'はじめから散歩' : 'はじめから走る'; } };
 let titleAgain = false;   // 遊んでいる途中から戻った：同じ遊びを選ぶと、はじめからやり直す
 const goMode = m => {
   if (matchMedia('(pointer: coarse)').matches && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});   // Android：ブラウザの枠を隠す（iPhone はホーム画面に追加した時だけ）
@@ -3892,6 +3897,11 @@ function frame(ts) {
   if (eco && !TEST) {   // 省電力：描く回数を間引く（画面の書き換え回数がそのまま電池の減りになる）
     const o = WALK ? walker : st, still = o.speed < 0.1 && st.speed < 0.1 && !dog.state.act;
     if (ts - lastDraw < (still ? 1000 / 20 : 1000 / 30) - 4) return;
+  }
+  if (titleOn) {   // タイトル：読み込みが済んで絵が落ち着いたら、描くのをやめる（電池と発熱のため）
+    const loading = /読み込み中/.test(hintEl.textContent);
+    if (!loading && titleFrames > 30) { clock.getDelta(); return; }
+    titleFrames = loading ? 0 : titleFrames + 1;
   }
   lastDraw = ts; window.__draws = (window.__draws || 0) + 1;   // 描いた回数（確認用）
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
