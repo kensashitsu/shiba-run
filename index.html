@@ -157,7 +157,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v104 · -- fps</div>
+<div id="fps" class="ui">v105 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -201,7 +201,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v104';
+const VERSION = 'v105';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3239,7 +3239,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           }
           if (!W.rush && W.poopT > (W.poopAt ??= 50 + rand() * 60)) {
             const g = findGrass(st.x, st.z);
-            W.rush = { ph: g ? 'seek' : 'search', x: g ? g[0] : st.x, z: g ? g[1] : st.z, t: 0, need: 5 + rand() * 5, hunch: 0 };
+            W.rush = { ph: g ? 'seek' : 'search', x: g ? g[0] : st.x, z: g ? g[1] : st.z, t: 0, need: 5 + rand() * 5, hunch: 0, dh: st.yaw };   // dh：草むらが見つからずにすぐ探し始める時の向き（無いと位置が NaN になって画面が真っ白になった）
           }
           if (W.rush) {
             const R = W.rush; R.t += dt;
@@ -3247,6 +3247,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
               W.dh = Math.atan2(R.x - st.x, R.z - st.z);
               if (Math.hypot(R.x - st.x, R.z - st.z) < 0.7 || R.t > 15) { if (R.t > 15) { R.x = st.x; R.z = st.z; } R.ph = 'search'; R.t = 0; R.dh = st.yaw; }   // たどり着けなかった時は、その場のまわりで探す
             } else {
+              if (!Number.isFinite(R.dh)) R.dh = st.yaw;
               // 落ち着かない：小走りで草むらの中をあちこち。急に向きを変え、ときどき一瞬止まって嗅ぐ。場所が決まりかけると、ゆっくりになって背中を丸める
               if ((R.turnT = (R.turnT ?? 0) - dt) <= 0) { R.dh += (rand() < 0.5 ? -1 : 1) * (0.7 + rand() * 1.6); R.turnT = 0.45 + rand() * 0.8; R.sniffT = rand() < 0.35 ? 0.3 + rand() * 0.35 : 0; }
               R.sniffT = Math.max(0, (R.sniffT || 0) - dt);
@@ -3812,7 +3813,18 @@ function drawMap() {
   if (!big) { c.strokeStyle = 'rgba(255,250,240,.8)'; c.lineWidth = 2 * u; c.beginPath(); c.arc(W / 2, Hh / 2, W / 2 - u, 0, 7); c.stroke(); }
 }
 
+const lastGood = { st: null, walker: null, camYaw: 0, camPitch: -0.38 };
 function step(dt, t) {
+  stepInner(dt, t);
+  const ok = o => Number.isFinite(o.x) && Number.isFinite(o.z) && Number.isFinite(o.yaw);
+  if (ok(st) && ok(walker) && Number.isFinite(camYaw) && Number.isFinite(camPitch)) { lastGood.st = { ...st }; lastGood.walker = { ...walker }; lastGood.camYaw = camYaw; lastGood.camPitch = camPitch; }
+  else if (lastGood.st) {   // どこかの計算が壊れて位置が NaN になった：直前の位置へ戻す（画面が真っ白のままにならないように）
+    Object.assign(st, lastGood.st); Object.assign(walker, lastGood.walker); camYaw = lastGood.camYaw; camPitch = lastGood.camPitch; st.speed = walker.speed = 0;
+    if (WALK) { const W = WALK.W; W.rush = null; W.sniff = null; W.grab = null; if (!Number.isFinite(W.dh)) W.dh = st.yaw; }
+    camSnap = true; console.warn('位置が NaN になったので戻した');
+  }
+}
+function stepInner(dt, t) {
   // 入力 → 進む向き（カメラ基準）
   let ix = input.x, iy = input.y;
   if (keys.KeyA || keys.ArrowLeft) ix -= 1;
