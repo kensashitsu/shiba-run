@@ -172,10 +172,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v131</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v132</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v131 · -- fps</div>
+<div id="fps" class="ui">v132 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v131';
+const VERSION = 'v132';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2439,7 +2439,7 @@ scene.add(contact);
 // ---------- 入力 ----------
 const input = { x: 0, y: 0 };
 const keys = {};
-let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY = 0, camDragT = -99, fpv = false, camPitch = -0.38, camTilt = 0.578, padReady = false;   // padReady：操作盤（lookIn）の用意ができた（最初のコマはまだ）   // camTilt：三人称のカメラの見下ろす角度（0.12＝低く見上げ気味〜1.25＝真上近く）
+let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY = 0, camDragT = -99, fpv = false, camPitch = -0.38, camTilt = 0.578, padReady = false, camLift = 0;   // camLift：狭い所でカメラを上げている度合い   // padReady：操作盤（lookIn）の用意ができた（最初のコマはまだ）   // camTilt：三人称のカメラの見下ろす角度（0.12＝低く見上げ気味〜1.25＝真上近く）
 const stickEl = document.getElementById('stick'), knobEl = document.getElementById('knob');
 const hintEl = document.getElementById('hint');
 let jumpReq = false;
@@ -4338,8 +4338,8 @@ function stepInner(dt, t) {
   camera.updateProjectionMatrix();
   const CAM_R = 5.49;   // 散歩のカメラ：飼い主からの距離（高さと奥行きは camTilt で分ける。ふだんは高さ3.0m・奥4.6m）
   let dist = WALK ? CAM_R * Math.cos(camTilt) : 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
-  const ch = WALK ? CAM_R * Math.sin(camTilt) : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
-  const side = WALK ? -1.1 : 0;   // 散歩は左肩越し（犬は左前を歩くので、人の体で隠れないように）
+  let ch = WALK ? CAM_R * Math.sin(camTilt) : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
+  let side = WALK ? -1.1 : 0;   // 散歩は左肩越し（犬は左前を歩くので、人の体で隠れないように）
   const camOff = yaw => [-Math.sin(yaw) * dist - Math.cos(yaw) * side, -Math.cos(yaw) * dist + Math.sin(yaw) * side];   // 追う相手からカメラまで
   // 町：追う相手からカメラまでの線（肩越しのずれも含む）が家に掛からない割合。壁の手前0.4mで止める
   const camClear = yaw => {
@@ -4348,7 +4348,12 @@ function stepInner(dt, t) {
     return 1;
   };
   let camK = 1;
-  if (TOWN && !fpv) {
+  if (TOWN && !fpv && WALK) {   // 散歩：後ろが家や塀で塞がれる狭い所では、回り込んだり寄ったりせず、カメラを高く上げて真上近くから見下ろす
+    const k0 = camClear(camYaw);
+    camLift += ((k0 < 0.85 ? 1 : 0) - camLift) * Math.min(1, dt * (k0 < 0.85 ? 4 : 1.2));
+    if (camLift > 0.01) { const tl = camTilt + (Math.max(camTilt, 1.32) - camTilt) * camLift; dist = CAM_R * Math.cos(tl); ch = CAM_R * Math.sin(tl); side *= 1 - 0.7 * camLift; }
+    camK = camClear(camYaw);   // それでも塞がれる時だけ寄せる
+  } else if (TOWN && !fpv) {
     camK = camClear(camYaw);
     if (camK < 0.6) {   // 背中が壁で、近寄せても人が隠れる：空いている向きへカメラを回り込ませる
       let best = null;
@@ -4450,7 +4455,14 @@ if (TOWN) {   // 町：中心に一番近い道路の上から
     if (d < best && townRoad(x, z) > 0.9 && !townBlocked(x, z)) { best = d; st.x = x; st.z = z; }
   }
   document.getElementById('credit').hidden = false;
-  if (WALK) { WALK.start(st.x, st.z); hintEl.textContent = WALK_HINT; }
+  if (WALK) {
+    WALK.start(st.x, st.z); hintEl.textContent = WALK_HINT;
+    // 向き：道が長く続き、後ろ（カメラの側）も空いている方へ。柴は飼い主の少し前に
+    const free = (a, max) => { let d = 0; while (d < max && !townBlocked(walker.x + Math.sin(a) * (d + 0.5), walker.z + Math.cos(a) * (d + 0.5)) && townRoad(walker.x + Math.sin(a) * (d + 0.5), walker.z + Math.cos(a) * (d + 0.5)) > 0.3) d += 0.5; return d; };
+    let ba = 0, bs = -1; for (let a = 0; a < 6.283; a += 0.13) { const sc = free(a, 25) + 0.6 * Math.min(free(a + Math.PI, 6), 6); if (sc > bs) { bs = sc; ba = a; } }
+    walker.yaw = st.yaw = camYaw = ba;
+    if (!townBlocked(walker.x + Math.sin(ba) * 1.1, walker.z + Math.cos(ba) * 1.1)) { st.x = walker.x + Math.sin(ba) * 1.1; st.z = walker.z + Math.cos(ba) * 1.1; }
+  }
 }
 step(0, 0);
 { const o = WALK ? walker : st;
