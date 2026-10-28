@@ -160,7 +160,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v97 · -- fps</div>
+<div id="fps" class="ui">v98 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
@@ -205,7 +205,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v97';
+const VERSION = 'v98';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3750,8 +3750,9 @@ function step(dt, t) {
   // カメラ：後ろから追う（なぞって回した直後は追わない）
   const run = smooth(2.5, 4.8, st.speed);
   if (fpv && gyro) gyroStep();   // ジャイロ中は、カメラを自動で進む向き・相手へ向けない
-  else if (WALK && WALK.W.mode === 'lock') { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
-  else if (fol.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, fol.yaw) * Math.min(1, dt * 1.6);
+  // 首輪が抜けた後は相手へ向け直さない（倒した向きが勝手に回って、思う方へ歩けなくなる）
+  else if (WALK && WALK.W.mode === 'lock' && !WALK.W.ev) { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
+  else if (fol.speed > 0.4 && t - camDragT > 1.5 && Math.abs(angDiff(camYaw, fol.yaw)) < 1.9) camYaw += angDiff(camYaw, fol.yaw) * Math.min(1, dt * 1.6);   // こちらへ向かって歩く時（手前に倒した時）は追わない：追うと「手前」が回り続け、その場でぐるぐる回る
   const dash = smooth(5.5, 8.5, st.speed);
   camera.fov += ((innerWidth < innerHeight ? (fpv ? 74 : 62) : (fpv ? 62 : 50)) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
   camera.updateProjectionMatrix();
