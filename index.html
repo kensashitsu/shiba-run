@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>しば草原</title>
+<meta name="apple-mobile-web-app-title" content="しば草原">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1e1c16">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
 <style>
   /* 全画面の3D。UIは画面端に浮かべる。単一ルック（夕方の草原） */
   :root {
@@ -26,7 +33,20 @@
     top: calc(env(safe-area-inset-top, 0px) + 10px); left: max(12px, env(safe-area-inset-left, 0px));
     font-size: 13px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0,0,0,.5); opacity: .85;
   }
-  #ecoBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
+  #homeBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
+    background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
+  #title { inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 12px;
+    padding: 0 24px calc(env(safe-area-inset-bottom, 0px) + 9vh); background: linear-gradient(to bottom, rgba(20,18,14,.35), rgba(20,18,14,0) 30%, rgba(20,18,14,0) 55%, rgba(20,18,14,.55)); }
+  #title[hidden] { display: none; }
+  #title h1 { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 11vh); left: 0; right: 0; margin: 0; text-align: center; color: #fffaf0;
+    font: 700 clamp(44px, 13vw, 76px) var(--font-ui); letter-spacing: .08em; text-shadow: 0 2px 14px rgba(0,0,0,.45); }
+  #title h1 small { display: block; margin-top: 6px; font-size: clamp(13px, 3.6vw, 17px); font-weight: 500; letter-spacing: .12em; opacity: .9; }
+  #title button { width: min(280px, 80vw); height: 54px; border-radius: 27px; border: 1px solid var(--glass-edge); background: var(--glass); color: var(--ink);
+    font: 700 17px var(--font-ui); letter-spacing: .06em; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  #title button.main { background: rgba(240,180,106,.85); color: #2b2118; border-color: rgba(255,240,210,.7); }
+  #title button[hidden] { display: none; }
+  body.titling .ui:not(#title) { visibility: hidden; }
+  #ecoBtn { top: calc(env(safe-area-inset-top, 0px) + 54px); left: calc(max(12px, env(safe-area-inset-left, 0px)) + 74px); padding: 3px 9px; border-radius: 12px;
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
   #ecoBtn.on { background: rgba(120,190,110,.55); opacity: .95; }
   #fpvBtn { top: calc(env(safe-area-inset-top, 0px) + 84px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
@@ -124,8 +144,11 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v90 · -- fps</div>
+<div id="fps" class="ui">v91 · -- fps</div>
+<button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
+<div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
+<button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button></div>
 <button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
 <button type="button" id="gyroBtn" class="ui" hidden>ジャイロ 切</button>
 <div id="dogArrow" class="ui" hidden>柴</div>
@@ -165,7 +188,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v90';
+const VERSION = 'v91';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2313,7 +2336,7 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 // ---------- 状態 ----------
 const st = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0, vy: 0 };
 const TEST = /[?&]test/.test(location.search);
-let camSnap = false, simT = 0;
+let camSnap = false, simT = 0, titleOn = !TEST && !/[?&]go(&|$)/.test(location.search), titleA = 0;
 let camYaw = 0;
 const fpsEl = document.getElementById('fps');
 let fpsN = 0, fpsT = 0, hinted = false, slowN = 0;
@@ -3637,6 +3660,7 @@ function step(dt, t) {
   if (keys.KeyD || keys.ArrowRight) ix += 1;
   if (keys.KeyW || keys.ArrowUp) iy += 1;
   if (keys.KeyS || keys.ArrowDown) iy -= 1;
+  if (titleOn) ix = iy = 0;   // タイトルの間は歩かない
   let mag = Math.min(Math.hypot(ix, iy), 1);
   // 散歩をキーで歩く時：ふだんは柴と同じ速さで歩き、Shift を押している間だけ走る（キーは全開か0なので、そのままだと常に全力疾走になる）
   if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag *= keys.ShiftLeft || keys.ShiftRight ? 1 : 0.5; }
@@ -3754,6 +3778,14 @@ function step(dt, t) {
   else if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
+  if (titleOn) {   // タイトル：柴のまわりをゆっくり回って眺める
+    titleA += dt * 0.12;
+    const a = st.yaw + 0.6 + Math.sin(titleA) * 0.9, hy = gy + 0.38;
+    let d = 2.6; while (d > 0.9 && TOWN && townHigh(st.x + Math.sin(a) * d, st.z + Math.cos(a) * d)) d -= 0.1;
+    const px = st.x + Math.sin(a) * d, pz = st.z + Math.cos(a) * d;
+    camera.position.set(px, Math.max(hy + 0.12, H(px, pz) + 0.3), pz); camera.lookAt(st.x, hy + 0.3, st.z);   // 低い所から見上げて、題字と人の顔が重ならないように
+    if (WALK) WALK.W.graceT = Math.max(WALK.W.graceT || 0, 1);   // 眺めている間に、ほかの犬に吠えかかったりしない
+  }
   // 周りの物を犬に合わせて巻き戻す
   grassU.uTime.value = t;
   // 草の範囲はカメラから測る（ダッシュでカメラが遅れても視野の先に草が残るように）
@@ -3793,6 +3825,20 @@ step(0, 0);
   camera.position.set(o.x - Math.sin(camYaw) * 2.7, H(o.x, o.z) + 1.0, o.z - Math.cos(camYaw) * 2.7);
   camera.lookAt(o.x, H(o.x, o.z) + 0.42, o.z); }
 
+const titleEl = document.getElementById('title'), MODE = WALK ? 'walk' : TOWN ? 'town' : 'meadow';
+const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleEl.hidden = !on; document.body.classList.toggle('titling', on); if (again) { titleAgain = true; document.getElementById('tContinue').hidden = false; document.getElementById(MODE === 'walk' ? 'tWalk' : 'tMeadow').textContent = MODE === 'walk' ? 'はじめから散歩' : 'はじめから走る'; } };
+let titleAgain = false;   // 遊んでいる途中から戻った：同じ遊びを選ぶと、はじめからやり直す
+const goMode = m => {
+  if (matchMedia('(pointer: coarse)').matches && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});   // Android：ブラウザの枠を隠す（iPhone はホーム画面に追加した時だけ）
+  if (m === MODE && !titleAgain) showTitle(false); else location.href = (m === 'walk' ? '?walk&go' : '?go');
+};
+titleEl.addEventListener('pointerdown', e => e.stopPropagation());
+document.getElementById('tWalk').addEventListener('click', () => goMode('walk'));
+document.getElementById('tMeadow').addEventListener('click', () => goMode('meadow'));
+document.getElementById('tContinue').addEventListener('click', () => showTitle(false));
+document.getElementById('homeBtn').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); input.x = input.y = 0; showTitle(true, true); });
+document.getElementById('homeBtn').hidden = TEST;
+if (titleOn) showTitle(true);
 const fpvBtn = document.getElementById('fpvBtn'), dogArrow = document.getElementById('dogArrow');
 function setFpv(v) {
   fpv = v; camPitch = -0.38; camSnap = true;
