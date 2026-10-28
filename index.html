@@ -157,7 +157,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v102 · -- fps</div>
+<div id="fps" class="ui">v103 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -201,7 +201,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v102';
+const VERSION = 'v103';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3230,27 +3230,30 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           }
           if (!W.rush && W.poopT > (W.poopAt ??= 50 + rand() * 60)) {
             const g = findGrass(st.x, st.z);
-            W.rush = { ph: g ? 'seek' : 'search', x: g ? g[0] : st.x, z: g ? g[1] : st.z, t: 0, need: 4 + rand() * 4, hunch: 0 };
+            W.rush = { ph: g ? 'seek' : 'search', x: g ? g[0] : st.x, z: g ? g[1] : st.z, t: 0, need: 5 + rand() * 5, hunch: 0 };
           }
           if (W.rush) {
             const R = W.rush; R.t += dt;
             if (R.ph === 'seek') {
               W.dh = Math.atan2(R.x - st.x, R.z - st.z);
-              if (Math.hypot(R.x - st.x, R.z - st.z) < 0.7 || R.t > 15) { R.ph = 'search'; R.t = 0; R.dh = st.yaw; }
+              if (Math.hypot(R.x - st.x, R.z - st.z) < 0.7 || R.t > 15) { if (R.t > 15) { R.x = st.x; R.z = st.z; } R.ph = 'search'; R.t = 0; R.dh = st.yaw; }   // たどり着けなかった時は、その場のまわりで探す
             } else {
-              // 草むらの中をうろうろ：少しずつ向きを変え、草むらから出そうなら中へ戻る
-              R.dh += (Math.sin(t * 1.3) * 0.8 + Math.sin(t * 0.47 + 2) * 0.5) * dt;
-              if (!isGrass(st.x + Math.sin(R.dh) * 0.9, st.z + Math.cos(R.dh) * 0.9)) R.dh += angDiff(R.dh, Math.atan2(R.x - st.x, R.z - st.z)) * Math.min(1, dt * 3);
+              // 落ち着かない：小走りで草むらの中をあちこち。急に向きを変え、ときどき一瞬止まって嗅ぐ。場所が決まりかけると、ゆっくりになって背中を丸める
+              if ((R.turnT = (R.turnT ?? 0) - dt) <= 0) { R.dh += (rand() < 0.5 ? -1 : 1) * (0.7 + rand() * 1.6); R.turnT = 0.45 + rand() * 0.8; R.sniffT = rand() < 0.35 ? 0.3 + rand() * 0.35 : 0; }
+              R.sniffT = Math.max(0, (R.sniffT || 0) - dt);
+              if (!isGrass(st.x + Math.sin(R.dh) * 0.9, st.z + Math.cos(R.dh) * 0.9) || Math.hypot(st.x - R.x, st.z - R.z) > 2.5) R.dh += angDiff(R.dh, Math.atan2(R.x - st.x, R.z - st.z)) * Math.min(1, dt * 6);   // 草むらから出そう・離れすぎたら中へ戻る
               W.dh = R.dh;
-              R.hunch = Math.min(1, R.t / R.need);
+              const settle = smooth(R.need - 1.6, R.need, R.t);
+              R.hunch = settle;
+              R.spd = R.sniffT > 0 ? 0.35 : (2.6 + 0.5 * Math.sin(t * 7)) * (1 - settle) + 0.5 * settle;
               if (R.t >= R.need) {
                 W.rush = null; W.poopT = 0; W.poopAt = 70 + rand() * 90; W.nextSniff = 8;
                 dog.__startSeq('poop', st); S.actData.dur = { circle: 1.1, sniff: 0.4, squat: 0.6 };
               }
             }
           }
-          S.nose = W.rush && W.rush.ph === 'search' ? 1 : 0; S.hunch = W.rush ? W.rush.hunch : 0;
-          const pace = W.heat ? 4.2 : W.rush ? (W.rush.ph === 'seek' ? 3.4 : 0.5) : 1.33 + 0.13 * Math.sin(t * 0.19) + 0.06 * Math.sin(t * 0.53 + 1);   // 柴が自分で歩く速さ（ゆっくり揺らぐ）
+          S.nose = W.rush && W.rush.ph === 'search' ? (W.rush.sniffT > 0 || W.rush.hunch > 0.5 ? 1 : 0.35) : 0; S.hunch = W.rush ? W.rush.hunch : 0;
+          const pace = W.heat ? 4.2 : W.rush ? (W.rush.ph === 'seek' ? 3.4 : W.rush.spd ?? 2.6) : 1.33 + 0.13 * Math.sin(t * 0.19) + 0.06 * Math.sin(t * 0.53 + 1);   // 柴が自分で歩く速さ（ゆっくり揺らぐ）
           // 人がそれより速く歩く・走る時は、人の左前に並ぶ速さで（速さ＝人の速さ＋位置のずれの補正）
           // 飼い主が全力で走ると、柴はもっと速く先を行く：リードの端でピンと張って、飼い主は追いつけない
           const dash = smooth(3.5, 6, walker.speed), ahd = 0.9 + dash * (LEASH + 0.4 - 0.9);
@@ -3713,7 +3716,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'follow' && W.sniff && W.sniff.grass && W.sniff.gz > 1.2) uiL.textContent = 'むしゃむしゃ…草を食べている（待つ／引いてやめさせる）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.sniff) uiL.textContent = 'くんくん…（待つ／軽く引くとマーキングしにくい／引いて崩す）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && (S.act === 'mark' || S.act === 'poop')) uiL.textContent = (S.act === 'mark' ? (W.grab && W.grab.ph !== 'let' ? 'マーキング中…首輪の近くを持って、軽く手前に引いている' : 'マーキング中…（待つ／離れる向きに操作して止める）') : 'うんち中…（待つ／引いて崩す）') + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
-      else if (W.mode === 'follow' && W.rush) uiL.textContent = W.rush.ph === 'seek' ? 'うんちしたい！ ぐんぐん引っ張る' : 'くんくん…場所を探している';
+      else if (W.mode === 'follow' && W.rush) uiL.textContent = W.rush.ph === 'seek' ? 'うんちしたい！ ぐんぐん引っ張る' : 'そわそわ…うんちの場所を探している';
       else if (W.mode === 'follow' && !W.ev) uiL.textContent = (W.harm > 0.95 ? '歩調ぴったり' : '歩調 ' + '●'.repeat(Math.round(W.harm * 5)) + '○'.repeat(5 - Math.round(W.harm * 5))) + '　満足 ' + '★'.repeat(Math.round(W.sat * 5)) + '☆'.repeat(5 - Math.round(W.sat * 5));
       if (W.msgT > 0 && W.msg) uiL.textContent = W.msg;
       ui.className = 'ui ' + (W.ev ? 'ev' : W.mode === 'follow' && (W.sniff || seq || W.rush || W.heat || W.crouch || W.ponder) ? 'sniff' : W.mode === 'follow' ? 'harm' + (W.harm > 0.95 ? ' full' : '') : W.mode);
