@@ -172,10 +172,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v126</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v127</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v126 · -- fps</div>
+<div id="fps" class="ui">v127 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button></div>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v126';
+const VERSION = 'v127';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -4376,14 +4376,27 @@ function stepInner(dt, t) {
     const out = behind || Math.abs(px) > 0.95 || Math.abs(py) > 0.95;
     dogArrow.hidden = !out;
     if (out) {
-      const m = Math.max(Math.abs(px), Math.abs(py)) || 1; px = px / m * 0.86; py = py / m * 0.86;
+      const m = Math.max(Math.abs(px), Math.abs(py)) || 1; px = px / m * 0.74; py = py / m * 0.8;   /* 右のボタンや上の地図と重ならないように少し内側 */
       dogArrow.style.transform = `translate(${(px + 1) / 2 * innerWidth}px, ${(1 - py) / 2 * innerHeight}px)`;
       dogArrow.style.setProperty('--a', Math.atan2(-py, px) + 'rad');
     }
   }
   camSnap = false;
+  if (WALK && !fpv) {   // 三人称でも、柴が画面の外にいる時は縁に向きを出す
+    const dogArrow = document.getElementById('dogArrow');   // 最初のコマは、まだ下の const が用意されていない
+    camera.updateMatrixWorld();
+    const p = fpvV.set(st.x, H(st.x, st.z) + 0.3, st.z).applyMatrix4(camera.matrixWorldInverse), behind = p.z > 0;
+    p.applyMatrix4(camera.projectionMatrix);
+    let px = behind ? -p.x : p.x, py = behind ? -p.y : p.y;
+    const out = behind || Math.abs(px) > 0.95 || Math.abs(py) > 0.95;
+    dogArrow.hidden = !out || titleOn;
+    if (out) { const m = Math.max(Math.abs(px), Math.abs(py)) || 1; px = px / m * 0.74; py = py / m * 0.8;   /* 右のボタンや上の地図と重ならないように少し内側 */ dogArrow.style.transform = `translate(${(px + 1) / 2 * innerWidth}px, ${(1 - py) / 2 * innerHeight}px)`; dogArrow.style.setProperty('--a', Math.atan2(-py, px) + 'rad'); }
+  }
   if (fpv) { /* 上で */ }
-  else if (WALK) camera.lookAt((walker.x + st.x) / 2, gy + 0.5, (walker.z + st.z) / 2);
+  else if (WALK) {   // 飼い主から柴の方へ少し寄った所を見る（離れても 0.9m まで：飼い主はいつも画面に入れる。柴は画面の外へ出てもよい）
+    const vx = (st.x - walker.x) / 2, vz = (st.z - walker.z) / 2, L = Math.hypot(vx, vz), k = L > 0.9 ? 0.9 / L : 1;
+    camera.lookAt(walker.x + vx * k, gy + 0.5, walker.z + vz * k);
+  }
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
   if (titleOn) {   // タイトル：柴を斜め前の低い所から眺める（数コマ描いたら止める）
@@ -4478,7 +4491,6 @@ function setFpv(v) {
   fpv = v; document.body.classList.toggle('fpv', fpv); lookPad.hidden = !fpv; lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; camPitch = -0.38; camSnap = true;
   fpvBtn.classList.toggle('on', fpv); fpvBtn.innerHTML = (fpv ? '後ろから' : '一人称') + '<span class="key">V</span>';
   if (WALK) WALK.me.__head.visible = WALK.me.__neck.visible = !fpv;   // 自分の頭と首は描かない（髪や、うつむいた時に首が目の前に来ないように）
-  if (!fpv) dogArrow.hidden = true;
   gyroBtn.hidden = !(fpv && gyroOk);
 }
 const gyroBtn = document.getElementById('gyroBtn'), gyroOk = 'DeviceOrientationEvent' in window && matchMedia('(pointer: coarse)').matches;
