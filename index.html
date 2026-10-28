@@ -68,7 +68,8 @@
   #map.compass { width: 64px; height: 64px; pointer-events: none; box-shadow: none; }
   #map.big { width: min(92vw, 80vh); height: min(92vw, 80vh); border-radius: 14px; top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
   #walkui { bottom: calc(env(safe-area-inset-bottom, 0px) + 26px); pointer-events: none; min-width: 200px; left: 50%; transform: translateX(-50%); padding: 6px 14px 10px;
-    border-radius: 12px; font-size: 13px; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0; }
+    border-radius: 12px; font-size: 13px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,.6); --bal: 0;
+    width: max-content; max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); white-space: normal; text-align: center; line-height: 1.45; box-sizing: border-box; }   /* 長い文は画面の幅で折り返す（はみ出して先頭が切れないように） */
   #walkui.follow { display: none; }
   #stam { left: max(12px, env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 32px); display: flex; align-items: center; gap: 6px;
     font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,.6); transition: opacity .6s; --v: 1; }
@@ -162,7 +163,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v116 · -- fps</div>
+<div id="fps" class="ui">v117 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -207,7 +208,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v116';
+const VERSION = 'v117';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -253,12 +254,12 @@ function H(x, z) {   // 小川の近くは谷底の高さにならし、川筋�
 }
 const waterY = z => Hb(streamX(z), z) - 0.37;
 const FIELD_GLSL = TOWN ? `
-uniform sampler2D uTownH, uTownMask; uniform vec3 uTownXf;   // x=標高格子の半幅 y=格子の点数 z=塗り分けの半幅
+uniform sampler2D uTownH, uTownMask; uniform vec3 uTownXf; uniform vec2 uTownMc;   // x=標高格子の半幅 y=格子の点数 z=塗り分けの窓の半幅、uTownMc＝窓の中心
 float H(vec2 p){ return texture2D(uTownH, ((p + uTownXf.x) / (2.0*uTownXf.x) * (uTownXf.y - 1.0) + 0.5) / uTownXf.y).r; }
 float streamX(float z){ return 1e5; }
 float pathX(float z){ return 1e5; }
 float heather(vec2 p){ return 0.0; }
-vec4 townMask(vec2 p){ return texture2D(uTownMask, (p + uTownXf.z) / (2.0*uTownXf.z)); }   // r=道路 g=家の周り b=水
+vec4 townMask(vec2 p){ return texture2D(uTownMask, (p - uTownMc + uTownXf.z) / (2.0*uTownXf.z)); }   // r=道路 g=家の周り b=水
 ` : `
 vec4 townMask(vec2 p){ return vec4(0.0); }
 float Hb(vec2 p){
@@ -277,53 +278,88 @@ float heather(vec2 p){
 }`;
 
 // 町の標高と塗り分けをテクスチャにして GPU へ渡す。塗り分けは 0.5m 刻み：r=道路 g=家の周り b=水。
-// 同じ大きさで「入れない所」（建物・水・範囲外）の表も作り、犬とカメラがめり込まないようにする
-const TOWN_PX = 0.5;
-const townU = { uTownH: { value: null }, uTownMask: { value: null }, uTownXf: { value: new THREE.Vector3() } };
-let townOcc = null, townMaskData = null, townMaskN = 0;
+// 同じ刻みで「入れない所」（建物・水・範囲外）の表も作り、犬とカメラがめり込まないようにする。
+// 町が広い（約2km四方）ので、全体を一度に持たない：当たり判定などに使う表は 64m 四方ごとに要る所だけ作り（古いものは捨てる）、
+// 地面の塗り分け（GPU）は、まわり 512m の窓だけを描いて、離れたら描き直す
+const TOWN_PX = 0.5, TILE_P = 128, TILE_M = TILE_P * TOWN_PX, WIN_P = 1024, WIN_M = WIN_P * TOWN_PX;
+const townU = { uTownH: { value: null }, uTownMask: { value: null }, uTownXf: { value: new THREE.Vector3() }, uTownMc: { value: new THREE.Vector2() } };
+let townMaskN = 0, townTile = null;   // townTile：直前の townCell が見た表
 const ringOf = flat => { const r = []; for (let i = 0; i < flat.length; i += 2) r.push([flat[i], flat[i + 1]]); return r; };
+let townFeat = null, townTiles = null, townWin = null;
 if (TOWN) {
   const n = TOWN.n, hh = new Uint16Array(n * n);
   for (let k = 0; k < n * n; k++) hh[k] = THREE.DataUtils.toHalfFloat(townH[k]);
   const ht = new THREE.DataTexture(hh, n, n, THREE.RedFormat, THREE.HalfFloatType);
   ht.magFilter = ht.minFilter = THREE.LinearFilter; ht.needsUpdate = true;
   townU.uTownH.value = ht;
-  const MH = TOWN.half, N = townMaskN = Math.round(2 * MH / TOWN_PX);
-  const toPx = ([x, z]) => [(x + MH) / TOWN_PX, (z + MH) / TOWN_PX];
-  const cv = document.createElement('canvas'); cv.width = cv.height = N;
-  const c = cv.getContext('2d');
-  c.fillStyle = '#000'; c.fillRect(0, 0, N, N);
-  c.globalCompositeOperation = 'lighter'; c.lineCap = c.lineJoin = 'round';
-  const path = (pts, close) => { c.beginPath(); pts.forEach((p, i) => { const [u, v] = toPx(p); i ? c.lineTo(u, v) : c.moveTo(u, v); }); if (close) c.closePath(); };
-  c.strokeStyle = c.fillStyle = '#00ff00'; c.lineWidth = 2.4 / TOWN_PX;            // 家の周り（犬走り・駐車場）
-  for (const b of TOWN.bld) { path(ringOf(b.p), true); c.fill(); c.stroke(); }
-  c.strokeStyle = '#ff0000';
-  for (const r of TOWN.road) { c.lineWidth = r.w / TOWN_PX; path(ringOf(r.p)); c.stroke(); }
-  c.fillStyle = c.strokeStyle = '#0000ff'; c.lineWidth = 2 / TOWN_PX;
-  for (const w of TOWN.water) { path(ringOf(w), true); c.fill(); }
-  for (const r of TOWN.river) { path(ringOf(r)); c.stroke(); }
-  townMaskData = c.getImageData(0, 0, N, N).data;
+  const MH = TOWN.half; townMaskN = Math.round(2 * MH / TOWN_PX);
+  // 描く物：{k 種類, p 点, w 線の太さ, x0..z1 範囲}。k：b=建物 r=道路 w=池 v=川
+  townFeat = [];
+  const add = (k, p, w) => { let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } const m = w / 2 + 1; townFeat.push({ k, p, w, x0: x0 - m, x1: x1 + m, z0: z0 - m, z1: z1 + m }); };
+  for (const b of TOWN.bld) add('b', ringOf(b.p), 2.4);
+  for (const r of TOWN.road) add('r', ringOf(r.p), r.w);
+  for (const w of TOWN.water) add('w', ringOf(w), 2);
+  for (const r of TOWN.river) add('v', ringOf(r), 2);
+  // 範囲 [x0,x1)×[z0,z1)（m）を、px 刻みの canvas に描く。前と同じ順・同じ太さ
+  const paint = (c, o, X0, Z0, X1, Z1) => {
+    const tp = ([x, z]) => [(x - X0) / TOWN_PX, (z - Z0) / TOWN_PX];
+    const inside = F => F.x1 >= X0 && F.x0 <= X1 && F.z1 >= Z0 && F.z0 <= Z1;
+    const path = (g, pts, close) => { g.beginPath(); pts.forEach((p, i) => { const [u, v] = tp(p); i ? g.lineTo(u, v) : g.moveTo(u, v); }); if (close) g.closePath(); };
+    const W = c.canvas.width;
+    c.globalCompositeOperation = 'source-over'; c.fillStyle = '#000'; c.fillRect(0, 0, W, W);
+    c.globalCompositeOperation = 'lighter'; c.lineCap = c.lineJoin = 'round';
+    const L = townFeat.filter(inside);
+    c.strokeStyle = c.fillStyle = '#00ff00'; c.lineWidth = 2.4 / TOWN_PX;            // 家の周り（犬走り・駐車場）
+    for (const F of L) if (F.k === 'b') { path(c, F.p, true); c.fill(); c.stroke(); }
+    c.strokeStyle = '#ff0000';
+    for (const F of L) if (F.k === 'r') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); }
+    c.fillStyle = c.strokeStyle = '#0000ff'; c.lineWidth = 2 / TOWN_PX;
+    for (const F of L) if (F.k === 'w') { path(c, F.p, true); c.fill(); }
+    for (const F of L) if (F.k === 'v') { path(c, F.p); c.stroke(); }
+    if (o) {   // 入れない所
+      o.fillStyle = '#000'; o.fillRect(0, 0, W, W); o.fillStyle = '#fff';
+      for (const F of L) if (F.k === 'b' || F.k === 'w') { path(o, F.p, true); o.fill(); }
+    }
+  };
+  // 当たり判定などの表（64m 四方）
+  const tc = document.createElement('canvas'); tc.width = tc.height = TILE_P; const tcx = tc.getContext('2d', { willReadFrequently: true });
+  const toc = document.createElement('canvas'); toc.width = toc.height = TILE_P; const tox = toc.getContext('2d', { willReadFrequently: true });
+  townTiles = new Map(); townTiles.max = 1e9;   // 町を作る間は全部持ち、できたら 160枚（まわり約400m）に減らす
+  townTiles.make = (i, j) => {
+    const X0 = i * TILE_M - MH, Z0 = j * TILE_M - MH;
+    paint(tcx, tox, X0, Z0, X0 + TILE_M, Z0 + TILE_M);
+    const md = tcx.getImageData(0, 0, TILE_P, TILE_P).data, od = tox.getImageData(0, 0, TILE_P, TILE_P).data, o = new Uint8Array(TILE_P * TILE_P), m = new Uint8Array(TILE_P * TILE_P * 3);   // m：道路・家の周り・水（3つずつ）
+    for (let k = 0; k < o.length; k++) { o[k] = od[k * 4] > 100 ? 1 : 0; m[k * 3] = md[k * 4]; m[k * 3 + 1] = md[k * 4 + 1]; m[k * 3 + 2] = md[k * 4 + 2]; }
+    const T = { m, o, p: null };
+    while (townTiles.size > townTiles.max) townTiles.delete(townTiles.keys().next().value);   // いちばん古いものを捨てる
+    townTiles.set(i * 1000 + j, T); return T;
+  };
+  // 地面の塗り分け（まわり 512m の窓）
+  const cv = document.createElement('canvas'); cv.width = cv.height = WIN_P;
+  const wc = cv.getContext('2d');
   const mt = new THREE.CanvasTexture(cv);
   mt.flipY = false; mt.colorSpace = THREE.NoColorSpace; mt.generateMipmaps = false; mt.minFilter = THREE.LinearFilter;
   townU.uTownMask.value = mt;
-  townU.uTownXf.value.set(TOWN.half, n, MH);
-  // 入れない所
-  const oc = document.createElement('canvas'); oc.width = oc.height = N;
-  const o = oc.getContext('2d');
-  o.fillStyle = '#fff';
-  for (const b of TOWN.bld) { o.beginPath(); ringOf(b.p).forEach((p, i) => { const [u, v] = toPx(p); i ? o.lineTo(u, v) : o.moveTo(u, v); }); o.closePath(); o.fill(); }
-  for (const w of TOWN.water) { o.beginPath(); ringOf(w).forEach((p, i) => { const [u, v] = toPx(p); i ? o.lineTo(u, v) : o.moveTo(u, v); }); o.closePath(); o.fill(); }
-  const od = o.getImageData(0, 0, N, N).data;
-  townOcc = new Uint8Array(N * N);
-  for (let k = 0; k < N * N; k++) townOcc[k] = od[k * 4] > 100 ? 1 : 0;
+  townU.uTownXf.value.set(TOWN.half, n, WIN_M / 2);
+  townWin = (x, z, force) => {   // 窓の中心を 64m 刻みにそろえる（升目が前と同じ 0.5m 格子に乗る）。中心から 96m 離れたら描き直す
+    const c = townU.uTownMc.value;
+    if (!force && Math.abs(x - c.x) < 96 && Math.abs(z - c.y) < 96) return;
+    const cx = Math.round((x + MH) / TILE_M) * TILE_M - MH, cz = Math.round((z + MH) / TILE_M) * TILE_M - MH;
+    paint(wc, null, cx - WIN_M / 2, cz - WIN_M / 2, cx + WIN_M / 2, cz + WIN_M / 2);
+    c.set(cx, cz); mt.needsUpdate = true;
+  };
+  townWin(0, 0, true);
 }
-const townCell = (x, z) => {
-  const i = Math.floor((x + TOWN.half) / TOWN_PX), j = Math.floor((z + TOWN.half) / TOWN_PX);
-  return i < 0 || j < 0 || i >= townMaskN || j >= townMaskN ? -1 : j * townMaskN + i;
+const townCell = (x, z) => {   // 0.5m 升目の番号（townTile の中）。範囲の外は -1
+  const gx = Math.floor((x + TOWN.half) / TOWN_PX), gz = Math.floor((z + TOWN.half) / TOWN_PX);
+  if (gx < 0 || gz < 0 || gx >= townMaskN || gz >= townMaskN) return -1;
+  const i = Math.floor(gx / TILE_P), j = Math.floor(gz / TILE_P);
+  townTile = townTiles.get(i * 1000 + j) || townTiles.make(i, j);
+  return (gz - j * TILE_P) * TILE_P + (gx - i * TILE_P);
 };
 const townBlocked = (x, z) => {
   if (Math.abs(x) > TOWN.area || Math.abs(z) > TOWN.area) return true;   // 町の範囲の外へは出ない
-  const k = townCell(x, z); return k < 0 || townOcc[k] !== 0 || lowHit(x, z);
+  const k = townCell(x, z); return k < 0 || townTile.o[k] !== 0 || lowHit(x, z);
 };
 // 低い障害物：{t:0 線分(塀) / 1 円(電柱) / 2 向きのある長方形(車)}。2m 格子に振り分ける
 let lowGrid = null;
@@ -376,25 +412,24 @@ const lowHit = (x, z) => {
 };
 const townHigh = (x, z) => {   // 家・水・範囲外（低い塀や車は含まない）
   if (Math.abs(x) > TOWN.area || Math.abs(z) > TOWN.area) return true;
-  const k = townCell(x, z); return k < 0 || townOcc[k] === 1;
+  const k = townCell(x, z); return k < 0 || townTile.o[k] === 1;
 };
 const isGrass = (x, z) => {
   if (!TOWN || townBlocked(x, z)) return false;
   const k = townCell(x, z); if (k < 0) return false;
-  return townMaskData[k * 4] < 30 && townMaskData[k * 4 + 1] < 30 && townMaskData[k * 4 + 2] < 30;
+  const m = townTile.m; return m[k * 3] < 30 && m[k * 3 + 1] < 30 && m[k * 3 + 2] < 30;
 };
-let privC = null;
 const headV = new THREE.Vector3();
 const privateLand = (x, z) => {
   if (!TOWN) return false;
   const k = townCell(x, z); if (k < 0) return false;
-  privC = privC || new Uint8Array(townMaskN * townMaskN);   // 0＝まだ調べていない 1＝公道・空き地 2＝よその敷地
+  const T = townTile, privC = T.p || (T.p = new Uint8Array(TILE_P * TILE_P));   // 0＝まだ調べていない 1＝公道・空き地 2＝よその敷地（表ごとに覚える）
   if (!privC[k]) {
     let v = 1;
     if (townRoad(x, z) < 0.3) {
       let edge = false;
       for (let i = 0; i < 8 && !edge; i++) { const a = i * 0.785; if (townRoad(x + Math.sin(a) * 1.2, z + Math.cos(a) * 1.2) > 0.5) edge = true; }
-      if (!edge) for (let r = 1.5; r <= 7 && v === 1; r += 1.5) for (let i = 0; i < 12; i++) { const a = i * 0.5236, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r, kk = townCell(px, pz); if (kk >= 0 && townOcc[kk] === 1 && townMaskData[kk * 4 + 2] < 128) { v = 2; break; } }
+      if (!edge) for (let r = 1.5; r <= 7 && v === 1; r += 1.5) for (let i = 0; i < 12; i++) { const a = i * 0.5236, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r, kk = townCell(px, pz); if (kk >= 0 && townTile.o[kk] === 1 && townTile.m[kk * 3 + 2] < 128) { v = 2; break; } }
     }
     privC[k] = v;
   }
@@ -416,7 +451,7 @@ const findSpot = (x, z, dir, r0 = 7, r1 = 14) => {
   }
   return null;
 };
-const townRoad = (x, z) => { const k = townCell(x, z); return k < 0 ? 0 : townMaskData[k * 4] / 255; };
+const townRoad = (x, z) => { const k = townCell(x, z); return k < 0 ? 0 : townTile.m[k * 3] / 255; };
 
 // ---------- renderer / scene ----------
 const canvas = document.getElementById('c');
@@ -935,7 +970,7 @@ const rng = seed => { let s = seed >>> 0; return () => (s = (s * 1664525 + 10139
     buildTree({ seed: 41, trunkLen: 1.8, trunkRad: 0.14, depth: 3, spread: 0.75, lift: 0.15, shrink: 0.72, card: 1.3, cards: 5, bark: barkDark, leaves: autumnLeaves }),
   ];
   const pick = [0, 1, 0, 1, 2, 2, 0, 1, 3, 2];
-  for (let i = 0; i < (TOWN ? 110 : 40); i++) {
+  for (let i = 0; i < (TOWN ? Math.round(110 * Math.min(4, (TOWN.area / 320) ** 2)) : 40); i++) {
     const g = templates[pick[i % pick.length]].clone();
     const s = 0.8 + Math.random() * 0.45;
     g.scale.set(s, s * (0.9 + Math.random() * 0.25), s);
@@ -948,7 +983,9 @@ const wrap = (v, c, size) => ((((v - c + size / 2) % size) + size) % size) + c -
 
 // ---------- 町の家（建物の輪郭を立ち上げ、四角に近い家には切妻か寄棟の屋根を載せる） ----------
 // 高さと屋根の形は元データに無いので推定：普通の家は2階建てが多め、堅ろう建物は3階、壁の無い建物（車庫・物置）は低く平ら
+const townChunks = [];   // 町の区画ごとの形：{o, x, z}。離れた区画は描かない
 if (TOWN) {
+  const nTown0 = scene.children.length;
   const r = rng(11);
   const WALLS = ['#e9e3d4', '#ddd0b6', '#f1eee6', '#c9bfae', '#b9ad98', '#d8c6a4', '#a9a49b', '#cdbfa8', '#8f8679', '#e2d9c6', '#9c8f7c', '#c4c8c6'];
   const ROOFS = ['#3c4148', '#4a4f57', '#5b4a3e', '#3f4f63', '#6b3b2e', '#555a5e', '#2f3337', '#48443f'];
@@ -1354,15 +1391,59 @@ if (TOWN) {
   const woods = TOWN.wood.map(ringOf);
   const free = (x, z) => !townBlocked(x, z) && !townBlocked(x + 1.5, z) && !townBlocked(x - 1.5, z) && !townBlocked(x, z + 1.5) && !townBlocked(x, z - 1.5) && townRoad(x, z) < 0.05;
   let k = 0;
-  for (let tries = 0; tries < 20000 && k < trees.length; tries++) {
+  for (let tries = 0; tries < 120000 && k < trees.length; tries++) {
     const x = (r() * 2 - 1) * (TOWN.area - 5), z = (r() * 2 - 1) * (TOWN.area - 5);
     const inWood = woods.some(p => inPoly(x, z, p));
     if (!free(x, z) || (!inWood && (k < trees.length * 0.55 || r() > 0.02))) continue;   // 庭木はまばらに
     trees[k].userData.bx = x; trees[k].userData.bz = z;
     trees[k].position.set(x, H(x, z) - 0.1, z); k++;
   }
-  for (; k < trees.length; k++) trees[k].visible = false;
+  for (; k < trees.length; k++) { trees[k].visible = false; trees[k].userData.off = true; }
+  for (const tr of trees) if (!tr.userData.off) townChunks.push({ o: tr, x: tr.position.x, z: tr.position.z, h: 6 });
+
+  // 建物・塀・白線・電柱・電線・車・池は、町じゅうをひとまとめにした形だと、霧の向こうの物まで毎フレーム描くことになる。
+  // 100m 四方の区画ごとに切り分けて、離れた区画は描かない（見た目は同じ）
+  {
+    let CH = 150;   // 電柱・車など（部品ごとに1回描く）は、区画を大きく（400m）して描く回数を増やさない
+    const key = (x, z) => Math.floor((x + TOWN.half) / CH) * 1000 + Math.floor((z + TOWN.half) / CH);
+    const center = k => [(Math.floor(k / 1000) + 0.5) * CH - TOWN.half, (k % 1000 + 0.5) * CH - TOWN.half];
+    const olds = scene.children.slice(nTown0).filter(o => (o.isMesh || o.isLineSegments) && !Array.isArray(o.material));
+    const v = new THREE.Vector3(), M4 = new THREE.Matrix4(), colT = new THREE.Color();
+    const copyProps = (n, o) => { n.castShadow = o.castShadow; n.receiveShadow = o.receiveShadow; n.renderOrder = o.renderOrder; n.customDepthMaterial = o.customDepthMaterial; n.position.copy(o.position); n.quaternion.copy(o.quaternion); n.scale.copy(o.scale); };
+    for (const o of olds) {
+      o.updateMatrixWorld();
+      CH = o.isInstancedMesh ? 400 : 150;
+      if (o.isInstancedMesh) {
+        const B = new Map();
+        for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, M4); v.setFromMatrixPosition(M4).applyMatrix4(o.matrixWorld); const k = key(v.x, v.z); (B.get(k) || B.set(k, []).get(k)).push(i); }
+        for (const [k, L] of B) {
+          const n = new THREE.InstancedMesh(o.geometry, o.material, L.length);
+          L.forEach((i, j) => { o.getMatrixAt(i, M4); n.setMatrixAt(j, M4); if (o.instanceColor) { o.getColorAt(i, colT); n.setColorAt(j, colT); } });
+          copyProps(n, o); n.computeBoundingSphere(); scene.add(n); const [x, z] = center(k); townChunks.push({ o: n, x, z, h: CH / 2 });
+        }
+      } else {
+        const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry, P = g.attributes.position, per = o.isLineSegments ? 2 : 3, B = new Map();
+        for (let i = 0; i + per <= P.count; i += per) { v.set(0, 0, 0); for (let q = 0; q < per; q++) { v.x += P.getX(i + q) / per; v.z += P.getZ(i + q) / per; } v.y = 0; v.applyMatrix4(o.matrixWorld); const k = key(v.x, v.z); (B.get(k) || B.set(k, []).get(k)).push(i); }
+        for (const [k, L] of B) {
+          const ng = new THREE.BufferGeometry();
+          for (const [name, A] of Object.entries(g.attributes)) {
+            // 色は 0〜255、法線は 16bit に詰める（町が広いので、形のデータを小さく）
+            const pack = A.array instanceof Float32Array && (name === 'color' ? 255 : name === 'normal' ? 32767 : 0);
+            const it = A.itemSize, arr = new (pack === 255 ? Uint8Array : pack ? Int16Array : A.array.constructor)(L.length * per * it);
+            L.forEach((i, j) => { for (let q = 0; q < per * it; q++) { const a = A.array[i * it + q]; arr[j * per * it + q] = pack ? Math.round(Math.max(pack === 255 ? 0 : -1, Math.min(1, a)) * pack) : a; } });
+            ng.setAttribute(name, new THREE.BufferAttribute(arr, it, pack ? true : A.normalized));
+          }
+          const n = o.isLineSegments ? new THREE.LineSegments(ng, o.material) : new THREE.Mesh(ng, o.material);
+          copyProps(n, o); scene.add(n); const [x, z] = center(k); townChunks.push({ o: n, x, z, h: CH / 2 });
+        }
+        if (g !== o.geometry) g.dispose();
+      }
+      scene.remove(o); o.geometry.dispose();
+    }
+  }
 }
+if (TOWN) { townTiles.max = 160; while (townTiles.size > townTiles.max) townTiles.delete(townTiles.keys().next().value); }
+const townCull = (x, z) => { for (const c of townChunks) { const dx = Math.max(0, Math.abs(c.x - x) - c.h), dz = Math.max(0, Math.abs(c.z - z) - c.h), vis = dx * dx + dz * dz < 158 * 158; if (c.o.visible !== vis) c.o.visible = vis; } };   // 区画のいちばん近い所が霧（150m）の向こうなら描かない
 
 // ---------- 柴犬（骨組み・歩き方・姿勢・仕草） ----------
 // 骨組み：胴は後ろ半身と前半身（背骨をしならせる）。脚は3節（前脚＝上腕・前腕・中手、後脚＝太もも・すね・中足）。
@@ -2754,8 +2835,27 @@ if (TOWN && /[?&]walk/.test(location.search)) {
     R.rdir *= -1;
   };
   // こちらに気づいた時のふるまい：yield＝道の端に寄って待つ／avoid＝引き返すか向こう側へ渡る／approach＝寄ってくる／turner＝ときどき引き返す
+  // 自分（x, z）から rMin〜rMax の住宅地の道に置く（put の人から gap 以上離す。うまく置けない時は間隔を少しずつ詰める）。置いた所を返す
+  const placeNear = (A, rMin, rMax, put, gap, x = walker.x, z = walker.z, hide = false) => {
+    ALLR = ALLR || TOWN.road.map(routeOf).filter(Q => Q.len > 25);
+    const near = ALLR.filter(Q => Q.p.some(q => Math.abs(q[0] - x) < rMax && Math.abs(q[1] - z) < rMax)), tot = near.reduce((a, Q) => a + Q.len, 0);
+    for (let tries = 0; tries < 500; tries++) {
+      let u = rand() * tot, Q = near[0]; for (const R of near) { if (u < R.len) { Q = R; break; } u -= R.len; }
+      const rs = rand() * Q.len, [px, pz] = at(Q, rs), d = Math.hypot(px - x, pz - z);
+      if (tries < 480 && (!resid(px, pz) || d < rMin || d > rMax || hide && visible(x, z, px, pz) || put.some(([ax, az]) => Math.hypot(px - ax, pz - az) < gap))) { if (tries % 60 === 59) gap *= 0.85; continue; }
+      A.route = Q; A.rs = rs; A.rdir = rand() < 0.5 ? 1 : -1; return [px, pz];
+    }
+    return at(A.route, A.rs);
+  };
   const personaStep = (a, R, hs, dt) => {
     if (!PERSONA || !a.persona) return;
+    if ((a.farT = (a.farT || 0) - dt) <= 0) {   // 遠く（380m 先）へ離れた人は、まわりの見えない道へ置き直す（広い町でも出会えるように）
+      a.farT = 3 + rand() * 2;
+      if (!a.mode && Math.hypot(walker.x - hs.x, walker.z - hs.z) > 380) {
+        const put = [W, ...OTHERS.slice(1), ...PEDS].filter(H => H !== R).map(H => at(H.route, H.rs));
+        placeNear(R, 180, 320, put, 60, walker.x, walker.z, true);
+      }
+    }
     if ((a.resT = (a.resT || 0) - dt) <= 0) {   // 住宅地の外へ出かかったら引き返す（道の途中で住宅地が途切れる時）
       a.resT = 1; const [rx, rz] = at(R.route, R.rs);
       if (!resid(rx, rz) && !a.mode && (a.resTurn = (a.resTurn || 0) - 1) <= 0) { R.rdir *= -1; a.resTurn = 6; }
@@ -2950,17 +3050,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       PEDS.forEach((o, k) => { const c = cands[k * 2 + 1] || cands[(k * 3) % Math.max(1, cands.length)] || { R: W.route }; o.route = c.R; o.rs = o.route.len * (0.15 + 0.23 * k) % o.route.len; o.rdir = k % 2 ? 1 : -1; });
       if (PERSONA) {   // ふだんは町じゅうのどこかにばらばらに置く（互いに、また自分からも離す。うまく置けない時は間隔を少しずつ詰める）
         ALLR = ALLR || TOWN.road.map(routeOf).filter(Q => Q.len > 25);
-        let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const Q of ALLR) for (const q of Q.p) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
-        const tot = ALLR.reduce((a, Q) => a + Q.len, 0), actors = [W, ...OTHERS.slice(1), ...PEDS], put = [];
-        let gap = Math.sqrt((x1 - x0) * (z1 - z0) / actors.length) * 0.7;
-        for (const A of actors) {
-          for (let tries = 0; ; tries++) {
-            let u = rand() * tot, Q = ALLR[0]; for (const R of ALLR) { if (u < R.len) { Q = R; break; } u -= R.len; }
-            const rs = rand() * Q.len, [px, pz] = at(Q, rs);
-            if (tries < 400 && (!resid(px, pz) || Math.hypot(px - x, pz - z) < 25 || put.some(([ax, az]) => Math.hypot(px - ax, pz - az) < gap))) { if (tries % 60 === 59) gap *= 0.85; continue; }
-            A.route = Q; A.rs = rs; A.rdir = rand() < 0.5 ? 1 : -1; put.push([px, pz]); break;
-          }
-        }
+        const actors = [W, ...OTHERS.slice(1), ...PEDS], put = [];
+        for (const A of actors) put.push(placeNear(A, 25, 300, put, Math.sqrt(Math.PI * 300 * 300 / actors.length) * 0.7, x, z));
       }
     },
     move(dt, t, dx, dz, mag) {
@@ -4323,6 +4414,7 @@ function frame(ts) {
   lastDraw = ts; window.__draws = (window.__draws || 0) + 1;   // 描いた回数（確認用）
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   if (!TEST) step(dt, t);   // 確認用（?test）は時間を手で進める
+  if (TOWN) { townWin(camera.position.x, camera.position.z); townCull(camera.position.x, camera.position.z); }
   renderer.render(scene, camera);
   if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
   if (fpsN % 3 === 0) drawMap();   // 地図は3コマに1回で十分
@@ -4342,7 +4434,7 @@ function frame(ts) {
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
 window.__V = THREE.Vector3; window.__isGrass = (x, z) => isGrass(x, z); window.__gy = (x, z) => H(x, z);
-window.__shiba = { lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; }, setFpv: v => setFpv(v), lookIn: () => lookIn, setGyro: (on, q) => { gyro = on; if (q) gyroQ = q; }, getFpv: () => ({ fpv, camPitch }) };
+window.__shiba = { townChunks, townTiles, get lowGridN() { return lowGrid ? lowGrid.size : 0; }, lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => { if (TOWN) { townWin(camera.position.x, camera.position.z); townCull(camera.position.x, camera.position.z); } renderer.render(scene, camera); }, snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; }, setFpv: v => setFpv(v), lookIn: () => lookIn, setGyro: (on, q) => { gyro = on; if (q) gyroQ = q; }, getFpv: () => ({ fpv, camPitch }) };
 </script>
 </body>
 </html>
