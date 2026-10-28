@@ -160,7 +160,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v95 · -- fps</div>
+<div id="fps" class="ui">v96 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
@@ -205,7 +205,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v95';
+const VERSION = 'v96';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2732,7 +2732,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
     if (e.repeat) return;
     if (e.code === 'KeyE') { if (W.canCatch) W.loose.catching = 0.001; else if (W.canPick && W.dung && !W.pick) { W.pick = { ph: 'down', t: 0, g: W.dung }; W.dung = null; } }
     else if (e.code === 'KeyC') { if (W.canCrouch) W.crouch = !W.crouch; }
-    else if (e.code === 'KeyT') { W.tray = !W.tray; W.trayT = 0; }
+    else if (e.code === 'KeyT') { if (W.feed && (W.feed.ph === 'show' || W.feed.ph === 'give' || W.feed.ph === 'doubt')) W.stowReq = true; else { W.tray = !W.tray; W.trayT = 0; } }
     else if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') { W.treatReq = { k: +e.code.slice(5) - 1 }; W.tray = false; }
     else if (e.code === 'KeyR') { if (W.canShort) W.short = !W.short; }
   });
@@ -2744,7 +2744,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   // 抜けた首輪（リードの先にぶら下がる）
   const emptyCollar = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.014, 6, 16), new THREE.MeshStandardMaterial({ color: 0xb8372a, roughness: 0.6 }));
   emptyCollar.visible = false; scene.add(emptyCollar);
-  treatBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.tray = !W.tray; W.trayT = 0; });
+  treatBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.feed && (W.feed.ph === 'show' || W.feed.ph === 'give' || W.feed.ph === 'doubt')) W.stowReq = true; else { W.tray = !W.tray; W.trayT = 0; } });
   const treatTray = document.getElementById('treatTray');
   [0, 1, 2].forEach(k => document.getElementById('treat' + k).addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.treatReq = { k }; W.tray = false; }));
   treatTray.addEventListener('pointerdown', e => e.stopPropagation());
@@ -3032,16 +3032,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         if (W.smell) { /* 上で行き先を決めた */ }
         else if (W.feed) {   // おやつ：見せる→柴が見たのを確かめる→ひざを少しかがめて差し出す→（気分しだいで迷う）→食べる（たまに吐き出す）
           const F = W.feed; F.t += dt; F.pt += dt;
+          if (W.stowReq) { W.stowReq = false; if (F.ph === 'show' || F.ph === 'give' || F.ph === 'doubt') { F.ph = 'stow'; F.pt = 0; W.msg = TREATS[F.k].name + 'をしまった'; W.msgT = 1.6; } }
           const fx = walker.x + Math.sin(walker.yaw) * 0.75, fz = walker.z + Math.cos(walker.yaw) * 0.75, dd = Math.hypot(fx - st.x, fz - st.z);
           gx = fx; gz = fz; dspd = dd > 0.08 ? Math.min(1.8, dd * 3) : 0;
           F.seen = dd < 0.3 ? F.seen + dt : 0;
           if (F.ph === 'show') {   // 手のおやつに気づいて、正面へ来て見上げる
             if (F.seen > 0.7) { F.ph = 'give'; F.pt = 0; }
-            else if (F.t > 6) W.feed = null;   // 来なかった
+            else if (F.t > 6) { F.ph = 'stow'; F.pt = 0; }   // 来なかった：しまう
           } else if (F.ph === 'give') {   // ひざを少しかがめて口元へ
             if (F.pt > 0.9) { F.ph = F.mood === 'eager' ? 'eat' : 'doubt'; F.pt = 0; F.doubt = 1.6 + rand() * 2.2; }
           } else if (F.ph === 'doubt') {   // 食べようか食べまいか：においを嗅いでは顔をそむける
-            if (F.pt > F.doubt) { if (F.refuse) { W.feed = null; W.msg = TREATS[F.k].name + 'は、嗅いだだけでぷいっ（食べない）'; W.msgT = 2.4; } else { F.ph = 'eat'; F.pt = 0; } }
+            if (F.pt > F.doubt) { if (F.refuse) { F.ph = 'stow'; F.pt = 0; W.msg = TREATS[F.k].name + 'は、嗅いだだけでぷいっ（食べない）'; W.msgT = 2.4; } else { F.ph = 'eat'; F.pt = 0; } }
           } else if (F.ph === 'eat') {
             const slow = F.mood !== 'eager';
             if (!F.bit && F.pt > 0.25) F.bit = true;   // ぱくっ
@@ -3056,6 +3057,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           } else if (F.ph === 'spit') {   // ぺっ：おやつが口から落ちる
             if (!F.dropped && F.pt > 0.5) { F.dropped = true; dropTreat(); W.msg = TREATS[F.k].name + 'をくわえたけど、下を向いてぽとりと落とした…'; W.msgT = 2.4; }
             if (F.pt > 1.4) W.feed = null;
+          } else if (F.ph === 'stow') {   // 手をポケットへ戻す。柴はその場で待つ
+            dspd = 0;
+            if (F.pt > 0.9) W.feed = null;
           }
         } else if (W.crouch && !seq && !W.sniff) {   // しゃがむと：満足していれば、うれしそうに寄ってきて顔を舐める
           if (W.sat > 0.5) {
@@ -3517,6 +3521,12 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           const k = F.ph === 'show' ? 0 : F.ph === 'give' ? smooth(0, 0.8, F.pt) : 1;
           const hp = show.lerp(mouth, k);
           if (F.ph === 'doubt') hp.add(new THREE.Vector3(Math.sin(st.yaw) * 0.04, 0, Math.cos(st.yaw) * 0.04));   // 迷っている間は口の少し先で待つ
+          if (F.ph === 'stow') {   // 腰の前まで引いてから、ポケットへ
+            if (!F.from) F.from = me.freeHand.clone();
+            if (F.pt > 0.45) { treatMesh.visible = false; return { crouch: 0, hand: 'pocket', tired: W.tired }; }
+            const u = smooth(0, 0.45, F.pt), hip = new THREE.Vector3(walker.x + Math.sin(walker.yaw) * 0.18, H(walker.x, walker.z) + 0.95, walker.z + Math.cos(walker.yaw) * 0.18);
+            treatMesh.visible = true; return { crouch: 0.5 * (1 - u) * (F.from.y < H(walker.x, walker.z) + 0.8 ? 1 : 0), lean: 1 - u, hand: F.from.clone().lerp(hip, u), tired: W.tired };
+          }
           treatMesh.visible = !F.bit;
           return { crouch: 0.5 * k, lean: k, hand: hp, tired: W.tired }; })()
         : W.grab ? (() => { const G = W.grab;
@@ -3561,7 +3571,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // ボタンは出したり消したりせず、使えない時は薄くするだけ（PCでも押しやすいように場所を固定）
       pickBtn.hidden = !!W.loose; catchBtn.hidden = !W.loose; crouchBtn.hidden = false;
       pickBtn.classList.toggle('off', !W.canPick); catchBtn.classList.toggle('off', !W.canCatch); crouchBtn.classList.toggle('off', !W.canCrouch);
-      treatBtn.classList.toggle('off', !!W.feed || !!W.pick || !!(W.loose && W.loose.catching));
+      const stowable = W.feed && (W.feed.ph === 'show' || W.feed.ph === 'give' || W.feed.ph === 'doubt');
+      treatBtn.classList.toggle('off', !!W.feed && !stowable || !!W.pick || !!(W.loose && W.loose.catching));
+      { const lb = stowable ? 'しまう' : 'おやつ'; if (treatBtn.dataset.l !== lb) { treatBtn.dataset.l = lb; treatBtn.innerHTML = lb + '<span class="key">T</span>'; } }
       if (treatBtn.classList.contains('off') || (W.trayT = (W.trayT || 0) + dt) > 6) W.tray = false;
       treatTray.hidden = !W.tray; treatBtn.classList.toggle('on', !!W.tray);
       const crouchLabel = W.crouch ? '立つ' : 'しゃがむ';
