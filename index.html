@@ -160,7 +160,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v96 · -- fps</div>
+<div id="fps" class="ui">v97 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
@@ -205,7 +205,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v96';
+const VERSION = 'v97';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2569,7 +2569,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
     A.el.quaternion.setFromUnitVectors(DOWN, tmpV);
   }
   const freeHand = new THREE.Vector3();
-  return { object: root, hand, freeHand, __legs: legs, __head: head, __chest: chest, update(dt, x, z, yaw, speed, aim, tension, act = null) {
+  return { object: root, hand, freeHand, __legs: legs, __head: head, __neck: neck, __chest: chest, update(dt, x, z, yaw, speed, aim, tension, act = null) {
     const crouch = act ? act.crouch || 0 : 0, tired = act ? act.tired || 0 : 0, lick = act ? act.lick || 0 : 0;
     breathPh += dt * (2 + 4 * tired);
     root.position.set(x, H(x, z), z); root.rotation.y = yaw;
@@ -3898,7 +3898,7 @@ const fpvBtn = document.getElementById('fpvBtn'), dogArrow = document.getElement
 function setFpv(v) {
   fpv = v; document.body.classList.toggle('fpv', fpv); lookPad.hidden = !fpv; lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; camPitch = -0.38; camSnap = true;
   fpvBtn.classList.toggle('on', fpv); fpvBtn.innerHTML = (fpv ? '後ろから' : '一人称') + '<span class="key">V</span>';
-  if (WALK) WALK.me.__head.visible = !fpv;   // 自分の頭は描かない（目の前に髪が来ないように）
+  if (WALK) WALK.me.__head.visible = WALK.me.__neck.visible = !fpv;   // 自分の頭と首は描かない（髪や、うつむいた時に首が目の前に来ないように）
   if (!fpv) dogArrow.hidden = true;
   gyroBtn.hidden = !(fpv && gyroOk);
 }
