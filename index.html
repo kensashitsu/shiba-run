@@ -172,10 +172,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v127</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v128</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v127 · -- fps</div>
+<div id="fps" class="ui">v128 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button></div>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v127';
+const VERSION = 'v128';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3168,8 +3168,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       rst = W.tgt.rst; rdst = W.tgt.rdst;
 
       // --- 飼い主（自分）
-      // なぞる量の半分で柴と同じ速さ（1.35m/s）、3/4 まで早歩き（1.8m/s）、9割まで小走り（3.0m/s）、それより大きく倒すと走る（最高6.5m/s）
-      let want = W.ev === 'bite' ? 0 : mag < 0.5 ? mag / 0.5 * 1.35 : mag < 0.75 ? 1.35 + (mag - 0.5) / 0.25 * 0.45 : mag < 0.9 ? 1.8 + (mag - 0.75) / 0.15 * 1.2 : 3.0 + (mag - 0.9) / 0.1 * 3.5;
+      const CURVE = [[0, 0], [0.3, 0.5], [0.6, 1.2], [0.85, 1.8], [0.95, 3.0], [1, 6.5]];   // スティックの倒し具合 → 速さ(m/s)。半分くらいまではゆっくり、ふつうの歩きは6割、全力は端いっぱいだけ
+      let want = 0; for (let i = 1; i < CURVE.length; i++) if (mag <= CURVE[i][0]) { const [a0, v0] = CURVE[i - 1], [a1, v1] = CURVE[i]; want = v0 + (v1 - v0) * (mag - a0) / (a1 - a0); break; }
+      if (W.ev === 'bite') want = 0;
       if (W.ev === 'bite') mag = 0;   // 咬まれた直後は手を引っ込めて動けない
       // フン拾い：歩み寄る→しゃがむ→袋をかぶせた手でつかむ→立つ→袋をしまう（その間は操作が効かない）
       W.pickPose = null;
@@ -4262,7 +4263,7 @@ function stepInner(dt, t) {
   if (titleOn) ix = iy = 0;   // タイトルの間は歩かない
   let mag = Math.min(Math.hypot(ix, iy), 1);
   // 散歩をキーで歩く時：ふだんは柴と同じ速さで歩き、Shift を押している間だけ走る（キーは全開か0なので、そのままだと常に全力疾走になる）
-  if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag *= keys.ShiftLeft || keys.ShiftRight ? 1 : 0.5; }
+  if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag *= keys.ShiftLeft || keys.ShiftRight ? 1 : 0.6; }   // キーはふつうの歩き（6割）
   // 歩く向きの基準：倒し始めた時のカメラの向きを、離すまで使う（カメラが飼い主を追って回ると、横に倒したまま向きが回り続けて、ぐるぐる回ってしまう）。
   // 自分でカメラを回した時だけ、基準をその向きに合わせる。一人称は見ている向きのまま
   if (WALK && !fpv && mag > 0.08) { if (moveRef === null || t - camDragT < 0.25) moveRef = camYaw; } else moveRef = null;
@@ -4325,6 +4326,7 @@ function stepInner(dt, t) {
   if (fpv && gyro) gyroStep();   // ジャイロ中は、カメラを自動で進む向き・相手へ向けない
   // 首輪が抜けた後は相手へ向け直さない（倒した向きが勝手に回って、思う方へ歩けなくなる）
   else if (WALK && WALK.W.mode === 'lock' && !WALK.W.ev) { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
+  else if (WALK && WALK.W.ev === 'loose') { /* 首輪が抜けて柴を追う間は、カメラを勝手に回さない（細かく向きを変えて近づくので、画面が回ると思った方へ行けない） */ }
   else if (fol.speed > 0.4 && t - camDragT > 1.5 && Math.abs(angDiff(camYaw, fol.yaw)) < 1.9) camYaw += angDiff(camYaw, fol.yaw) * Math.min(1, dt * 1.6);   // こちらへ向かって歩く時（手前に倒した時）は追わない：追うと「手前」が回り続け、その場でぐるぐる回る
   const dash = smooth(5.5, 8.5, st.speed);
   camera.fov += ((innerWidth < innerHeight ? (fpv ? 74 : 62) : (fpv ? 62 : 50)) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
