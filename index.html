@@ -160,7 +160,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v98 · -- fps</div>
+<div id="fps" class="ui">v99 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
@@ -205,7 +205,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v98';
+const VERSION = 'v99';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2687,20 +2687,27 @@ const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WA
 if (TOWN && /[?&]walk/.test(location.search)) {
   const me = makeHuman({ shirt: 0x3d5a80, pants: 0x2b2d33, hair: 0x2a1f1a });
   scene.add(me.object);
-  // 出会う相手：犬を連れた人が3組、それぞれ別の道を行き来する
+  // 出会う相手：犬を連れた人が5組、それぞれ別の道を行き来する
   const OTHERS = [
     { name: '黒柴', kind: 'shiba', react: 5, pace: 1.05, dog: makeDog({ red: 0x2a2421, cream: 0xd9b48a, earIn: 0xc9a27a }), man: makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b }) },
     { name: 'ボーダーコリー', kind: 'collie', react: 3, pace: 1.2, dog: makeDog({ red: 0x4a2a1c, cream: 0xf2efe8, earIn: 0x7a5040, size: 1.15, long: 1.2, leg: 1.15, ears: 'semi', tail: 'plume', muzzle: 1.3, blaze: true, ruff: true, shibaFace: false }), man: makeHuman({ shirt: 0x4f6b4a, pants: 0x34363d, hair: 0x2a2420 }) },
     { name: 'ラブラドール', kind: 'lab', react: 4, pace: 0.95, dog: makeDog({ red: 0x1e1c1c, cream: 0x1e1c1c, earIn: 0x2a2525, size: 1.25, long: 1.15, leg: 1.2, ears: 'drop', tail: 'otter', muzzle: 1.35, gloss: true, shibaFace: false }), man: makeHuman({ shirt: 0xd9b3a3, pants: 0x2e3542, hair: 0x3a2618, long: true }) },
+    { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'plume', muzzle: 0.95, shibaFace: false }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
+    { name: 'コーギー', kind: 'corgi', react: 4, pace: 1.0, dog: makeDog({ red: 0xc0722c, cream: 0xf3ece0, earIn: 0xd9a27a, size: 1.05, long: 1.3, leg: 0.6, muzzle: 1.1, blaze: true, tail: 'plume' }), man: makeHuman({ shirt: 0x2f3a4f, pants: 0x6b6050, hair: 0x1c1814 }) },
   ];
   for (const o of OTHERS) {
     scene.add(o.dog.object, o.dog.points, o.dog.extras, o.man.object);
     o.rst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 }; o.rdst = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 }; o.rs = 0; o.rdir = 1; o.st = 'walk'; o.t = 0; o.hold = 0; o.lostT = 0; o.barkT = 0;
     // 相手の犬のリード（飼い主の手から首輪、またはくわえた口へ）
     o.leashPts = new Float32Array(12 * 3); o.leashGeo = new LineGeometry(); o.leashGeo.setPositions(o.leashPts);
-    o.leashMat = new LineMaterial({ color: o.kind === 'collie' ? 0x2c6fb0 : o.kind === 'lab' ? 0x3f9a40 : 0x8a5a2a, linewidth: 2.5, worldUnits: false });
+    o.leashMat = new LineMaterial({ color: o.kind === 'collie' ? 0x2c6fb0 : o.kind === 'lab' ? 0x3f9a40 : o.kind === 'poodle' ? 0xd0607e : 0x8a5a2a, linewidth: 2.5, worldUnits: false });
     o.leash = new Line2(o.leashGeo, o.leashMat); o.leash.frustumCulled = false; scene.add(o.leash);
   }
+  // 犬を連れていない人：道を行き来するだけ（柴は気にしない）
+  const PEDS = [
+    makeHuman({ shirt: 0x9a3b3b, pants: 0x30343c, hair: 0x2a1f1a }), makeHuman({ shirt: 0xd8c27a, pants: 0x3e4a5c, hair: 0x5a4030, long: true }),
+    makeHuman({ shirt: 0x5b6d7a, pants: 0x262628, hair: 0x9a9a9a }), makeHuman({ shirt: 0x7a5a8a, pants: 0x44403a, hair: 0x1a1410, long: true }),
+  ].map((man, k) => { scene.add(man.object); return { man, pace: [1.25, 1.1, 0.85, 1.2][k], route: null, rs: 0, rdir: 1, x: 0, z: 0, yaw: 0 }; });
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
   const W = { mode: 'follow', smell: null, smellT: 0, smellAt: 40, crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   let rst = OTHERS[0].rst, rdst = OTHERS[0].rdst;   // 今気にしている相手（いちばん近くに見える犬）
@@ -2775,7 +2782,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rand = Math.random;
 
   WALK = {
-    me, OTHERS, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return (W.tgt || OTHERS[0]).rst; }, get rdst() { return (W.tgt || OTHERS[0]).rdst; }, W, leashMat,
+    me, OTHERS, PEDS, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return (W.tgt || OTHERS[0]).rst; }, get rdst() { return (W.tgt || OTHERS[0]).rdst; }, W, leashMat,
     start(x, z) {
       walker.x = x; walker.z = z;
       st.x = x + 1; st.z = z;
@@ -2795,7 +2802,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         if (dmin > 15 && dmin < 120) cands.push({ R, d: dmin });
       }
       cands.sort((a, b) => a.d - b.d);
-      OTHERS.slice(1).forEach((o, k) => { const c = cands[k * 2] || cands[k] || { R: W.route }; o.route = c.R; o.rs = o.route.len * (0.3 + 0.4 * k); o.rdir = k ? -1 : 1; });
+      OTHERS.slice(1).forEach((o, k) => { const c = cands[k * 2] || cands[k] || { R: W.route }; o.route = c.R; o.rs = o.route.len * (0.3 + 0.4 * k) % o.route.len; o.rdir = k % 2 ? -1 : 1; });
+      PEDS.forEach((o, k) => { const c = cands[k * 2 + 1] || cands[(k * 3) % Math.max(1, cands.length)] || { R: W.route }; o.route = c.R; o.rs = o.route.len * (0.15 + 0.23 * k) % o.route.len; o.rdir = k % 2 ? 1 : -1; });
     },
     move(dt, t, dx, dz, mag) {
       const S = dog.state;
@@ -2803,16 +2811,16 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       OTHERS.forEach((o, i) => {
         const R = i ? o : W, hs = o.rst, ds = o.rdst;   // 黒柴の道は W.route（確認用スクリプトが止めたり動かしたりする）
         // 気づく：こちらの柴が近くに見えている
-        const dSt = Math.hypot(st.x - o.rdst.x, st.z - o.rdst.z), seesMe = o.kind !== 'shiba' && dSt < 16 && visible(o.rdst.x, o.rdst.z, st.x, st.z);
+        const dSt = Math.hypot(st.x - o.rdst.x, st.z - o.rdst.z), seesMe = o.kind !== 'shiba' && o.kind !== 'corgi' && dSt < 16 && visible(o.rdst.x, o.rdst.z, st.x, st.z);
         o.lostT = seesMe ? 0 : o.lostT + dt; o.t += dt;
         if (o.kind === 'collie') {
           if (o.st === 'walk' && seesMe && dSt < 13) { o.st = 'down'; o.t = 0; }
           else if (o.st === 'down' && dSt < 4.5) { o.st = 'pounce'; o.t = 0; }
           else if (o.st === 'pounce' && dSt > 6.5) { o.st = 'down'; o.t = 0; }
           if (o.st !== 'walk' && (o.lostT > 3 || dSt > 18)) { o.st = 'walk'; o.t = 0; }
-        } else if (o.kind === 'lab') {
+        } else if (o.kind === 'lab' || o.kind === 'poodle') {
           if (o.st === 'walk' && seesMe) { o.st = 'bark'; o.t = 0; }
-          else if (o.st === 'bark' && dSt < 9 && o.t > 1.5) { o.st = 'tug'; o.t = 0; o.tugDur = 2.5 + Math.random() * 2; }   // 飼い主がリードを短く持って止める→リードをくわえて振り回す
+          else if (o.st === 'bark' && dSt < 9 && o.t > 1.5 && o.kind === 'lab') { o.st = 'tug'; o.t = 0; o.tugDur = 2.5 + Math.random() * 2; }   // 飼い主がリードを短く持って止める→リードをくわえて振り回す
           else if (o.st === 'tug' && o.t > o.tugDur) { o.st = 'bark'; o.t = 0; }
           if (o.st !== 'walk' && (o.lostT > 3 || dSt > 20)) { o.st = 'walk'; o.t = 0; }
         }
@@ -3477,6 +3485,14 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       S.gaze = W.mode === 'lock' || W.mode === 'stare' ? Math.max(-1.3, Math.min(1.3, angDiff(st.yaw, toRival))) : 0;
       if (W.mode !== 'lock' && S.rage < 0.05) S.rage = 0;
       if (W.mode === 'lock' && lvl >= 4) { W.barkT -= dt; if (W.barkT <= 0) { dog.command(S.rage > 0.5 ? 'barkHard' : 'bark', st); W.barkT = S.rage > 0.5 ? 0.12 + rand() * 0.1 : frenzy ? 0.16 + rand() * 0.14 : 0.35 + rand() * 0.5; } }   // 近いほど激しく
+      for (const o of PEDS) {   // 犬を連れていない人：道を進める。遠い人は描かない
+        o.rs += o.rdir * o.pace * dt;
+        if (o.rs > o.route.len || o.rs < 0) { o.rdir *= -1; o.rs = Math.max(0, Math.min(o.route.len, o.rs)); }
+        const [rx, rz, ryaw] = at(o.route, o.rs);
+        o.yaw = ryaw + (o.rdir < 0 ? Math.PI : 0); o.x = rx - Math.cos(o.yaw) * 0.8; o.z = rz + Math.sin(o.yaw) * 0.8;   // 道の端寄り（犬連れとは逆の側）
+        const far = Math.hypot(o.x - walker.x, o.z - walker.z) > 80;
+        o.man.object.visible = !far; if (!far) o.man.update(dt, o.x, o.z, o.yaw, o.pace, null, 0);
+      }
       for (const o of OTHERS) {   // 遠い組は描かない・動かさない（位置だけ進める）
         const far = Math.hypot(o.rst.x - walker.x, o.rst.z - walker.z) > 80;
         o.dog.object.visible = o.man.object.visible = o.leash.visible = !far; if (far) continue;
@@ -3666,6 +3682,7 @@ function drawMap() {
   // 見ている向き（扇）と犬
   if (WALK) {   // 散歩：ほかの犬は赤い点、自分の柴は小さな橙の点
     const dot = (x, z, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(W / 2 + (x - cx) * scale, Hh / 2 + (z - cz) * scale, r * u, 0, 7); c.fill(); };
+    for (const o of WALK.PEDS) dot(o.x, o.z, 2.6, '#6f6a62');   // 犬を連れていない人は灰色の小さな点
     for (const o of WALK.OTHERS) dot(o.rdst.x, o.rdst.z, 4, '#d23a2a');
     dot(st.x, st.z, 2.6, '#f08a3c');
   }
