@@ -45,6 +45,7 @@
     font: 700 17px var(--font-ui); letter-spacing: .06em; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   #title button.main { background: rgba(240,180,106,.85); color: #2b2118; border-color: rgba(255,240,210,.7); }
   #title button[hidden] { display: none; }
+  #tVer { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); right: max(14px, env(safe-area-inset-right, 0px)); color: #fffaf0; font: 500 12px var(--font-ui); letter-spacing: .04em; opacity: .7; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
   @media (orientation: landscape) and (max-height: 520px) {   /* 横持ち：ボタンは下に横並び */
     #title { flex-direction: row; align-items: flex-end; justify-content: center; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5vh); }
     #title h1 { top: calc(env(safe-area-inset-top, 0px) + 5vh); font-size: clamp(36px, 9vh, 56px); }
@@ -159,11 +160,11 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v93 · -- fps</div>
+<div id="fps" class="ui">v94 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
-<button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button></div>
+<button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
 <button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
 <button type="button" id="gyroBtn" class="ui" hidden>ジャイロ 切</button>
 <div id="dogArrow" class="ui" hidden>柴</div>
@@ -204,7 +205,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v93';
+const VERSION = 'v94';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3845,6 +3846,7 @@ step(0, 0);
   camera.position.set(o.x - Math.sin(camYaw) * 2.7, H(o.x, o.z) + 1.0, o.z - Math.cos(camYaw) * 2.7);
   camera.lookAt(o.x, H(o.x, o.z) + 0.42, o.z); }
 
+document.getElementById('tVer').textContent = VERSION;
 const titleEl = document.getElementById('title'), MODE = WALK ? 'walk' : TOWN ? 'town' : 'meadow';
 const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleFrames = 0; titleEl.hidden = !on; document.body.classList.toggle('titling', on); if (again) { titleAgain = true; document.getElementById('tContinue').hidden = false; document.getElementById(MODE === 'walk' ? 'tWalk' : 'tMeadow').textContent = MODE === 'walk' ? 'はじめから散歩' : 'はじめから走る'; } };
 let titleAgain = false;   // 遊んでいる途中から戻った：同じ遊びを選ぶと、はじめからやり直す
