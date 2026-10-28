@@ -150,7 +150,14 @@
   body.fpv #treatTray { bottom: calc(env(safe-area-inset-bottom, 0px) + 242px); }
   body.fpv #pickBtn, body.fpv #catchBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 304px); }
   body.fpv #shortBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 376px); }
-  #err { left: 16px; right: 16px; bottom: 140px; font-size: 12px; color: #ffd0c0; text-shadow: 0 1px 2px #000; }
+  /* 読み込み画面：ボタン類や描きかけの画面を隠す。絵も動きも無い（読み込みの邪魔をしない） */
+  #boot { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: calc(env(safe-area-inset-top, 0px) + 11vh);   /* 題字はタイトル画面と同じ位置 */
+    background: linear-gradient(to bottom, #6d8a5c, #3f5236); color: #fffaf0; text-align: center; }
+  #boot b { font: 700 clamp(40px, 12vw, 68px) var(--font-ui); letter-spacing: .08em; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
+  #boot i { font: normal 500 clamp(13px, 3.6vw, 17px) var(--font-ui); letter-spacing: .12em; opacity: .9; }
+  #boot span { margin-top: 30vh; font: 500 14px var(--font-ui); letter-spacing: .12em; opacity: .85; }
+  #boot small { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); right: max(14px, env(safe-area-inset-right, 0px)); font: 500 12px var(--font-ui); opacity: .6; }
+  #err { z-index: 60; left: 16px; right: 16px; bottom: 140px; font-size: 12px; color: #ffd0c0; text-shadow: 0 1px 2px #000; }
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap">
 <script type="importmap">
@@ -161,9 +168,10 @@
 </script>
 </head>
 <body>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v121</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v120 · -- fps</div>
+<div id="fps" class="ui">v121 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -208,7 +216,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v120';
+const VERSION = 'v121';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2528,7 +2536,10 @@ new RGBELoader().load('assets/sky.hdr', tex => {
   scene.fog.color.copy(FOG_COLOR);
   colorRidges();
   hintEl.textContent = WALK ? WALK_HINT : hintText;
-}, undefined, () => { hintEl.textContent = '空の写真を読み込めませんでした'; });
+  bootDone();
+}, undefined, () => { hintEl.textContent = '空の写真を読み込めませんでした'; bootDone(); });
+// 読み込み画面を外す：空の色が決まって、1コマ描いた後で（描きかけの画面を見せない）
+function bootDone() { requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('boot')?.remove())); }
 
 // ---------- 散歩（?walk）：飼い主を動かし、リードでつないだ柴を連れて歩く ----------
 // 柴は黒柴を見つけるとロックオンする：視線が相手に固定され、足を踏ん張って吠え続け、真後ろへ引いてもテコでも動かない。
