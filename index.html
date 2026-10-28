@@ -162,7 +162,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v112 · -- fps</div>
+<div id="fps" class="ui">v113 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -207,7 +207,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v112';
+const VERSION = 'v113';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3312,7 +3312,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             }
           }
           S.nose = W.rush && W.rush.ph === 'search' ? (W.rush.sniffT > 0 || W.rush.hunch > 0.5 ? 1 : 0.35) : 0; S.hunch = W.rush ? W.rush.hunch : 0;
-          const pace = W.heat ? (W.heat.ph === 'scent' ? 0 : 3.9 + 0.5 * Math.sin(t * 3.1)) : W.rush ? (W.rush.ph === 'seek' ? 3.4 : W.rush.spd ?? 2.6) : (1.33 + 0.13 * Math.sin(t * 0.19) + 0.06 * Math.sin(t * 0.53 + 1)) * (1 + 0.8 * W.ar);   // 柴が自分で歩く速さ（ゆっくり揺らぐ）。興奮しているほど速く、飼い主より先へ出て引っ張る
+          const pace = W.heat ? (W.heat.ph === 'scent' ? 0 : 3.9 + 0.5 * Math.sin(t * 3.1)) : W.rush ? (W.rush.ph === 'seek' ? 3.4 : W.rush.spd ?? 2.6) : (1.33 + 0.13 * Math.sin(t * 0.19) + 0.06 * Math.sin(t * 0.53 + 1)) * (1 + 0.8 * W.ar) * (1 - 0.35 * smooth(0.3, 0.8, S.fatigue || 0));   // 柴が自分で歩く速さ（ゆっくり揺らぐ）。興奮しているほど速く、飼い主より先へ出て引っ張る
           // 人がそれより速く歩く・走る時は、人の左前に並ぶ速さで（速さ＝人の速さ＋位置のずれの補正）
           // 飼い主が全力で走ると、柴はもっと速く先を行く：リードの端でピンと張って、飼い主は追いつけない
           const dash = smooth(3.5, 6, walker.speed), ahd = 0.9 + dash * (LEASH + 0.4 - 0.9);
@@ -3562,6 +3562,14 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         // 上がるほど歩くのが速くなってリードの先でグイグイ引き、飼い主の向きに合わせにくく、ときどき急に向きを変える
         const arUp = (W.sniff && W.sniff.heat ? 0.14 : 0) + (W.heat ? 0.08 : 0) + (W.mode === 'stare' ? 0.15 : W.mode === 'lock' || W.loose ? 0.3 : 0);
         W.arUp = arUp > 0;
+        W.spinCool = Math.max(0, (W.spinCool || 0) - dt);
+        const spinOk = W.mode === 'follow' && !W.ev && !W.sniff && !seq && !W.rush && !W.heat && !W.pick && !W.feed && !W.grab && !W.crouch && !W.ponder && !W.threat;
+        if (!W.spin && W.ar > 0.9 && W.spinCool <= 0 && spinOk) { W.spinWait = (W.spinWait ?? 0.5 + rand() * 1.5) - dt; if (W.spinWait <= 0) { W.spinWait = undefined; W.spin = { t: 0, dur: 4 + rand() * 2.5, dir: rand() < 0.5 ? 1 : -1, ang: Math.atan2(st.x - walker.x, st.z - walker.z), blk: 0 }; W.msg = '興奮しすぎて、飼い主のまわりをぐるぐる猛ダッシュ！'; W.msgT = 2.2; } }
+        if (W.spin && !spinOk) W.spin = null;   // 何か起きたら（ほかの犬・引いた・おやつ…）やめる
+        if (W.spin) { W.spin.t += dt; W.nextSniff = Math.max(W.nextSniff, 3); W.nextGraze = Math.max(W.nextGraze || 0, 3); W.begT = W.ponderT = 0; W.heatT = Math.min(W.heatT || 0, 10); W.poopT = Math.max(0, (W.poopT || 0) - dt);
+          if (W.spin.t >= W.spin.dur) { W.spin = null; W.spinCool = 90; W.ar = Math.min(W.ar, 0.25); S.fatigue = 0.9; W.pantStop = 2.5; W.msg = 'ハアハア…はしゃぎ疲れた'; W.msgT = 2.2; } }
+        if (!W.spin) S.fatigue = Math.max(0, (S.fatigue || 0) - 0.03 * dt);   // 疲れはだんだん抜ける（散歩では think を通らないので、ここで）
+        W.pantStop = Math.max(0, (W.pantStop || 0) - dt);
         if (W.ar > 0.6 && !W.arHi && W.mode === 'follow') { W.msg = '興奮して、グイグイ引っ張る'; W.msgT = 1.8; } W.arHi = W.ar > 0.6 ? true : W.ar < 0.45 ? false : W.arHi;   // 0.6 を超えた時に一度だけ知らせる
         W.ar = Math.max(0, Math.min(1, W.ar + (arUp > 0 ? arUp : -(W.sniff && !W.sniff.heat ? 0.12 : W.crouch ? 0.08 : 0.018 + 0.03 * W.harm)) * dt));   // ふつうの匂い嗅ぎ（草を食べるのも）でいちばん落ち着く。しゃがんでなでても早い。歩調が合っていても少し早い
       }
@@ -3578,6 +3586,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.ev === 'loose' && W.mode === 'free') dyaw = W.loose.catching || W.loose.ph === 'look' || dspd < 0.2 && (W.loose.lure > 0 || W.loose.ph === 'come') ? Math.atan2(walker.x - st.x, walker.z - st.z) : dspd > 0.1 ? gyaw : st.yaw;
       if (W.ev === 'bite') dyaw = Math.atan2(walker.x - st.x, walker.z - st.z);
 
+      if (W.spin) {
+        const P = W.spin, v = 5.2 * smooth(0, 0.6, P.t) * (1 - 0.7 * smooth(P.dur - 1, P.dur, P.t));
+        P.ang = Math.atan2(st.x - walker.x, st.z - walker.z) + P.dir * v * dt / (P.r ?? Math.max(0.6, LEASH - 0.2));
+        let r = Math.max(0.6, LEASH - 0.2);   // 塀や車があるところは輪を小さくしてすり抜ける
+        for (const u of [1, 0.8, 0.62, 0.48]) { const rr = Math.max(0.6, LEASH - 0.2) * u, qx = walker.x + Math.sin(P.ang) * rr, qz = walker.z + Math.cos(P.ang) * rr, fa = P.ang + P.dir * Math.PI / 2; r = rr; if (!townBlocked(qx, qz) && !townBlocked(qx + Math.sin(fa) * 0.4, qz + Math.cos(fa) * 0.4) && !townBlocked(qx - Math.sin(fa) * 0.3, qz - Math.cos(fa) * 0.3)) break; }
+        P.r = (P.r ?? r) + (r - (P.r ?? r)) * Math.min(1, dt * 10); r = P.r;
+        sx = walker.x + Math.sin(P.ang) * r; sz = walker.z + Math.cos(P.ang) * r;
+        dyaw = P.ang + P.dir * Math.PI / 2 - P.dir * 0.25;   // 進む向き（少し内向き）
+        walker.yaw += angDiff(walker.yaw, Math.atan2(st.x - walker.x, st.z - walker.z)) * Math.min(1, dt * 7);   // 飼い主はその場で柴を目で追って回る
+      }
+      if (W.pantStop > 0 && W.mode === 'follow' && !W.ev) { sx = st.x; sz = st.z; }   // ひと息つく：立ち止まってハアハア
       const tied = W.ev !== 'loose', cross0 = tied && lowCross(walker.x, walker.z, st.x, st.z);   // すでにまたいでいる時（置き直した直後など）は、それ以上は止めない
       const manHits = (x, z) => townBlocked(x, z) || [0, 1.57, 3.14, 4.71].some(a => lowHit(x + Math.sin(a) * 0.17, z + Math.cos(a) * 0.17)) || tied && !cross0 && lowCross(x, z, st.x, st.z);   // リードが塀に掛かって、塀の向こうとこちらには分かれられない
       if (!manHits(nx, nz)) { walker.x = nx; walker.z = nz; }
@@ -3601,7 +3620,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (okAt(st.x, sz, st.yaw)) st.z = sz;
       const real = Math.hypot(st.x - x0, st.z - z0);   // 実際に動けた距離（塀に当たって進めなければ、脚も止まる）
       st.speed += (real / Math.max(dt, 1e-4) - st.speed) * Math.min(1, dt * 8);
-      W.stuckT = moved > 0.3 * dt && real < 0.3 * moved && W.mode === 'follow' && !W.ev ? (W.stuckT || 0) + dt : 0;
+      if (W.spin && moved > 0.3 * dt && real < 0.3 * moved) { W.spin.blk += dt; if (W.spin.blk > 0.25) { W.spin.blk = -0.6; W.spin.dir *= -1; W.spin.rev = (W.spin.rev || 0) + 1; if (W.spin.rev >= 2) W.spin.t = Math.max(W.spin.t, W.spin.dur - 0.6); } }   // 塀に当たったら逆回り。2度目なら止まる
+      W.stuckT = !W.spin && moved > 0.3 * dt && real < 0.3 * moved && W.mode === 'follow' && !W.ev ? (W.stuckT || 0) + dt : 0;
       if (W.stuckT > 0.5) {   // 行き止まり：空いている方へ向き直って進む（飼い主から離れすぎない向きを先に）
         W.stuckT = 0; const toW = Math.atan2(walker.x - st.x, walker.z - st.z);
         let best = null, bs = -1e9;
@@ -3814,6 +3834,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'follow' && W.leftT > 0 && !S.act) uiL.textContent = 'フンを置き去りにしてしまった…';
       else if (W.mode === 'follow' && W.dung && !S.act && !W.sniff) uiL.textContent = Math.hypot(W.dung.position.x - walker.x, W.dung.position.z - walker.z) < 1.3 ? '「拾う」を押してフンを拾う' : 'フンを拾おう（近づくと「拾う」が出る）';
       else if (W.mode === 'follow' && S.act === 'shake') uiL.textContent = 'ブルブル…（身震いして落ち着く）';
+      else if (W.mode === 'follow' && W.spin) uiL.textContent = 'ぐるぐる猛ダッシュ！';
       else if (W.mode === 'follow' && W.heat) uiL.textContent = W.heat.ph === 'scent' ? 'ふんふん…何かを嗅ぎつけた' : (W.pulledK > 0.5 ? '猛ダッシュ！ 引っ張られて小走りに' : '鼻を地面につけたまま猛ダッシュ！');
       else if (W.mode === 'follow' && W.sniff && W.sniff.heat) uiL.textContent = 'くんくんくんくん！ 異様に執着している' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.grab && W.grab.ph !== 'let' && S.act !== 'mark') uiL.textContent = '首輪の近くを持って、軽く手前に引いている' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
