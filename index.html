@@ -160,7 +160,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v99 · -- fps</div>
+<div id="fps" class="ui">v100 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
@@ -205,7 +205,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v99';
+const VERSION = 'v100';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2689,11 +2689,11 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   scene.add(me.object);
   // 出会う相手：犬を連れた人が5組、それぞれ別の道を行き来する
   const OTHERS = [
-    { name: '黒柴', kind: 'shiba', react: 5, pace: 1.05, dog: makeDog({ red: 0x2a2421, cream: 0xd9b48a, earIn: 0xc9a27a }), man: makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b }) },
-    { name: 'ボーダーコリー', kind: 'collie', react: 3, pace: 1.2, dog: makeDog({ red: 0x4a2a1c, cream: 0xf2efe8, earIn: 0x7a5040, size: 1.15, long: 1.2, leg: 1.15, ears: 'semi', tail: 'plume', muzzle: 1.3, blaze: true, ruff: true, shibaFace: false }), man: makeHuman({ shirt: 0x4f6b4a, pants: 0x34363d, hair: 0x2a2420 }) },
-    { name: 'ラブラドール', kind: 'lab', react: 4, pace: 0.95, dog: makeDog({ red: 0x1e1c1c, cream: 0x1e1c1c, earIn: 0x2a2525, size: 1.25, long: 1.15, leg: 1.2, ears: 'drop', tail: 'otter', muzzle: 1.35, gloss: true, shibaFace: false }), man: makeHuman({ shirt: 0xd9b3a3, pants: 0x2e3542, hair: 0x3a2618, long: true }) },
-    { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'plume', muzzle: 0.95, shibaFace: false }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
-    { name: 'コーギー', kind: 'corgi', react: 4, pace: 1.0, dog: makeDog({ red: 0xc0722c, cream: 0xf3ece0, earIn: 0xd9a27a, size: 1.05, long: 1.3, leg: 0.6, muzzle: 1.1, blaze: true, tail: 'plume' }), man: makeHuman({ shirt: 0x2f3a4f, pants: 0x6b6050, hair: 0x1c1814 }) },
+    { name: '黒柴', kind: 'shiba', react: 5, pace: 1.05, persona: 'yield', dog: makeDog({ red: 0x2a2421, cream: 0xd9b48a, earIn: 0xc9a27a }), man: makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b }) },
+    { name: 'ボーダーコリー', kind: 'collie', react: 3, pace: 1.2, persona: 'turner', dog: makeDog({ red: 0x4a2a1c, cream: 0xf2efe8, earIn: 0x7a5040, size: 1.15, long: 1.2, leg: 1.15, ears: 'semi', tail: 'plume', muzzle: 1.3, blaze: true, ruff: true, shibaFace: false }), man: makeHuman({ shirt: 0x4f6b4a, pants: 0x34363d, hair: 0x2a2420 }) },
+    { name: 'ラブラドール', kind: 'lab', react: 4, pace: 0.95, persona: 'avoid', dog: makeDog({ red: 0x1e1c1c, cream: 0x1e1c1c, earIn: 0x2a2525, size: 1.25, long: 1.15, leg: 1.2, ears: 'drop', tail: 'otter', muzzle: 1.35, gloss: true, shibaFace: false }), man: makeHuman({ shirt: 0xd9b3a3, pants: 0x2e3542, hair: 0x3a2618, long: true }) },
+    { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, persona: 'turner', flexi: true, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'plume', muzzle: 0.95, shibaFace: false }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
+    { name: 'コーギー', kind: 'corgi', react: 4, pace: 1.0, persona: 'approach', dog: makeDog({ red: 0xc0722c, cream: 0xf3ece0, earIn: 0xd9a27a, size: 1.05, long: 1.3, leg: 0.6, muzzle: 1.1, blaze: true, tail: 'plume' }), man: makeHuman({ shirt: 0x2f3a4f, pants: 0x6b6050, hair: 0x1c1814 }) },
   ];
   for (const o of OTHERS) {
     scene.add(o.dog.object, o.dog.points, o.dog.extras, o.man.object);
@@ -2707,12 +2707,78 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const PEDS = [
     makeHuman({ shirt: 0x9a3b3b, pants: 0x30343c, hair: 0x2a1f1a }), makeHuman({ shirt: 0xd8c27a, pants: 0x3e4a5c, hair: 0x5a4030, long: true }),
     makeHuman({ shirt: 0x5b6d7a, pants: 0x262628, hair: 0x9a9a9a }), makeHuman({ shirt: 0x7a5a8a, pants: 0x44403a, hair: 0x1a1410, long: true }),
-  ].map((man, k) => { scene.add(man.object); return { man, pace: [1.25, 1.1, 0.85, 1.2][k], route: null, rs: 0, rdir: 1, x: 0, z: 0, yaw: 0 }; });
+  ].map((man, k) => { scene.add(man.object); return { man, ped: true, persona: ['approach', 'yield', 'turner', 'avoid'][k], pace: [1.25, 1.1, 0.85, 1.2][k], route: null, rs: 0, rdir: 1, x: 0, z: 0, yaw: 0, speed: 0 }; });
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
   const W = { mode: 'follow', smell: null, smellT: 0, smellAt: 40, crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   let rst = OTHERS[0].rst, rdst = OTHERS[0].rdst;   // 今気にしている相手（いちばん近くに見える犬）
   // 道路の線を一本選んで行き来させる（自分の出発地点の近くを通る、長い道）
-  const routeOf = r => { const p = ringOf(r.p), cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return { p, cum, len: cum[cum.length - 1] }; };
+  const routeOf = r => { const p = ringOf(r.p), cum = [0]; for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1])); return { p, cum, len: cum[cum.length - 1], w: r.w || 2.6 }; };
+  const PERSONA = !TEST || /[?&]persona/.test(location.search);   // 確かめる時（?test）は、決まった道を行き来するだけにする
+  let ALLR = null;
+  // 道の端まで来た：つながっている道へ曲がる（なければ引き返す）
+  const endOfRoad = R => {
+    const e = R.rs > R.route.len / 2 ? R.route.p[R.route.p.length - 1] : R.route.p[0];
+    R.rs = Math.max(0, Math.min(R.route.len, R.rs));
+    if (PERSONA) {
+      ALLR = ALLR || TOWN.road.map(routeOf).filter(Q => Q.len > 25);
+      const opts = [];
+      for (const Q of ALLR) { if (Q.p === R.route.p) continue; for (let j = 0; j < Q.p.length; j++) if (Math.hypot(Q.p[j][0] - e[0], Q.p[j][1] - e[1]) < 4) { opts.push([Q, j]); break; } }
+      if (opts.length && rand() < 0.85) {
+        const [Q, j] = opts[Math.floor(rand() * opts.length)];
+        R.route = Q; R.rs = Q.cum[j]; R.rdir = j === 0 ? 1 : j === Q.p.length - 1 ? -1 : rand() < 0.5 ? 1 : -1; return;
+      }
+    }
+    R.rdir *= -1;
+  };
+  // こちらに気づいた時のふるまい：yield＝道の端に寄って待つ／avoid＝引き返すか向こう側へ渡る／approach＝寄ってくる／turner＝ときどき引き返す
+  const personaStep = (a, R, hs, dt) => {
+    if (!PERSONA || !a.persona) return;
+    a.cool = (a.cool || 0) - dt; a.modeT = (a.modeT || 0) + dt;
+    const dMe = Math.hypot(walker.x - hs.x, walker.z - hs.z), closing = dMe < (a.prevD ?? 99) - 0.002; a.prevD = dMe;
+    const edge = Math.max(0.7, R.route.w / 2 - 0.35);
+    const sees = r => dMe < r && visible(hs.x, hs.z, walker.x, walker.z);
+    const set = (m, extra) => { a.mode = m; a.modeT = 0; Object.assign(a, extra); };
+    if (a.persona === 'turner' && !a.mode && (a.turnT = (a.turnT ?? 20 + rand() * 30) - dt) <= 0) { R.rdir *= -1; a.turnT = 25 + rand() * 35; }
+    if (a.persona === 'yield') {
+      if (!a.mode && a.cool <= 0 && closing && sees(a.ped ? 9 : 16)) { set('yield', { latT: edge, stop: true, minD: dMe }); if (!a.ped) a.sitReq = true; }
+      if (a.mode === 'yield') { a.minD = Math.min(a.minD, dMe); if (dMe > a.minD + 2.5 || dMe > 24 || a.modeT > 30) set(null, { latT: null, stop: false, cool: 15 }); }
+    }
+    if (a.persona === 'avoid') {
+      if (!a.mode && a.cool <= 0 && closing && sees(a.ped ? 12 : 24)) {
+        if (rand() < 0.55) { R.rdir *= -1; a.cool = 30; }   // 引き返す
+        else set('cross', { latT: -edge });               // 道の向こう側へ渡ってすれ違う
+      }
+      if (a.mode === 'cross' && (dMe > 26 || a.modeT > 40)) set(null, { latT: null, cool: 20 });
+    }
+    if (a.persona === 'approach') {
+      const tx = a.ped ? st.x : walker.x, tz = a.ped ? st.z : walker.z, gd = a.ped ? 0.95 : 2.0;   // 犬好きの人は柴のそばへ、犬連れの人は飼い主と立ち話できる所へ
+      if (!a.mode && a.cool <= 0 && (W.mode === 'follow' && !W.ev) && sees(14)) { set('go', { stop: true }); if (a.ped) { W.msg = '近所の人が、柴に気づいて寄ってきた'; W.msgT = 2.2; } }
+      if (a.mode === 'go' || a.mode === 'greet') {
+        const ux = hs.x - tx, uz = hs.z - tz, ul = Math.hypot(ux, uz) || 1;
+        if (a.mode === 'go' || ul > gd + 0.6) a.goal = { x: tx + ux / ul * gd, z: tz + uz / ul * gd };   // 立ち止まった後は、相手が少し動いても足を動かさない
+        a.face = Math.atan2(tx - hs.x, tz - hs.z);
+        const there = Math.hypot(a.goal.x - hs.x, a.goal.z - hs.z) < 0.3;
+        if (a.mode === 'go' && there) set('greet', { greetDur: 4 + rand() * 3 });
+        if (a.mode === 'go' && (a.modeT > 14 || W.ev || W.mode === 'lock')) set('back', { goal: null });
+        if (a.mode === 'greet' && (a.modeT > a.greetDur || ul > gd + 3 || W.ev)) set('back', { goal: null });
+      }
+      if (a.mode === 'back' && a.backDone) set(null, { stop: false, cool: 60, backDone: false, face: null });
+    }
+  };
+  // 道の上の位置（端からの距離 lat）か、寄っていく先（goal）へ、歩く速さで近づく
+  const walkTo = (a, R, hs, dt) => {
+    a.hold = a.hold || 0;
+    const [rx, rz, ryaw] = at(R.route, R.rs), ryw = ryaw + (R.rdir < 0 ? Math.PI : 0);
+    a.lat = a.lat ?? 0.6; a.lat += ((a.latT ?? 0.6) - a.lat) * Math.min(1, dt * 1.2);
+    const ax = a.goal ? a.goal.x : rx - Math.cos(ryw) * a.lat, az = a.goal ? a.goal.z : rz + Math.sin(ryw) * a.lat;
+    if (!hs.init || !a.goal && a.mode !== 'back' && Math.hypot(ax - hs.x, az - hs.z) > 4) { hs.x = ax; hs.z = az; hs.yaw = ryw; hs.init = true; }   // 置き直された時（道を飛んだ時）は、その場へ
+    const mx = ax - hs.x, mz = az - hs.z, md = Math.hypot(mx, mz), stepL = Math.min(md, dt * Math.min(md * 4, a.pace * 1.7));
+    if (md > 1e-4) { hs.x += mx / md * stepL; hs.z += mz / md * stepL; }
+    hs.speed = stepL / Math.max(dt, 1e-4);
+    if (a.mode === 'back' && md < 0.3) a.backDone = true;
+    const fy = hs.speed > 0.25 ? Math.atan2(mx, mz) : a.face ?? ryw;
+    hs.yaw += angDiff(hs.yaw, fy) * Math.min(1, dt * 6);
+  };
   const at = (R, s) => {
     s = Math.max(0, Math.min(R.len, s)); let i = 1; while (i < R.cum.length - 1 && R.cum[i] < s) i++;
     const a = R.p[i - 1], b = R.p[i], u = (s - R.cum[i - 1]) / ((R.cum[i] - R.cum[i - 1]) || 1);
@@ -2804,6 +2870,20 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       cands.sort((a, b) => a.d - b.d);
       OTHERS.slice(1).forEach((o, k) => { const c = cands[k * 2] || cands[k] || { R: W.route }; o.route = c.R; o.rs = o.route.len * (0.3 + 0.4 * k) % o.route.len; o.rdir = k % 2 ? -1 : 1; });
       PEDS.forEach((o, k) => { const c = cands[k * 2 + 1] || cands[(k * 3) % Math.max(1, cands.length)] || { R: W.route }; o.route = c.R; o.rs = o.route.len * (0.15 + 0.23 * k) % o.route.len; o.rdir = k % 2 ? 1 : -1; });
+      if (PERSONA) {   // ふだんは町じゅうのどこかにばらばらに置く（互いに、また自分からも離す。うまく置けない時は間隔を少しずつ詰める）
+        ALLR = ALLR || TOWN.road.map(routeOf).filter(Q => Q.len > 25);
+        let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const Q of ALLR) for (const q of Q.p) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+        const tot = ALLR.reduce((a, Q) => a + Q.len, 0), actors = [W, ...OTHERS.slice(1), ...PEDS], put = [];
+        let gap = Math.sqrt((x1 - x0) * (z1 - z0) / actors.length) * 0.7;
+        for (const A of actors) {
+          for (let tries = 0; ; tries++) {
+            let u = rand() * tot, Q = ALLR[0]; for (const R of ALLR) { if (u < R.len) { Q = R; break; } u -= R.len; }
+            const rs = rand() * Q.len, [px, pz] = at(Q, rs);
+            if (tries < 400 && (Math.hypot(px - x, pz - z) < 25 || put.some(([ax, az]) => Math.hypot(px - ax, pz - az) < gap))) { if (tries % 60 === 59) gap *= 0.85; continue; }
+            A.route = Q; A.rs = rs; A.rdir = rand() < 0.5 ? 1 : -1; put.push([px, pz]); break;
+          }
+        }
+      }
     },
     move(dt, t, dx, dz, mag) {
       const S = dog.state;
@@ -2824,18 +2904,27 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           else if (o.st === 'tug' && o.t > o.tugDur) { o.st = 'bark'; o.t = 0; }
           if (o.st !== 'walk' && (o.lostT > 3 || dSt > 20)) { o.st = 'walk'; o.t = 0; }
         }
-        o.hold += ((o.st === 'walk' ? 0 : 1) - o.hold) * Math.min(1, dt * 3);   // 飼い主は立ち止まる
+        personaStep(o, R, hs, dt);
+        o.hold += ((o.st === 'walk' && !o.stop ? 0 : 1) - o.hold) * Math.min(1, dt * 3);   // 飼い主は立ち止まる
         R.rs += R.rdir * o.pace * (1 - o.hold) * dt;
-        if (R.rs > R.route.len || R.rs < 0) { R.rdir *= -1; R.rs = Math.max(0, Math.min(R.route.len, R.rs)); }
-        const [rx, rz, ryaw] = at(R.route, R.rs);
-        hs.speed = o.pace * (1 - o.hold); hs.yaw = ryaw + (R.rdir < 0 ? Math.PI : 0);
-        hs.x = rx - Math.cos(hs.yaw) * 0.6; hs.z = rz + Math.sin(hs.yaw) * 0.6;                    // 道の端寄りを歩く
-        const sz = o.dog.object.scale.x, hx = hs.x + Math.cos(hs.yaw) * 0.7 * sz + Math.sin(hs.yaw) * 0.5, hz = hs.z - Math.sin(hs.yaw) * 0.7 * sz + Math.cos(hs.yaw) * 0.5;   // 犬は飼い主の横を少し先に
-        if (!ds.init) { ds.x = hx; ds.z = hz; ds.init = true; }
-        ds.x += (hx - ds.x) * Math.min(1, dt * 4); ds.z += (hz - ds.z) * Math.min(1, dt * 4);
-        ds.yaw = hs.yaw; ds.speed = hs.speed;
+        if (R.rs > R.route.len || R.rs < 0) endOfRoad(R);
+        walkTo(o, R, hs, dt);   // 道の端寄りを歩く（寄っていく時は道を外れる）
+        const sz = o.dog.object.scale.x;
+        let hx = hs.x + Math.cos(hs.yaw) * 0.7 * sz + Math.sin(hs.yaw) * 0.5, hz = hs.z - Math.sin(hs.yaw) * 0.7 * sz + Math.cos(hs.yaw) * 0.5;   // 犬は飼い主の横を少し先に
+        if (o.mode === 'yield') { const ex = -Math.cos(hs.yaw), ez = Math.sin(hs.yaw); hx = hs.x + ex * 0.35 + Math.sin(hs.yaw) * 0.25; hz = hs.z + ez * 0.35 + Math.cos(hs.yaw) * 0.25; }   // 端に寄せて足元に座らせる
+        else if (o.flexi) {   // 伸びるリード：先へ横へと、においを嗅ぎながら数メートル離れて歩く
+          if ((o.flexT = (o.flexT || 0) - dt) <= 0) { o.fa = (rand() - 0.5) * 2.2; o.fd = 1.2 + rand() * 2.6; o.flexT = 2.5 + rand() * 4; }
+          hx = hs.x + Math.sin(hs.yaw + o.fa) * o.fd; hz = hs.z + Math.cos(hs.yaw + o.fa) * o.fd;
+          if (townBlocked(hx, hz)) { o.fd = 1; o.flexT = 0.5; hx = hs.x + Math.sin(hs.yaw) * 1; hz = hs.z + Math.cos(hs.yaw) * 1; }
+        }
+        if (!ds.init || Math.hypot(hx - ds.x, hz - ds.z) > 6) { ds.x = hx; ds.z = hz; ds.init = true; }   // 飼い主ごと置き直された時は、その場へ
+        { const mx = hx - ds.x, mz = hz - ds.z, md = Math.hypot(mx, mz), sp = Math.min(md * 4, o.flexi ? 2.2 : 6), px = ds.x, pz = ds.z;
+          if (md > 1e-4) { ds.x += mx / md * Math.min(md, sp * dt); ds.z += mz / md * Math.min(md, sp * dt); }
+          const v = Math.hypot(ds.x - px, ds.z - pz) / Math.max(dt, 1e-4);
+          ds.speed = v; ds.yaw = o.flexi && v > 0.2 ? ds.yaw + angDiff(ds.yaw, Math.atan2(mx, mz)) * Math.min(1, dt * 6) : hs.yaw; }
+        if (o.sitReq) { o.sitReq = false; o.dog.command('sit', ds); }
         if (o.st !== 'walk') {   // こちらを向く。飛びかかる・吠える時はリードの届く所まで前へ
-          const toMe = Math.atan2(st.x - hs.x, st.z - hs.z), reach = o.st === 'pounce' ? 1.5 : o.st === 'bark' ? 1.2 : o.st === 'tug' ? 0.9 : 0.8;
+          const toMe = Math.atan2(st.x - hs.x, st.z - hs.z), reach = o.st === 'pounce' ? 1.5 : o.st === 'bark' ? (o.flexi ? 3.4 : 1.2) : o.st === 'tug' ? 0.9 : 0.8;
           const tx = hs.x + Math.sin(toMe) * reach + Math.cos(toMe) * 0.25, tz = hs.z + Math.cos(toMe) * reach - Math.sin(toMe) * 0.25;
           ds.x += (tx - ds.x) * Math.min(1, dt * 3); ds.z += (tz - ds.z) * Math.min(1, dt * 3);
           ds.yaw = o.st === 'tug' ? toMe + Math.PI * 0.5 : Math.atan2(st.x - ds.x, st.z - ds.z);   // 振り回す時は横を向いてリードを引っぱる
@@ -3486,12 +3575,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.mode !== 'lock' && S.rage < 0.05) S.rage = 0;
       if (W.mode === 'lock' && lvl >= 4) { W.barkT -= dt; if (W.barkT <= 0) { dog.command(S.rage > 0.5 ? 'barkHard' : 'bark', st); W.barkT = S.rage > 0.5 ? 0.12 + rand() * 0.1 : frenzy ? 0.16 + rand() * 0.14 : 0.35 + rand() * 0.5; } }   // 近いほど激しく
       for (const o of PEDS) {   // 犬を連れていない人：道を進める。遠い人は描かない
-        o.rs += o.rdir * o.pace * dt;
-        if (o.rs > o.route.len || o.rs < 0) { o.rdir *= -1; o.rs = Math.max(0, Math.min(o.route.len, o.rs)); }
-        const [rx, rz, ryaw] = at(o.route, o.rs);
-        o.yaw = ryaw + (o.rdir < 0 ? Math.PI : 0); o.x = rx - Math.cos(o.yaw) * 0.8; o.z = rz + Math.sin(o.yaw) * 0.8;   // 道の端寄り（犬連れとは逆の側）
+        personaStep(o, o, o, dt);
+        o.hold = (o.hold || 0) + ((o.stop ? 1 : 0) - (o.hold || 0)) * Math.min(1, dt * 3);
+        o.rs += o.rdir * o.pace * (1 - o.hold) * dt;
+        if (o.rs > o.route.len || o.rs < 0) endOfRoad(o);
+        walkTo(o, o, o, dt);
         const far = Math.hypot(o.x - walker.x, o.z - walker.z) > 80;
-        o.man.object.visible = !far; if (!far) o.man.update(dt, o.x, o.z, o.yaw, o.pace, null, 0);
+        o.man.object.visible = !far;
+        if (!far) {
+          o.crouchK = (o.crouchK || 0) + ((o.mode === 'greet' ? 1 : 0) - (o.crouchK || 0)) * Math.min(1, dt * 3);   // しゃがんで柴に手を差し出す
+          o.man.update(dt, o.x, o.z, o.yaw, o.speed, null, 0, o.crouchK > 0.05 ? { crouch: o.crouchK * 0.9, hand: o.crouchK > 0.5 ? dog.__head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(Math.sin(st.yaw) * 0.2, -0.05, Math.cos(st.yaw) * 0.2)) : null } : null);
+        }
       }
       for (const o of OTHERS) {   // 遠い組は描かない・動かさない（位置だけ進める）
         const far = Math.hypot(o.rst.x - walker.x, o.rst.z - walker.z) > 80;
