@@ -45,6 +45,10 @@
     font: 700 17px var(--font-ui); letter-spacing: .06em; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   #title button.main { background: rgba(240,180,106,.85); color: #2b2118; border-color: rgba(255,240,210,.7); }
   #title button[hidden] { display: none; }
+  #tTown { display: flex; align-items: center; gap: 6px; color: #fffaf0; font: 600 13px var(--font-ui); text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  #tTown span { margin-right: 4px; opacity: .85; }
+  #title #tTown button { width: auto; height: 34px; padding: 0 16px; border-radius: 17px; font-size: 14px; }
+  #title #tTown button.on { background: rgba(255,250,240,.9); color: #2b2118; }
   #tVer { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); right: max(14px, env(safe-area-inset-right, 0px)); color: #fffaf0; font: 500 12px var(--font-ui); letter-spacing: .04em; opacity: .7; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
   @media (orientation: landscape) and (max-height: 520px) {   /* 横持ち：ボタンは下に横並び */
     #title { flex-direction: row; align-items: flex-end; justify-content: center; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5vh); }
@@ -168,12 +172,13 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v122</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v123</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v122 · -- fps</div>
+<div id="fps" class="ui">v123 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
+<div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="hakodate">函館</button></div>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
 <button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
 <button type="button" id="gyroBtn" class="ui" hidden>ジャイロ 切</button>
@@ -216,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v122';
+const VERSION = 'v123';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -235,7 +240,11 @@ const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0),
 
 // 町（?town）：実在の住宅地の起伏・建物・道路・池。assets/town.json は中心からの距離(m)だけで、地名や緯度経度は持たない
 // 元データ：国土地理院（標高タイル・ベクトルタイル）、© OpenStreetMap contributors（林）
-const TOWN = /[?&](town|walk)/.test(location.search) ? await (await fetch('assets/town.json')).json() : null;
+const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, hakodate: { file: 'assets/town-hakodate.json', name: '函館' } };
+let TOWN_ID = (location.search.match(/[?&]town=(\w+)/) || [])[1];
+if (!TOWN_ID && !/[?&]test/.test(location.search)) { try { TOWN_ID = localStorage.getItem('shiba-town'); } catch (e) { /* 覚えられない時はいつもの町 */ } }
+if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
+const TOWN = /[?&](town|walk)/.test(location.search) ? await (await fetch(TOWNS[TOWN_ID].file)).json() : null;
 let townH = null;
 if (TOWN) {
   const raw = Uint8Array.from(atob(TOWN.height), c => c.charCodeAt(0));
@@ -303,6 +312,10 @@ if (TOWN) {
   const MH = TOWN.half; townMaskN = Math.round(2 * MH / TOWN_PX);
   // 描く物：{k 種類, p 点, w 線の太さ, x0..z1 範囲}。k：b=建物 r=道路 w=池 v=川
   townFeat = [];
+  if (TOWN.sea) {   // 海の升目（1bit ずつ）
+    const bits = Uint8Array.from(atob(TOWN.sea), c => c.charCodeAt(0));
+    TOWN.isSea = (i, j) => i >= 0 && j >= 0 && i < n && j < n && (bits[(j * n + i) >> 3] >> ((j * n + i) & 7) & 1) === 1;
+  }
   const add = (k, p, w) => { let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } const m = w / 2 + 1; townFeat.push({ k, p, w, x0: x0 - m, x1: x1 + m, z0: z0 - m, z1: z1 + m }); };
   for (const b of TOWN.bld) add('b', ringOf(b.p), 2.4);
   for (const r of TOWN.road) add('r', ringOf(r.p), r.w);
@@ -324,9 +337,18 @@ if (TOWN) {
     c.fillStyle = c.strokeStyle = '#0000ff'; c.lineWidth = 2 / TOWN_PX;
     for (const F of L) if (F.k === 'w') { path(c, F.p, true); c.fill(); }
     for (const F of L) if (F.k === 'v') { path(c, F.p); c.stroke(); }
+    const seaCells = g => {   // 海：升目の中心に丸を置いて岸をなめらかに
+      if (!TOWN.isSea) return;
+      const S = TOWN.step, i0 = Math.floor((X0 + MH) / S) - 1, i1 = Math.ceil((X1 + MH) / S) + 1, j0 = Math.floor((Z0 + MH) / S) - 1, j1 = Math.ceil((Z1 + MH) / S) + 1;
+      g.beginPath();
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (TOWN.isSea(i, j)) { const [u, v] = tp([i * S - MH, j * S - MH]); g.moveTo(u + S * 0.72 / TOWN_PX, v); g.arc(u, v, S * 0.72 / TOWN_PX, 0, 6.2832); }
+      g.fill();
+    };
+    c.fillStyle = '#0000ff'; seaCells(c);
     if (o) {   // 入れない所
       o.fillStyle = '#000'; o.fillRect(0, 0, W, W); o.fillStyle = '#fff';
       for (const F of L) if (F.k === 'b' || F.k === 'w') { path(o, F.p, true); o.fill(); }
+      seaCells(o);
     }
   };
   // 当たり判定などの表（64m 四方）
@@ -1145,6 +1167,18 @@ if (TOWN) {
     const tris = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
     const pos = [];
     for (const t of tris) for (const i of t) pos.push(p[i][0], lvl - 0.25, p[i][1]);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    scene.add(new THREE.Mesh(g, water.material));
+  }
+
+  if (TOWN.isSea) {   // 海の水面：海の升目と、そのとなり（岸の下にもぐる）に板を張る
+    const S = TOWN.step, n = TOWN.n, M = TOWN.half, y = TOWN.seaY, pos = [];
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      let near = false; for (let dj = -1; dj <= 1 && !near; dj++) for (let di = -1; di <= 1; di++) if (TOWN.isSea(i + di, j + dj)) { near = true; break; }
+      if (!near) continue;
+      const x0 = i * S - M - S / 2, z0 = j * S - M - S / 2, x1 = x0 + S, z1 = z0 + S;
+      pos.push(x0, y, z0, x0, y, z1, x1, y, z1, x0, y, z0, x1, y, z1, x1, y, z0);
+    }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     scene.add(new THREE.Mesh(g, water.material));
   }
@@ -4097,6 +4131,7 @@ if (TOWN) {   // 町の地図は最初に一枚描いておく（1px = 1m）
   const path = (pts, close) => { c.beginPath(); pts.forEach(([x, z], i) => i ? c.lineTo(x + M, z + M) : c.moveTo(x + M, z + M)); if (close) c.closePath(); };
   c.fillStyle = 'rgba(40,80,40,.45)'; for (const w of TOWN.wood) { path(ringOf(w), true); c.fill(); }
   c.fillStyle = '#7fb2db'; for (const w of TOWN.water) { path(ringOf(w), true); c.fill(); }
+  if (TOWN.isSea) for (let j = 0; j < TOWN.n; j++) for (let i = 0; i < TOWN.n; i++) if (TOWN.isSea(i, j)) c.fillRect(i * TOWN.step - TOWN.step * 0.6, j * TOWN.step - TOWN.step * 0.6, TOWN.step * 1.2, TOWN.step * 1.2);   // 海
   c.strokeStyle = '#7fb2db'; c.lineWidth = 2; for (const r of TOWN.river) { path(ringOf(r)); c.stroke(); }
   c.lineCap = c.lineJoin = 'round';
   c.strokeStyle = '#8d8a84'; for (const r of TOWN.road) { c.lineWidth = r.w + 1.6; path(ringOf(r.p)); c.stroke(); }
@@ -4408,9 +4443,14 @@ const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleFr
 let titleAgain = false;   // 遊んでいる途中から戻った：同じ遊びを選ぶと、はじめからやり直す
 const goMode = m => {
   if (matchMedia('(pointer: coarse)').matches && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});   // Android：ブラウザの枠を隠す（iPhone はホーム画面に追加した時だけ）
-  if (m === MODE && !titleAgain) showTitle(false); else location.href = (m === 'walk' ? '?walk&go' : '?go');
+  if (m === MODE && !titleAgain && (m !== 'walk' || pickTown === TOWN_ID)) showTitle(false); else location.href = (m === 'walk' ? '?walk&go' + (/[?&]town=/.test(location.search) ? '&town=' + pickTown : '') : '?go');
 };
 titleEl.addEventListener('pointerdown', e => e.stopPropagation());
+let pickTown = TOWN_ID;
+const townBtns = [...document.querySelectorAll('#tTown button')];
+const showPick = () => townBtns.forEach(b => b.classList.toggle('on', b.dataset.town === pickTown));
+townBtns.forEach(b => b.addEventListener('click', () => { pickTown = b.dataset.town; try { localStorage.setItem('shiba-town', pickTown); } catch (e) { /* 覚えられなくても、この回は選んだ町へ */ } showPick(); }));
+showPick();
 document.getElementById('tWalk').addEventListener('click', () => goMode('walk'));
 document.getElementById('tMeadow').addEventListener('click', () => goMode('meadow'));
 document.getElementById('tContinue').addEventListener('click', () => showTitle(false));
