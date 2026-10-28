@@ -31,7 +31,10 @@
   #ecoBtn.on { background: rgba(120,190,110,.55); opacity: .95; }
   #fpvBtn { top: calc(env(safe-area-inset-top, 0px) + 84px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
     background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
-  #fpvBtn.on { background: rgba(240,180,106,.6); opacity: .95; }
+  #fpvBtn.on, #gyroBtn.on { background: rgba(240,180,106,.6); opacity: .95; }
+  #gyroBtn { top: calc(env(safe-area-inset-top, 0px) + 114px); left: max(12px, env(safe-area-inset-left, 0px)); padding: 3px 9px; border-radius: 12px;
+    background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 600 11px var(--font-ui); opacity: .75; }
+  #gyroBtn[hidden] { display: none; }
   #dogArrow { position: fixed; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: rgba(240,180,106,.75); color: #2b2118;
     font: 700 12px var(--font-ui); display: grid; place-items: center; pointer-events: none; }
   #dogArrow::after { content: ''; position: absolute; left: 50%; top: 50%; border: 7px solid transparent; border-left: 10px solid rgba(240,180,106,.9); transform: translate(13px, -7px); transform-origin: -13px 7px; rotate: var(--a, 0rad); }
@@ -121,9 +124,10 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v89 · -- fps</div>
+<div id="fps" class="ui">v90 · -- fps</div>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
+<button type="button" id="gyroBtn" class="ui" hidden>ジャイロ 切</button>
 <div id="dogArrow" class="ui" hidden>柴</div>
 <canvas id="map" class="ui"></canvas>
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
@@ -161,7 +165,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v89';
+const VERSION = 'v90';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3691,7 +3695,8 @@ function step(dt, t) {
 
   // カメラ：後ろから追う（なぞって回した直後は追わない）
   const run = smooth(2.5, 4.8, st.speed);
-  if (WALK && WALK.W.mode === 'lock') { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
+  if (fpv && gyro) gyroStep();   // ジャイロ中は、カメラを自動で進む向き・相手へ向けない
+  else if (WALK && WALK.W.mode === 'lock') { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
   else if (fol.speed > 0.4 && t - camDragT > 1.5) camYaw += angDiff(camYaw, fol.yaw) * Math.min(1, dt * 1.6);
   const dash = smooth(5.5, 8.5, st.speed);
   camera.fov += ((innerWidth < innerHeight ? (fpv ? 74 : 62) : (fpv ? 62 : 50)) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
@@ -3729,7 +3734,7 @@ function step(dt, t) {
       const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.35 - eye.y;
       camYaw += angDiff(camYaw, Math.atan2(tx, tz)) * Math.min(1, dt * 4);
       camPitch += (Math.max(-1.3, Math.atan2(ty, Math.hypot(tx, tz))) - camPitch) * Math.min(1, dt * 4);
-    } else if (t - camDragT > 2.5) camPitch += (-0.38 - camPitch) * Math.min(1, dt * 1.5);
+    } else if (!gyro && t - camDragT > 2.5) camPitch += (-0.38 - camPitch) * Math.min(1, dt * 1.5);
     camera.lookAt(eye.x + Math.sin(camYaw) * Math.cos(camPitch), eye.y + Math.sin(camPitch), eye.z + Math.cos(camYaw) * Math.cos(camPitch));
     // 柴が画面の外にいる時は、画面の縁に向きを出す
     camera.updateMatrixWorld();
@@ -3794,6 +3799,36 @@ function setFpv(v) {
   fpvBtn.classList.toggle('on', fpv); fpvBtn.innerHTML = (fpv ? '後ろから' : '一人称') + '<span class="key">V</span>';
   if (WALK) WALK.me.__head.visible = !fpv;   // 自分の頭は描かない（目の前に髪が来ないように）
   if (!fpv) dogArrow.hidden = true;
+  gyroBtn.hidden = !(fpv && gyroOk);
+}
+const gyroBtn = document.getElementById('gyroBtn'), gyroOk = 'DeviceOrientationEvent' in window && matchMedia('(pointer: coarse)').matches;
+let gyro = false, gyroQ = null, gyroPrev = null, gyroSeen = 0;
+const gq = new THREE.Quaternion(), gq1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)), gqz = new THREE.Quaternion(), ge = new THREE.Euler(), gz = new THREE.Vector3(0, 0, 1), gf = new THREE.Vector3();
+addEventListener('deviceorientation', e => {
+  if (e.alpha === null) return;
+  const r = Math.PI / 180, so = ((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) * r;
+  ge.set(e.beta * r, e.alpha * r, -e.gamma * r, 'YXZ');
+  gq.setFromEuler(ge).multiply(gq1).multiply(gqz.setFromAxisAngle(gz, -so));   // 端末の向き → 画面の奥の向き
+  gf.set(0, 0, -1).applyQuaternion(gq);
+  gyroQ = { yaw: Math.atan2(gf.x, gf.z), pitch: Math.asin(Math.max(-1, Math.min(1, gf.y))) }; gyroSeen++;
+});
+const showGyro = (txt) => { gyroBtn.textContent = txt || (gyro ? 'ジャイロ 入' : 'ジャイロ 切'); gyroBtn.classList.toggle('on', gyro); };
+gyroBtn.addEventListener('pointerdown', e => e.stopPropagation());
+gyroBtn.addEventListener('click', async e => {
+  e.preventDefault(); e.stopPropagation();
+  if (gyro) { gyro = false; showGyro(); return; }
+  try { if (typeof DeviceOrientationEvent.requestPermission === 'function' && await DeviceOrientationEvent.requestPermission() !== 'granted') { showGyro('許可されていません'); return; } }
+  catch (err) { showGyro('許可されていません'); return; }
+  gyro = true; gyroPrev = null; const n0 = gyroSeen; showGyro();
+  setTimeout(() => { if (gyro && gyroSeen === n0) { gyro = false; showGyro('使えない端末です'); } }, 1500);
+});
+function gyroStep() {   // 前のコマからの向きの変化を足す（なぞった分や、自動で柴へ目を落とす分とけんかしない）
+  if (!(fpv && gyro && gyroQ)) { gyroPrev = null; return; }
+  if (gyroPrev) {
+    if (Math.abs(gyroQ.pitch) < 1.35) camYaw += angDiff(gyroPrev.yaw, gyroQ.yaw);   // 真上・真下付近は左右がふらつくので使わない
+    camPitch = Math.max(-1.35, Math.min(0.5, camPitch + gyroQ.pitch - gyroPrev.pitch));
+  }
+  gyroPrev = gyroQ;
 }
 if (WALK) { fpvBtn.hidden = false; fpvBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); setFpv(!fpv); }); }
 const ecoBtn = document.getElementById('ecoBtn');
@@ -3834,7 +3869,7 @@ function frame(ts) {
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
 window.__V = THREE.Vector3; window.__isGrass = (x, z) => isGrass(x, z); window.__gy = (x, z) => H(x, z);
-window.__shiba = { lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; }, setFpv: v => setFpv(v), getFpv: () => ({ fpv, camPitch }) };
+window.__shiba = { lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => renderer.render(scene, camera), snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; }, setFpv: v => setFpv(v), setGyro: (on, q) => { gyro = on; if (q) gyroQ = q; }, getFpv: () => ({ fpv, camPitch }) };
 </script>
 </body>
 </html>
