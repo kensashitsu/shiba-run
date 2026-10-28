@@ -162,7 +162,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v111 · -- fps</div>
+<div id="fps" class="ui">v112 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -207,7 +207,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v111';
+const VERSION = 'v112';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3254,7 +3254,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             }
           }
         } else {
-          if (walker.speed > 0.3) W.dh += angDiff(W.dh, walker.yaw) * Math.min(1, dt * (2.5 + 4 * W.sat) * (1 - 0.6 * W.ar));   // 満足しているほど飼い主の向きにすぐ合わせる。興奮していると合わせにくい
+          W.avoidT = Math.max(0, (W.avoidT || 0) - dt);   // 行き止まりから向き直った直後は、すぐ飼い主の向きへ戻らない
+          if (walker.speed > 0.3 && W.avoidT <= 0) W.dh += angDiff(W.dh, walker.yaw) * Math.min(1, dt * (2.5 + 4 * W.sat) * (1 - 0.6 * W.ar));   // 満足しているほど飼い主の向きにすぐ合わせる。興奮していると合わせにくい
           if (W.ar > 0.3 && !W.rush && !W.heat) { W.jerkT = (W.jerkT ?? 2) - dt * W.ar; if (W.jerkT <= 0) { W.jerkT = 1 + rand() * 2.5; W.dh += (rand() - 0.5) * 1.6 * W.ar; } }   // 興奮して落ち着きがなく、ときどき急に向きを変える
           if (privateLand(st.x, st.z) && !W.smell && !W.feed) {   // よその敷地の中にいたら、いちばん近い道の方へ向かう
             let best = null; for (let r = 1; r <= 6 && best === null; r += 1) for (let i = 0; i < 16; i++) { const a = i * 0.3927, px = st.x + Math.sin(a) * r, pz = st.z + Math.cos(a) * r; if (!townBlocked(px, pz) && !privateLand(px, pz)) { best = a; break; } }
@@ -3594,10 +3595,21 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       const h0 = dogHits(st.x, st.z, st.yaw);   // すでに当たっている時（置き直した直後など）は、当たりが増えない動きだけ許す
       const cross1 = tied && lowCross(walker.x, walker.z, st.x, st.z);
       const okAt = (x, z, yaw) => { if (tied && !cross1 && lowCross(walker.x, walker.z, x, z)) return false; const n = dogHits(x, z, yaw); return h0 ? n < h0 || n === h0 && !townBlocked(x, z) && n <= 1 : n === 0; };
+      const x0 = st.x, z0 = st.z;
       if (okAt(sx, sz, st.yaw)) { st.x = sx; st.z = sz; }
       else if (okAt(sx, st.z, st.yaw)) st.x = sx;
       else if (okAt(st.x, sz, st.yaw)) st.z = sz;
-      st.speed += (moved / Math.max(dt, 1e-4) - st.speed) * Math.min(1, dt * 8);
+      const real = Math.hypot(st.x - x0, st.z - z0);   // 実際に動けた距離（塀に当たって進めなければ、脚も止まる）
+      st.speed += (real / Math.max(dt, 1e-4) - st.speed) * Math.min(1, dt * 8);
+      W.stuckT = moved > 0.3 * dt && real < 0.3 * moved && W.mode === 'follow' && !W.ev ? (W.stuckT || 0) + dt : 0;
+      if (W.stuckT > 0.5) {   // 行き止まり：空いている方へ向き直って進む（飼い主から離れすぎない向きを先に）
+        W.stuckT = 0; const toW = Math.atan2(walker.x - st.x, walker.z - st.z);
+        let best = null, bs = -1e9;
+        for (let i = 1; i <= 12; i++) { const a = W.dh + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.5, ax = st.x + Math.sin(a) * 0.7, az = st.z + Math.cos(a) * 0.7;
+          if (dogHits(ax, az, a) || dogHits(st.x + Math.sin(a) * 0.35, st.z + Math.cos(a) * 0.35, a) || tied && lowCross(walker.x, walker.z, ax, az)) continue;
+          const sc = Math.cos(angDiff(a, toW)) * (Math.hypot(walker.x - st.x, walker.z - st.z) > LEASH - 0.3 ? 1 : 0.3) - Math.abs(angDiff(a, W.dh)) * 0.2; if (sc > bs) { bs = sc; best = a; } }
+        if (best !== null) { W.dh = best; W.avoidT = 1.2; if (W.heat) W.heat.sw = angDiff(Math.atan2(W.heat.x - st.x, W.heat.z - st.z), best); }
+      }
       {
         const ny = st.yaw + angDiff(st.yaw, dyaw) * Math.min(1, dt * (W.mode === 'lock' ? 9 : 5));
         const h1 = dogHits(st.x, st.z, st.yaw);
