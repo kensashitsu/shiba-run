@@ -163,7 +163,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v119 · -- fps</div>
+<div id="fps" class="ui">v120 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -208,7 +208,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v119';
+const VERSION = 'v120';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -456,7 +456,7 @@ const townRoad = (x, z) => { const k = townCell(x, z); return k < 0 ? 0 : townTi
 // ---------- renderer / scene ----------
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
-const PR_FULL = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5), PR_ECO = Math.min(PR_FULL, 1.2);
+const PR_FULL = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5), PR_ECO = Math.min(PR_FULL, 1);   // 省電力：画面の細かさは1倍（描く点の数が1.2倍の時の約7割）
 const eco = true;   // いつも省電力（描く回数を30回/秒までに間引き、解像度も抑える）
 let pixelRatio = eco ? PR_ECO : PR_FULL;
 renderer.setPixelRatio(pixelRatio);
