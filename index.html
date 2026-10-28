@@ -160,7 +160,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v94 · -- fps</div>
+<div id="fps" class="ui">v95 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <button type="button" id="ecoBtn" class="ui">省電力</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
@@ -205,7 +205,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v94';
+const VERSION = 'v95';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3847,6 +3847,15 @@ step(0, 0);
   camera.lookAt(o.x, H(o.x, o.z) + 0.42, o.z); }
 
 document.getElementById('tVer').textContent = VERSION;
+// 新しい版が出ていたら読み直す（端末が古いページを覚えていて、更新しても前の版のままになることがある）。読み直しは1回だけ
+if (!TEST) fetch(location.pathname + '?nocache=' + Date.now(), { cache: 'no-store' }).then(r => r.text()).then(html => {
+  const m = html.match(/const VERSION = 'v(\d+)'/), now = +VERSION.slice(1);
+  if (!m || +m[1] <= now) return;
+  let tried = null; try { tried = sessionStorage.getItem('shiba-reload'); sessionStorage.setItem('shiba-reload', m[1]); } catch (err) { /* 覚えられなくても1回は試す */ }
+  if (tried === m[1]) { document.getElementById('tVer').textContent = VERSION + '（新しい v' + m[1] + ' があります）'; return; }
+  const q = location.search.replace(/[?&]r=\d+/, '').replace(/^\?/, '');
+  location.replace(location.pathname + '?' + (q ? q + '&' : '') + 'r=' + Date.now());
+}).catch(() => {});
 const titleEl = document.getElementById('title'), MODE = WALK ? 'walk' : TOWN ? 'town' : 'meadow';
 const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleFrames = 0; titleEl.hidden = !on; document.body.classList.toggle('titling', on); if (again) { titleAgain = true; document.getElementById('tContinue').hidden = false; document.getElementById(MODE === 'walk' ? 'tWalk' : 'tMeadow').textContent = MODE === 'walk' ? 'はじめから散歩' : 'はじめから走る'; } };
 let titleAgain = false;   // 遊んでいる途中から戻った：同じ遊びを選ぶと、はじめからやり直す
