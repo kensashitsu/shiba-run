@@ -110,6 +110,11 @@
   #crouchBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 13px var(--font-ui); }
   #crouchBtn.on { background: rgba(240,180,106,.6); }
+  #tugBtn { right: max(88px, calc(env(safe-area-inset-right, 0px) + 88px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+    width: 64px; height: 64px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.85); border: 2px solid #8a6a3a; color: #4a3520; font: 700 14px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); touch-action: none; }
+  #tugBtn.on { background: rgba(240,180,106,.9); }
+  #tugBtn[hidden] { display: none; }
+  body.fpv #tugBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }
   #pickBtn.off, #crouchBtn.off, #treatBtn.off, #catchBtn.off { opacity: .32; pointer-events: none; box-shadow: none; }
   .key { display: none; font: 600 10px var(--font-ui); opacity: .75; margin-top: 2px; }
   @media (hover: hover) and (pointer: fine) { .key { display: block; } }
@@ -157,7 +162,7 @@
 <body>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v105 · -- fps</div>
+<div id="fps" class="ui">v106 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
@@ -168,6 +173,7 @@
 <div id="stam" class="ui" hidden><span>体力</span><i></i></div>
 <button type="button" id="pickBtn" class="ui" hidden>拾う<span class="key">E</span></button>
 <button type="button" id="crouchBtn" class="ui" hidden>しゃがむ</button>
+<button type="button" id="tugBtn" class="ui" hidden>たぐる<span class="key">F</span></button>
 <button type="button" id="treatBtn" class="ui" hidden>おやつ<span class="key">T</span></button>
 <div id="treatTray" class="ui" hidden><button type="button" id="treat0">砂肝<span class="key">1</span></button><button type="button" id="treat1">カワハギ<span class="key">2</span></button><button type="button" id="treat2">煮干し<span class="key">3</span></button></div>
 <button type="button" id="shortBtn" class="ui" hidden>短く<span class="key">R</span></button>
@@ -201,7 +207,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v105';
+const VERSION = 'v106';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2678,7 +2684,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
 }
 
 let WALK = null;
-const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WASD／矢印キーで歩く（Shiftで走る）・E 拾う／捕まえる・C しゃがむ・T おやつ（1 砂肝・2 カワハギ・3 煮干し）・R 短く・V 一人称" : "左側をなぞって散歩します（右側をなぞると見回す）";
+const WALK_HINT = matchMedia("(hover: hover) and (pointer: fine)").matches ? "WASD／矢印キーで歩く（Shiftで走る）・E 拾う／捕まえる・C しゃがむ・T おやつ（1 砂肝・2 カワハギ・3 煮干し）・R 短く・F たぐる（押している間）・V 一人称" : "左側をなぞって散歩します（右側をなぞると見回す）";
 if (TOWN && /[?&]walk/.test(location.search)) {
   const me = makeHuman({ shirt: 0x3d5a80, pants: 0x2b2d33, hair: 0x2a1f1a });
   scene.add(me.object);
@@ -2803,12 +2809,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const stamEl = document.getElementById('stam'); stamEl.hidden = false;
   const pickBtn = document.getElementById('pickBtn');
   const crouchBtn = document.getElementById('crouchBtn');
+  const tugBtn = document.getElementById('tugBtn');
+  tugBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); W.tugHold = true; try { tugBtn.setPointerCapture(e.pointerId); } catch (err) { /* 指が外れても離すまで */ } });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) tugBtn.addEventListener(ev, () => { W.tugHold = false; });
+  addEventListener('keyup', e => { if (e.code === 'KeyF') W.tugHold = false; });
   crouchBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.canCrouch) W.crouch = !W.crouch; });
   // キーボード：E＝拾う／捕まえる、C＝しゃがむ／立つ、T＝おやつ
   addEventListener('keydown', e => {
     if (e.repeat) return;
     if (e.code === 'KeyE') { if (W.canCatch) W.loose.catching = 0.001; else startPick(); }
     else if (e.code === 'KeyC') { if (W.canCrouch) W.crouch = !W.crouch; }
+    else if (e.code === 'KeyF') W.tugHold = true;
     else if (e.code === 'KeyT') { if (W.feed && (W.feed.ph === 'show' || W.feed.ph === 'give' || W.feed.ph === 'doubt')) W.stowReq = true; else { W.tray = !W.tray; W.trayT = 0; } }
     else if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') { W.treatReq = { k: +e.code.slice(5) - 1 }; W.tray = false; }
     else if (e.code === 'KeyR') { if (W.canShort) W.short = !W.short; }
@@ -2992,21 +3003,24 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
       {
         const cx = collar.x - walker.x, cz = collar.z - walker.z, cl = Math.hypot(cx, cz) || 1;
-        const marking = W.mode === 'follow' && !W.ev && (S.act === 'mark' || W.sniff && (W.sniff.grass && W.sniff.gz > 0 || W.sniff.heat)) && !W.pick && !W.feed && !W.crouch;   // マーキング・草を食べている・においに執着している
-        const awayIn = mag > 0.15 && (dx * cx + dz * cz) / (Math.hypot(dx, dz) * cl) < 0.3;   // 柴の方へ寄っていく操作ではない
-        if (marking && awayIn && !W.grab) W.grab = { t: 0, ph: 'reach' };
+        const marking = W.canTug = W.mode === 'follow' && !W.ev && (S.act === 'mark' || S.act === 'poop' || !!W.sniff) && !W.pick && !W.feed && !W.crouch;   // マーキング・うんち・嗅いでいる（草を食べる・執着も）
+        if (marking && W.tugHold && !W.grab) W.grab = { t: 0, ph: 'reach' };
         if (W.grab) {
           const G = W.grab;
-          if ((!marking || mag < 0.15) && G.ph !== 'let') { G.ph = 'let'; G.t = 0; }   // 操作をやめた・マーキングが終わった：手を放して立つ
+          if ((!marking || !W.tugHold) && G.ph !== 'let') { G.ph = 'let'; G.t = 0; }   // ボタンを離した・終わった：手を放して立つ
           G.t += dt;
           if (G.ph !== 'let') {
-            mag = 0; want = cl > 0.85 ? 1.2 : 0;   // 手が届かなければ半歩寄る。届けばその場で
+            mag = 0; want = 0;   // その場で（届かなければ、リードを手繰って柴を手元へ寄せる）
             walker.yaw += angDiff(walker.yaw, Math.atan2(cx, cz)) * Math.min(1, dt * 8);   // 柴の方を向く
             if (G.ph === 'reach' && G.t > 0.45 && cl < 0.95) { G.ph = 'pull'; G.t = 0; }
             if (G.ph === 'pull') {
-              const heat = W.sniff && W.sniff.heat, grass = W.sniff && W.sniff.grass;
-              W.sbal = Math.min(1, (W.sbal || 0) + dt * 0.75 * (1 + W.sat) * (heat ? 0.45 : 1));   // 執着している時はなかなか離れない
-              if (W.sbal >= 1) { W.sbal = 0; W.sniff = null; W.nextSniff = 6 + rand() * 8; S.act = null; G.ph = 'let'; G.t = 0; W.msg = heat ? '首輪の近くを持って軽く引き、においから引き離した' : grass ? '首輪の近くを持って軽く引き、草を食べるのをやめさせた' : '首輪の近くを持って軽く引き、やめさせた'; W.msgT = 2; }
+              const heat = W.sniff && W.sniff.heat, grass = W.sniff && W.sniff.grass, poop = S.act === 'poop', mark = S.act === 'mark';
+              W.sbal = Math.min(1, (W.sbal || 0) + dt * 0.75 * (1 + W.sat) * (heat ? 0.45 : poop ? 0.6 : 1));   // 執着している時・うんちの最中はなかなかやめない
+              if (W.sbal >= 1) {
+                if (poop) W.poopT = Math.max(0, W.poopAt - 15);   // 途中でやめさせたうんちは、しばらくしてまたしたくなる
+                W.sbal = 0; W.sniff = null; W.nextSniff = 6 + rand() * 8; S.act = null; G.ph = 'let'; G.t = 0;
+                W.msg = '首輪の近くを持って軽く引き、' + (heat ? 'においから引き離した' : grass ? '草を食べるのをやめさせた' : poop ? 'うんちをやめさせた' : mark ? 'マーキングをやめさせた' : '嗅ぐのをやめさせた'); W.msgT = 2;
+              }
             }
           } else if (G.t > 0.4) W.grab = null;
         }
@@ -3419,6 +3433,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         }
       }
 
+      if (W.grab && W.grab.ph === 'reach' && Math.hypot(collar.x - walker.x, collar.z - walker.z) > 0.9) { const ux = walker.x - sx, uz = walker.z - sz, ul = Math.hypot(ux, uz) || 1, p = 0.9 * dt; if (!townBlocked(sx + ux / ul * p, sz + uz / ul * p)) { sx += ux / ul * p; sz += uz / ul * p; if (W.sniff) { W.sniff.x = sx; W.sniff.z = sz; } } }   // 手繰り寄せる（嗅いでいた所へ戻ろうとしないように、嗅ぐ場所も一緒に寄せる）
       if (W.grab && W.grab.ph === 'pull') { const ux = walker.x - sx, uz = walker.z - sz, ul = Math.hypot(ux, uz) || 1, p = 0.12 * dt * Math.max(0, 1 - W.grab.t / 0.8); if (!townBlocked(sx + ux / ul * p, sz + uz / ul * p)) { sx += ux / ul * p; sz += uz / ul * p; } }
       // --- リード：張ったら長さを超えた分を、人と犬に振り分けて戻す
       let vx = sx - nx, vz = sz - nz, d = Math.hypot(vx, vz);
@@ -3658,8 +3673,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           return { crouch: 0.5 * k, lean: k, hand: hp, tired: W.tired }; })()
         : W.grab ? (() => { const G = W.grab;
           const k = G.ph === 'reach' ? smooth(0, 0.45, G.t) : G.ph === 'pull' ? 1 : 1 - smooth(0, 0.4, G.t);
-          const ux = walker.x - collar.x, uz = walker.z - collar.z, ul = Math.hypot(ux, uz) || 1, back = 0.2 + (G.ph === 'pull' ? 0.08 * smooth(0, 0.35, G.t) : 0);
-          const gp = new THREE.Vector3(collar.x + ux / ul * back, collar.y + 0.03 + (G.ph === 'pull' ? 0.04 * smooth(0, 0.35, G.t) : 0), collar.z + uz / ul * back);
+          const ux = walker.x - collar.x, uz = walker.z - collar.z, ul = Math.hypot(ux, uz) || 1, far = Math.max(0, ul - 0.82), back = 0.2 + far + (G.ph === 'pull' ? 0.08 * smooth(0, 0.35, G.t) : 0);   // 遠い時は手の届く所でリードをつかんで手繰る
+          const gp = new THREE.Vector3(collar.x + ux / ul * back, collar.y + 0.03 + far * 0.5 + (G.ph === 'pull' ? 0.04 * smooth(0, 0.35, G.t) : 0), collar.z + uz / ul * back);
           const rest = new THREE.Vector3(walker.x + Math.sin(walker.yaw) * 0.25, H(walker.x, walker.z) + 0.85, walker.z + Math.cos(walker.yaw) * 0.25);
           W.grabK = k; return { crouch: 0.45 * k, lean: k, hand: rest.lerp(gp, k), tired: W.tired }; })()
         : { crouch: W.crouchK, lick: W.lickK = (W.lickK || 0) + ((S.lick ? 1 : 0) - (W.lickK || 0)) * Math.min(1, dt * 4), hand: W.crouchK > 0.6 && S.lick ? dog.__head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(-Math.sin(st.yaw) * 0.1, 0.11, -Math.cos(st.yaw) * 0.1)) : null, tired: W.tired });   // しゃがむ・舐めに来た柴をなでる
@@ -3689,6 +3704,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         if (dd2 > 15) { W.dung = null; W.leftT = 4; W.sat = Math.max(0, W.sat - 0.1); }   // 置き去りにした
       }
       if (dropped.visible && !W.pick && !W.feed && Math.hypot(dropped.position.x - walker.x, dropped.position.z - walker.z) < 1.3) W.canPick = true;   // 吐き出したおやつも拾える
+      tugBtn.hidden = !(W.canTug || W.grab); tugBtn.classList.toggle('on', !!(W.grab && W.grab.ph !== 'let'));
       W.canCatch = !!(W.loose && !W.loose.catching && Math.hypot(walker.x - st.x, walker.z - st.z) < 1.0 && (st.speed < 1.3 || W.loose.ph === 'charge'));
       const near = OTHERS.some(o => Math.hypot(o.rdst.x - walker.x, o.rdst.z - walker.z) < 20 && visible(walker.x, walker.z, o.rdst.x, o.rdst.z));
       W.canShort = !W.ev && (W.short || near);
@@ -3727,7 +3743,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (W.mode === 'follow' && W.grab && W.grab.ph !== 'let' && S.act !== 'mark') uiL.textContent = '首輪の近くを持って、軽く手前に引いている' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.sniff && W.sniff.grass && W.sniff.gz > 1.2) uiL.textContent = 'むしゃむしゃ…草を食べている（待つ／引いてやめさせる）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.sniff) uiL.textContent = 'くんくん…（待つ／軽く引くとマーキングしにくい／引いて崩す）' + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
-      else if (W.mode === 'follow' && (S.act === 'mark' || S.act === 'poop')) uiL.textContent = (S.act === 'mark' ? (W.grab && W.grab.ph !== 'let' ? 'マーキング中…首輪の近くを持って、軽く手前に引いている' : 'マーキング中…（待つ／離れる向きに操作して止める）') : 'うんち中…（待つ／引いて崩す）') + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
+      else if (W.mode === 'follow' && (S.act === 'mark' || S.act === 'poop')) uiL.textContent = (S.act === 'mark' ? (W.grab && W.grab.ph !== 'let' ? 'マーキング中…首輪の近くを持って、軽く手前に引いている' : 'マーキング中…（待つ／「たぐる」で止める）') : 'うんち中…（待つ／引いて崩す）') + (W.sbal > 0.02 ? '　崩し ' + '●'.repeat(Math.round(W.sbal * 5)) + '○'.repeat(5 - Math.round(W.sbal * 5)) : '');
       else if (W.mode === 'follow' && W.rush) uiL.textContent = W.rush.ph === 'seek' ? 'うんちしたい！ ぐんぐん引っ張る' : 'そわそわ…うんちの場所を探している';
       else if (W.mode === 'follow' && !W.ev) uiL.textContent = (W.harm > 0.95 ? '歩調ぴったり' : '歩調 ' + '●'.repeat(Math.round(W.harm * 5)) + '○'.repeat(5 - Math.round(W.harm * 5))) + '　満足 ' + '★'.repeat(Math.round(W.sat * 5)) + '☆'.repeat(5 - Math.round(W.sat * 5));
       if (W.msgT > 0 && W.msg) uiL.textContent = W.msg;
