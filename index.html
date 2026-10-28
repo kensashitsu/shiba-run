@@ -119,7 +119,7 @@
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.85); border: 2px solid #8a6a3a; color: #4a3520; font: 700 14px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); touch-action: none; }
   #tugBtn.on { background: rgba(240,180,106,.9); }
   #tugBtn[hidden] { display: none; }
-  body.fpv #tugBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }
+  body.pad #tugBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }
   #pickBtn.off, #crouchBtn.off, #treatBtn.off, #catchBtn.off { opacity: .32; pointer-events: none; box-shadow: none; }
   .key { display: none; font: 600 10px var(--font-ui); opacity: .75; margin-top: 2px; }
   @media (hover: hover) and (pointer: fine) { .key { display: block; } }
@@ -149,11 +149,11 @@
   #lookPad[hidden] { display: none; }
   #lookPad span { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink); font: 600 11px var(--font-ui); opacity: .55; pointer-events: none; }
   #lookKnob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; background: rgba(255,250,240,.7); pointer-events: none; }
-  body.fpv #crouchBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }   /* 一人称：右の列のボタンを操作盤の上へ */
-  body.fpv #treatBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 232px); }
-  body.fpv #treatTray { bottom: calc(env(safe-area-inset-bottom, 0px) + 242px); }
-  body.fpv #pickBtn, body.fpv #catchBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 304px); }
-  body.fpv #shortBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 376px); }
+  body.pad #crouchBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }   /* 操作盤を出している時：右の列のボタンを操作盤の上へ */
+  body.pad #treatBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 232px); }
+  body.pad #treatTray { bottom: calc(env(safe-area-inset-bottom, 0px) + 242px); }
+  body.pad #pickBtn, body.pad #catchBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 304px); }
+  body.pad #shortBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 376px); }
   /* 読み込み画面：ボタン類や描きかけの画面を隠す。絵も動きも無い（読み込みの邪魔をしない） */
   #boot { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: calc(env(safe-area-inset-top, 0px) + 11vh);   /* 題字はタイトル画面と同じ位置 */
     background: linear-gradient(to bottom, #6d8a5c, #3f5236); color: #fffaf0; text-align: center; }
@@ -172,10 +172,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v129</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v130</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v129 · -- fps</div>
+<div id="fps" class="ui">v130 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v129';
+const VERSION = 'v130';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2436,7 +2436,7 @@ scene.add(contact);
 // ---------- 入力 ----------
 const input = { x: 0, y: 0 };
 const keys = {};
-let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY = 0, camDragT = -99, fpv = false, camPitch = -0.38;
+let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY = 0, camDragT = -99, fpv = false, camPitch = -0.38, camTilt = 0.578, padReady = false;   // padReady：操作盤（lookIn）の用意ができた（最初のコマはまだ）   // camTilt：三人称のカメラの見下ろす角度（0.12＝低く見上げ気味〜1.25＝真上近く）
 const stickEl = document.getElementById('stick'), knobEl = document.getElementById('knob');
 const hintEl = document.getElementById('hint');
 let jumpReq = false;
@@ -2462,7 +2462,9 @@ canvas.addEventListener('pointermove', e => {
     input.x = dx / STICK_R; input.y = -dy / STICK_R;
   } else if (e.pointerId === camId) {
     camYaw -= (e.clientX - camLastX) * 0.006; camLastX = e.clientX; camDragT = clock.elapsedTime;
-    if (fpv) camPitch = Math.max(-1.35, Math.min(0.5, camPitch - (e.clientY - camLastY) * 0.005)); camLastY = e.clientY;
+    if (fpv) camPitch = Math.max(-1.35, Math.min(0.5, camPitch - (e.clientY - camLastY) * 0.005));
+    else camTilt = Math.max(0.12, Math.min(1.25, camTilt + (e.clientY - camLastY) * 0.004));   // 三人称：上下になぞるとカメラの高さ（下へなぞると高く・見下ろす）
+    camLastY = e.clientY;
   }
 });
 const endPointer = e => {
@@ -4331,8 +4333,9 @@ function stepInner(dt, t) {
   const dash = smooth(5.5, 8.5, st.speed);
   camera.fov += ((innerWidth < innerHeight ? (fpv ? 74 : 62) : (fpv ? 62 : 50)) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
   camera.updateProjectionMatrix();
-  let dist = WALK ? 4.6 : 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
-  const ch = WALK ? 3.0 : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
+  const CAM_R = 5.49;   // 散歩のカメラ：飼い主からの距離（高さと奥行きは camTilt で分ける。ふだんは高さ3.0m・奥4.6m）
+  let dist = WALK ? CAM_R * Math.cos(camTilt) : 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
+  const ch = WALK ? CAM_R * Math.sin(camTilt) : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
   const side = WALK ? -1.1 : 0;   // 散歩は左肩越し（犬は左前を歩くので、人の体で隠れないように）
   const camOff = yaw => [-Math.sin(yaw) * dist - Math.cos(yaw) * side, -Math.cos(yaw) * dist + Math.sin(yaw) * side];   // 追う相手からカメラまで
   // 町：追う相手からカメラまでの線（肩越しのずれも含む）が家に掛からない割合。壁の手前0.4mで止める
@@ -4356,6 +4359,10 @@ function stepInner(dt, t) {
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
   if (TOWN && townHigh(camera.position.x, camera.position.z)) camera.position.copy(camGoal);   // 追いかける途中で家の中に入ったら目標へ跳ぶ
+  if (padReady && WALK && !fpv && (lookIn.x || lookIn.y)) {   // 三人称の操作盤：左右で飼い主のまわりを回り、上下で高さ（上へ倒すと低く・見上げ気味）
+    const cv = v => Math.sign(v) * Math.abs(v) ** 1.6;
+    camYaw -= cv(lookIn.x) * 1.8 * dt; camTilt = Math.max(0.12, Math.min(1.25, camTilt - cv(lookIn.y) * 1.0 * dt)); camDragT = t;
+  }
   if (fpv && (lookIn.x || lookIn.y)) {   // 右下の操作盤：端まで倒すと左右 1.8rad/s・上下 1.2rad/s（小さく倒すとゆっくり）
     const cv = v => Math.sign(v) * Math.abs(v) ** 1.6;
     camYaw -= cv(lookIn.x) * 1.8 * dt; camPitch = Math.max(-1.35, Math.min(0.5, camPitch + cv(lookIn.y) * 1.2 * dt)); camDragT = t;
@@ -4477,6 +4484,7 @@ document.getElementById('homeBtn').addEventListener('pointerdown', e => { e.prev
 document.getElementById('homeBtn').hidden = TEST;
 if (titleOn) showTitle(true);
 const lookPad = document.getElementById('lookPad'), lookKnob = document.getElementById('lookKnob'), lookIn = { x: 0, y: 0, id: null };
+padReady = true;
 {
   const R = 42, move = e => {
     const r = lookPad.getBoundingClientRect(); let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
@@ -4490,7 +4498,7 @@ const lookPad = document.getElementById('lookPad'), lookKnob = document.getEleme
 }
 const fpvBtn = document.getElementById('fpvBtn'), dogArrow = document.getElementById('dogArrow');
 function setFpv(v) {
-  fpv = v; document.body.classList.toggle('fpv', fpv); lookPad.hidden = !fpv; lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; camPitch = -0.38; camSnap = true;
+  fpv = v; document.body.classList.toggle('fpv', fpv); lookPad.hidden = !WALK; document.body.classList.toggle('pad', !!WALK); lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; camPitch = -0.38; camSnap = true;
   fpvBtn.classList.toggle('on', fpv); fpvBtn.innerHTML = (fpv ? '後ろから' : '一人称') + '<span class="key">V</span>';
   if (WALK) WALK.me.__head.visible = WALK.me.__neck.visible = !fpv;   // 自分の頭と首は描かない（髪や、うつむいた時に首が目の前に来ないように）
   gyroBtn.hidden = !(fpv && gyroOk);
@@ -4525,6 +4533,7 @@ function gyroStep() {   // 前のコマからの向きの変化を足す（な�
   gyroPrev = gyroQ;
 }
 if (WALK) { fpvBtn.hidden = false; fpvBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); setFpv(!fpv); }); }
+if (WALK) { lookPad.hidden = false; document.body.classList.add('pad'); }   // 操作盤は三人称でも使う（飼い主のまわりを回す・高さを変える）
 let lastDraw = 0;
 function frame(ts) {
   requestAnimationFrame(frame);
