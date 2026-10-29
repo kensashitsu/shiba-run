@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v141</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v142</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v141 · -- fps</div>
+<div id="fps" class="ui">v142 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v141';
+const VERSION = 'v142';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -276,7 +276,7 @@ if (early.on) {
   });
   await new Promise(r => requestAnimationFrame(() => { window.__titleT = performance.now(); setTimeout(r, 0); }));   // タイトルを描いてから、重い読み込みに入る
 }
-const TOWN = /[?&](town|walk)/.test(location.search) ? await (await fetch(TOWNS[TOWN_ID].file)).json() : null;
+const TOWN = /[?&](town|walk)/.test(location.search) ? await (await fetch(TOWNS[TOWN_ID].file + '?' + VERSION)).json() : null;
 let townH = null, townBridges = null;   // townBridges：掘った水路に架けた橋（その上は床板の高さを歩く）
 if (TOWN) {
   const raw = Uint8Array.from(atob(TOWN.height), c => c.charCodeAt(0));
