@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v149</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v150</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v149 · -- fps</div>
+<div id="fps" class="ui">v150 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v149';
+const VERSION = 'v150';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -378,6 +378,7 @@ if (TOWN) {
   TOWN.water.forEach((w, i) => { add('w', ringOf(w), 2); if (canalSet.has(i)) add('cw', ringOf(w), 1.8); });   // cw：掘った水路（岸から 0.9m 外まで入れない。柵は 0.75m）
   for (const B of townBridges || []) add('dk', B.p.map(q => [q[0], q[1]]), B.w);   // dk：水路の橋の床板（ここだけ渡れる）
   for (const r of TOWN.river) add('v', ringOf(r), 2);
+  for (const z of TOWN.pzone || []) add('pz', ringOf(z), 1);   // ため池の水面と土手の斜面（立ち入り禁止。柵は輪郭の斜面の上）
   // 範囲 [x0,x1)×[z0,z1)（m）を、px 刻みの canvas に描く。前と同じ順・同じ太さ
   const paint = (c, o, X0, Z0, X1, Z1) => {
     const tp = ([x, z]) => [(x - X0) / TOWN_PX, (z - Z0) / TOWN_PX];
@@ -417,6 +418,7 @@ if (TOWN) {
       for (const F of L) if (F.k === 'p') { path(o, F.p, true); o.fill(); o.stroke(); }
       o.fillStyle = o.strokeStyle = '#fff'; o.lineWidth = 1.8 / TOWN_PX;   // 掘った水路：岸から 0.9m 外まで入れない（道が重なっていても。柵はこの内側）
       for (const F of L) if (F.k === 'cw') { path(o, F.p, true); o.fill(); o.stroke(); }
+      for (const F of L) if (F.k === 'pz') { path(o, F.p, true); o.fill(); }   // ため池の土手：輪郭の柵まで
       o.strokeStyle = '#000'; o.lineCap = 'butt';   // 橋の床板の上だけ渡れる
       for (const F of L) if (F.k === 'dk') { o.lineWidth = Math.max(1, F.w - 0.5) / TOWN_PX; path(o, F.p); o.stroke(); }   // 床板より左右 25cm 細く（端で水の上に出ない）
       o.lineCap = 'round';
@@ -1378,8 +1380,11 @@ if (TOWN) {
         }
       }
     }
-    // 池（ため池など）のまわり：水際から 0.8m 外に柵（池は岸から 1m まで入れない）
+    // ため池のまわり：土手の斜面を登りきった所（道の縁など）に柵。斜面は立ち入り禁止（町データの pzone）
+    for (const z of TOWN.pzone || []) { const p = dense(ringOf(z), 3); for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; fenceSeg(a[0], a[1], b[0], b[1]); } }
+    // ほかの広い水（川の広い所など）：水際から 0.8m 外に柵（岸から 1m まで入れない）
     for (const k of Object.keys(TOWN.wlev || {})) {
+      if ((TOWN.pzk || []).includes(+k)) continue;
       const p0 = ringOf(TOWN.water[k]), p = dense(p0, 3);
       const inW = (x, z, q) => { let c = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > z) !== (q[j][1] > z) && x < (q[j][0] - q[i][0]) * (z - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) c = !c; return c; };
       for (let i = 0; i < p.length; i++) {
@@ -1531,7 +1536,9 @@ if (TOWN) {
     // --- ブロック塀：家が道のすぐ奥（1.5〜7m）にある所だけ、道の縁に沿って。ところどころ車庫・門の切れ目、車庫には車
     const WL = { pos: [], uv: [], col: [] }, cars = [];
     const wallCol = new THREE.Color();
-    const isHouse = (x, z) => { if (!townHigh(x, z)) return false; const k = townCell(x, z); return k >= 0 && townTile.m[k * 3 + 2] < 128; };   // 入れない所のうち、水でない所（池の岸に塀や車を置かない）
+    const pzs = (TOWN.pzone || []).map(z => { const p = ringOf(z); let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, y] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, y); z1 = Math.max(z1, y); } return { p, x0, x1, z0, z1 }; });
+    const inPz = (x, z) => pzs.some(Z => x >= Z.x0 && x <= Z.x1 && z >= Z.z0 && z <= Z.z1 && inRing(x, z, Z.p));
+    const isHouse = (x, z) => { if (!townHigh(x, z) || inPz(x, z)) return false; const k = townCell(x, z); return k >= 0 && townTile.m[k * 3 + 2] < 128; };   // 入れない所のうち、水・ため池の土手でない所（池の岸に塀や車を置かない）
     const houseBehind = (x, z, nx, nz) => { for (let d = 1.5; d <= 7; d += 0.5) if (isHouse(x + nx * d, z + nz * d)) return d; return 0; };
     const capCol = new THREE.Color();
     const box = (x0, z0, x1, z1, yb0, yb1, yt0, yt1, t, nx, nz, c, uvL) => {   // 線分 x0→x1 に沿った厚さ 2t の箱（下端 yb・上端 yt は両端で別）
