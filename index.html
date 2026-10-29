@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v138</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v139</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v138 · -- fps</div>
+<div id="fps" class="ui">v139 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v138';
+const VERSION = 'v139';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -360,9 +360,9 @@ if (TOWN) {
   for (const p of TOWN.pave || []) add('a', ringOf(p), 1);     // 駐車場・駅前広場
   let pavedCv = null;   // 航空写真で舗装に見える地面（1m 升）：緑の画素の絵にしておき、塗り分けに重ねる
   if (TOWN.paved) {
-    const P = TOWN.paved, bits = Uint8Array.from(atob(P.bits), ch => ch.charCodeAt(0)), asph = P.asph ? Uint8Array.from(atob(P.asph), ch => ch.charCodeAt(0)) : null;   // 暗い灰色はアスファルト（赤）
+    const P = TOWN.paved, bits = Uint8Array.from(atob(P.bits), ch => ch.charCodeAt(0)), asph = P.asph ? Uint8Array.from(atob(P.asph), ch => ch.charCodeAt(0)) : null;   // 暗い灰色はアスファルト（赤。道より少し薄く：出発地点などは本当の道を選ぶ）
     pavedCv = document.createElement('canvas'); pavedCv.width = pavedCv.height = P.n; const g = pavedCv.getContext('2d', { willReadFrequently: true }), im = g.createImageData(P.n, P.n);
-    for (let k = 0; k < P.n * P.n; k++) { if (bits[k >> 3] >> (k & 7) & 1) { im.data[k * 4 + 1] = 255; im.data[k * 4 + 3] = 255; } if (asph && asph[k >> 3] >> (k & 7) & 1) { im.data[k * 4] = 255; im.data[k * 4 + 3] = 255; } }
+    for (let k = 0; k < P.n * P.n; k++) { if (bits[k >> 3] >> (k & 7) & 1) { im.data[k * 4 + 1] = 255; im.data[k * 4 + 3] = 255; } if (asph && asph[k >> 3] >> (k & 7) & 1) { im.data[k * 4] = 215; im.data[k * 4 + 3] = 255; } }
     g.putImageData(im, 0, 0);
   }
   for (const r of TOWN.road) add('r', ringOf(r.p), r.w);
@@ -1239,8 +1239,13 @@ if (TOWN) {
 
   const carved = new Set();   // 手直しの範囲で、地面を掘って水面と護岸を作る池・水路（TOWN.water の番号）
   if (TOWN.fix) {
-    const R = TOWN.fix.r, near = q => Math.hypot(q[0], q[1]) <= R;
-    TOWN.water.forEach((w, i) => { if (ringOf(w).some(near)) carved.add(i); });
+    const FX = TOWN.fix, c0 = FX.c || [0, 0], near = q => FX.box ? q[0] >= FX.box[0] && q[0] <= FX.box[1] && q[1] >= FX.box[2] && q[1] <= FX.box[3] : Math.hypot(q[0] - c0[0], q[1] - c0[1]) <= FX.r;   // 手直しの範囲（四角か円）
+    const fb = FX.box || [c0[0] - FX.r, c0[0] + FX.r, c0[1] - FX.r, c0[1] + FX.r];
+    TOWN.water.forEach((w, i) => {   // 掘るのは細長い水（水路・川）だけ。ため池のような広い池は今までどおり
+      const p = ringOf(w); if (!p.some(near)) return;
+      let A = 0, L = 0; for (let k = 0; k < p.length; k++) { const a = p[k], b = p[(k + 1) % p.length]; A += a[0] * b[1] - b[0] * a[1]; L += Math.hypot(b[0] - a[0], b[1] - a[1]); }
+      if (Math.abs(A) / L < 6) carved.add(i);   // 面積÷周＝幅の半分くらい
+    });
     const dense = (p, step) => { const o = []; for (let i = 0; i < p.length; i++) { const a = p[i], c = p[(i + 1) % p.length], n = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / step)); for (let k = 0; k < n; k++) o.push([a[0] + (c[0] - a[0]) * k / n, a[1] + (c[1] - a[1]) * k / n]); } return o; };
     const geo = (pos, color, opt = {}) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); const { cast, ...mo } = opt, m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), roughness: 0.9, side: THREE.DoubleSide, ...mo })); m.castShadow = !!cast; m.receiveShadow = true; scene.add(m); return m; };
     const qd = (A, a, b, c, d) => A.push(...a, ...b, ...c, ...a, ...c, ...d);
@@ -1273,7 +1278,7 @@ if (TOWN) {
     }
     if (carved.size) {
       // 道の線（橋の所は護岸を道の下までにする）
-      const roads = TOWN.road.map(r => ({ w: r.w, p: ringOf(r.p) })).filter(r => r.p.some(q => Math.hypot(q[0], q[1]) < R + 300));
+      const roads = TOWN.road.map(r => ({ w: r.w, p: ringOf(r.p) })).filter(r => r.p.some(q => q[0] > fb[0] - 300 && q[0] < fb[1] + 300 && q[1] > fb[2] - 300 && q[1] < fb[3] + 300));
       const segD = (x, z, a, c) => { const dx = c[0] - a[0], dz = c[1] - a[1], L2 = dx * dx + dz * dz || 1e-9, u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)); return Math.hypot(x - a[0] - dx * u, z - a[1] - dz * u); };
       const onRoad = (x, z, m) => roads.some(r => r.p.some((q, i) => i && segD(x, z, r.p[i - 1], q) < r.w / 2 + m));
       const inR = (x, z, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; return c; };
