@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v140</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v141</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v140 · -- fps</div>
+<div id="fps" class="ui">v141 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v140';
+const VERSION = 'v141';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -251,7 +251,7 @@ if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
 // 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
 const PAGE = /[?&]walk/.test(location.search) ? 'walk' : /[?&]town/.test(location.search) ? 'town' : 'meadow', MODE_BTN = { walk: 'tWalk', town: 'tTownRun', meadow: 'tMeadow' };
-const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : ''].filter(Boolean).join('&');
+const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
 const early = { on: !/[?&]test/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
 if (early.on) {
   const main = document.getElementById(MODE_BTN[PAGE]);
@@ -1294,7 +1294,7 @@ if (TOWN) {
       const wat = [], bed = [], wall = [];
       for (const p0 of polys) {
         const p = dense(p0, 2), tr = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []), hy = p.map(([x, z]) => H(x, z));
-        for (const t of tr) for (const i of t) { wat.push(p[i][0], hy[i] - 2.6, p[i][1]); bed.push(p[i][0], hy[i] - 3.0, p[i][1]); }
+        for (const t of tr) for (const i of [t[0], t[2], t[1]]) { wat.push(p[i][0], hy[i] - 2.6, p[i][1]); bed.push(p[i][0], hy[i] - 3.0, p[i][1]); }
         for (let i = 0; i < p.length; i++) {
           const j = (i + 1) % p.length, a = p[i], b = p[j], mxp = (a[0] + b[0]) / 2, mzp = (a[1] + b[1]) / 2, under = onRoad(mxp, mzp, 0.6);
           const ta = under ? hy[i] - 0.7 : hy[i] + 0.25, tb = under ? hy[j] - 0.7 : hy[j] + 0.25;
@@ -1336,9 +1336,10 @@ if (TOWN) {
     if (carved.has(wi)) continue;
     const p = ringOf(w);
     let lvl = 1e9; for (const q of p) lvl = Math.min(lvl, H(q[0], q[1]));
+    if (TOWN.wlev && TOWN.wlev[wi] !== undefined) lvl = TOWN.wlev[wi] + 0.25;   // 手直しした池：町データの水面の高さ（池の中の地面は下げてある）
     const tris = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
     const pos = [];
-    for (const t of tris) for (const i of t) pos.push(p[i][0], lvl - 0.25, p[i][1]);
+    for (const t of tris) for (const i of [t[0], t[2], t[1]]) pos.push(p[i][0], lvl - 0.25, p[i][1]);   // 上を向く順に（平面の三角分けは下向きになる）
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     scene.add(new THREE.Mesh(g, water.material));
   }
@@ -4654,7 +4655,8 @@ document.getElementById('tVer').textContent = VERSION;
 if (!TEST) fetch(location.pathname + '?nocache=' + Date.now(), { cache: 'no-store' }).then(r => r.text()).then(html => {
   const m = html.match(/const VERSION = 'v(\d+)'/), now = +VERSION.slice(1);
   if (!m || +m[1] <= now) return;
-  let tried = null; try { tried = sessionStorage.getItem('shiba-reload'); sessionStorage.setItem('shiba-reload', m[1]); } catch (err) { /* 覚えられなくても1回は試す */ }
+  const key = 'shiba-reload' + location.search.replace(/[?&](r|v)=w+/g, '');   // URL ごとに1回
+  let tried = null; try { tried = sessionStorage.getItem(key); sessionStorage.setItem(key, m[1]); } catch (err) { /* 覚えられなくても1回は試す */ }
   if (tried === m[1]) { document.getElementById('tVer').textContent = VERSION + '（新しい v' + m[1] + ' があります）'; return; }
   const q = location.search.replace(/[?&]r=\d+/, '').replace(/^\?/, '');
   location.replace(location.pathname + '?' + (q ? q + '&' : '') + 'r=' + Date.now());
