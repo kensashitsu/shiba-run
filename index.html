@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v145</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v146</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v145 · -- fps</div>
+<div id="fps" class="ui">v146 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v145';
+const VERSION = 'v146';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1314,14 +1314,22 @@ if (TOWN) {
       const inR = (x, z, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; return c; };
       const polys = [...carved].map(i => ringOf(TOWN.water[i]));
       let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of polys) for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-      const side = Math.max(x1 - x0, z1 - z0) + 4, X0 = x0 - 2, Z0 = z0 - 2, N = Math.min(4096, Math.ceil(side / 0.5));
-      const cv = document.createElement('canvas'); cv.width = cv.height = N; const c = cv.getContext('2d');
-      c.fillStyle = '#000'; c.fillRect(0, 0, N, N); c.fillStyle = '#fff';
-      for (const p of polys) { c.beginPath(); p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.closePath(); c.fill(); c.lineWidth = 1.0 / side * N; c.strokeStyle = '#fff'; c.lineJoin = 'round'; c.stroke(); }   // 岸の外へ 0.5m 広げて掘る（すき間は護岸の天端でふさぐ）
-      c.lineCap = 'butt'; for (const B of townBridges || []) { c.lineWidth = (B.w + 0.1) / side * N; c.beginPath(); B.p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.stroke(); }   // 橋の床板の下の地面も描かない（床板がいちばん上の面）
-      const tex = new THREE.CanvasTexture(cv); tex.flipY = false; tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+      const side = Math.max(x1 - x0, z1 - z0) + 4, X0 = x0 - 2, Z0 = z0 - 2, N = Math.min(4096, Math.ceil(side / 0.5)), T = 1024, cdat = new Uint8Array(N * N);
+      const pb = polys.map(p => { let a = 1e9, b = -1e9, c = 1e9, d = -1e9; for (const [x, z] of p) { a = Math.min(a, x); b = Math.max(b, x); c = Math.min(c, z); d = Math.max(d, z); } return [a, b, c, d]; });
+      const cv = document.createElement('canvas'); cv.width = cv.height = T; const c = cv.getContext('2d', { willReadFrequently: true });
+      for (let ty = 0; ty < N; ty += T) for (let tx = 0; tx < N; tx += T) {   // 1024 升ずつ
+        const wx0 = X0 + tx / N * side, wz0 = Z0 + ty / N * side, wx1 = X0 + (tx + T) / N * side, wz1 = Z0 + (ty + T) / N * side;
+        const hit = (b, m) => b[1] + m >= wx0 && b[0] - m <= wx1 && b[3] + m >= wz0 && b[2] - m <= wz1;
+        if (!pb.some(b => hit(b, 2))) continue;
+        c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#000'; c.fillRect(0, 0, T, T); c.setTransform(1, 0, 0, 1, -tx, -ty); c.fillStyle = c.strokeStyle = '#fff';
+        polys.forEach((p, k) => { if (!hit(pb[k], 2)) return; c.beginPath(); p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.closePath(); c.fill(); c.lineWidth = 1.0 / side * N; c.lineJoin = 'round'; c.stroke(); });   // 岸の外へ 0.5m 広げて掘る（すき間は護岸の天端でふさぐ）
+        c.lineCap = 'butt'; for (const B of townBridges || []) { if (!hit([B.x0, B.x1, B.z0, B.z1], B.w)) continue; c.lineWidth = (B.w + 0.1) / side * N; c.beginPath(); B.p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.stroke(); }   // 橋の床板の下の地面も描かない（床板がいちばん上の面）
+        const id = c.getImageData(0, 0, T, T).data, w = Math.min(T, N - tx), h = Math.min(T, N - ty);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cdat[(ty + y) * N + tx + x] = id[(y * T + x) * 4];
+      }
+      const tex = new THREE.DataTexture(cdat, N, N, THREE.RedFormat, THREE.UnsignedByteType); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false; tex.unpackAlignment = 1; tex.needsUpdate = true;
       carveU.uCarveTex.value = tex; carveU.uCarveXf.value.set(X0, Z0, side, 1);
-      if (/[?&]test/.test(location.search)) window.__carve = { cv, X0, Z0, side };   // 確認用（ずれの検査）
+      if (/[?&]test/.test(location.search)) window.__carve = { data: cdat, N, X0, Z0, side };   // 確認用（ずれの検査）
       // 深く掘った水路：底は岸の高さから 3m 下、水は浅く（深さ 0.4m）、流れに沿って下る。両側に護岸
       const wat = [], bed = [], wall = [];
       for (const p0 of polys) {
@@ -1331,8 +1339,8 @@ if (TOWN) {
           const j = (i + 1) % p.length, a = p[i], b = p[j], mxp = (a[0] + b[0]) / 2, mzp = (a[1] + b[1]) / 2, under = onDeck(mxp, mzp, 0.3);
           const ta = under ? hy[i] - 0.7 : hy[i] + 0.25, tb = under ? hy[j] - 0.7 : hy[j] + 0.25;
           qd(wall, [a[0], hy[i] - 3.0, a[1]], [b[0], hy[j] - 3.0, b[1]], [b[0], tb, b[1]], [a[0], ta, a[1]]);
-          if (!under) { const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, ox = -dz / L * 0.7, oz = dx / L * 0.7, s = inR(mxp + ox * 0.3, mzp + oz * 0.3, p0) ? -1 : 1;   // 護岸の天端（外側へ 70cm、掘った所の縁を覆う）
-            qd(wall, [a[0], ta, a[1]], [b[0], tb, b[1]], [b[0] + ox * s, tb, b[1] + oz * s], [a[0] + ox * s, ta, a[1] + oz * s]); }
+          if (!under) { const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, ox = -dz / L * 0.9, oz = dx / L * 0.9, s = inR(mxp + ox * 0.3, mzp + oz * 0.3, p0) ? -1 : 1;   // 護岸の天端（外側へ 90cm、掘った所の縁を覆う。掘る絵は町全体で約 0.6m 升と粗いので。外の縁は地面の高さまで下げる）
+            qd(wall, [a[0], ta, a[1]], [b[0], tb, b[1]], [b[0] + ox * s, tb - 0.27, b[1] + oz * s], [a[0] + ox * s, ta - 0.27, a[1] + oz * s]); }
         }
       }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wat, 3)); scene.add(new THREE.Mesh(g, water.material));
@@ -1356,13 +1364,13 @@ if (TOWN) {
       }
       geo(deck, '#5b5c60'); geo(rail, '#c9ccc8', { cast: true });
       // 水路の縁（岸から 0.6m 外、天端の上）に柵。橋のところは開ける
-      for (const p0 of polys) {
-        const p = dense(p0, 2);
+      for (const [pi, p0] of polys.entries()) {
+        const p = dense(p0, 3), others = polys.filter((q, k) => k !== pi && pb[k][1] >= pb[pi][0] - 2 && pb[k][0] <= pb[pi][1] + 2 && pb[k][3] >= pb[pi][2] - 2 && pb[k][2] <= pb[pi][3] + 2);
         for (let i = 0; i < p.length; i++) {
           const a = p[i], b = p[(i + 1) % p.length], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
           let ox = -dz / L * 0.6, oz = dx / L * 0.6; if (inR(mx + ox * 0.4, mz + oz * 0.4, p0)) { ox = -ox; oz = -oz; }
           const xa = a[0] + ox, za = a[1] + oz, xb = b[0] + ox, zb = b[1] + oz;
-          if (onDeck(xa, za, 0.4) || onDeck(xb, zb, 0.4) || polys.some(q => q !== p0 && (inR(xa, za, q) || inR(xb, zb, q)))) continue;
+          if (onDeck(xa, za, 0.4) || onDeck(xb, zb, 0.4) || others.some(q => inR(xa, za, q) || inR(xb, zb, q))) continue;
           fenceSeg(xa, za, xb, zb);
         }
       }
@@ -4801,7 +4809,7 @@ function frame(ts) {
     if (slowN >= 4 && pixelRatio > 1.15) { pixelRatio = Math.max(1.1, pixelRatio - 0.1); renderer.setPixelRatio(pixelRatio); resize(); slowN = 0;
       renderer.render(scene, camera);   // 大きさを変えると画面が空になるので、その場で描き直す（しないと背景色が一瞬白く光る）
     }
-    fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + fps + ' fps' + (pixelRatio < PR_FULL ? ' ×' + pixelRatio.toFixed(1) : '');
+    fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + fps + ' fps' + (pixelRatio < PR_FULL ? ' ×' + pixelRatio.toFixed(1) : '') + (TOWN ? ' · ' + Math.round(st.x) + ',' + Math.round(st.z) : '');   // 町では柴の位置（m）も（場所を伝えてもらう用）
     fpsN = 0; fpsT = now;
   }
 }
