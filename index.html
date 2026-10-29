@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v137</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v138</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v137 · -- fps</div>
+<div id="fps" class="ui">v138 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v137';
+const VERSION = 'v138';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -357,6 +357,14 @@ if (TOWN) {
   for (const b of TOWN.bld) if (!b.k) add('b', ringOf(b.p), 2.4);   // 柱と屋根だけの物・跨線橋は通れる
   for (const r of TOWN.rail || []) add('t', ringOf(r), 3.6);   // 線路（バラスト）
   for (const p of TOWN.plat || []) add('p', ringOf(p), 1);     // ホーム
+  for (const p of TOWN.pave || []) add('a', ringOf(p), 1);     // 駐車場・駅前広場
+  let pavedCv = null;   // 航空写真で舗装に見える地面（1m 升）：緑の画素の絵にしておき、塗り分けに重ねる
+  if (TOWN.paved) {
+    const P = TOWN.paved, bits = Uint8Array.from(atob(P.bits), ch => ch.charCodeAt(0)), asph = P.asph ? Uint8Array.from(atob(P.asph), ch => ch.charCodeAt(0)) : null;   // 暗い灰色はアスファルト（赤）
+    pavedCv = document.createElement('canvas'); pavedCv.width = pavedCv.height = P.n; const g = pavedCv.getContext('2d'), im = g.createImageData(P.n, P.n);
+    for (let k = 0; k < P.n * P.n; k++) { if (bits[k >> 3] >> (k & 7) & 1) { im.data[k * 4 + 1] = 255; im.data[k * 4 + 3] = 255; } if (asph && asph[k >> 3] >> (k & 7) & 1) { im.data[k * 4] = 255; im.data[k * 4 + 3] = 255; } }
+    g.putImageData(im, 0, 0);
+  }
   for (const r of TOWN.road) add('r', ringOf(r.p), r.w);
   for (const w of TOWN.water) add('w', ringOf(w), 2);
   for (const r of TOWN.river) add('v', ringOf(r), 2);
@@ -372,7 +380,9 @@ if (TOWN) {
     c.strokeStyle = c.fillStyle = '#00ff00'; c.lineWidth = 2.4 / TOWN_PX;            // 家の周り（犬走り・駐車場）
     for (const F of L) if (F.k === 'b') { path(c, F.p, true); c.fill(); c.stroke(); }
     for (const F of L) if (F.k === 't') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); } else if (F.k === 'p') { path(c, F.p, true); c.fill(); }   // 線路の砂利・ホーム
-    c.strokeStyle = '#ff0000';
+    if (pavedCv) { const P = TOWN.paved; c.imageSmoothingEnabled = true; c.drawImage(pavedCv, (P.x0 - 0.5 - X0) / TOWN_PX, (P.z0 - 0.5 - Z0) / TOWN_PX, P.n / TOWN_PX, P.n / TOWN_PX); }
+    c.strokeStyle = '#ff0000'; c.fillStyle = '#ff0000';
+    for (const F of L) if (F.k === 'a') { path(c, F.p, true); c.fill(); }
     for (const F of L) if (F.k === 'r') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); }
     c.fillStyle = c.strokeStyle = '#0000ff'; c.lineWidth = 2 / TOWN_PX;
     for (const F of L) if (F.k === 'w') { path(c, F.p, true); c.fill(); }
@@ -1058,7 +1068,8 @@ const wrap = (v, c, size) => ((((v - c + size / 2) % size) + size) % size) + c -
 
 // ---------- 町の家（建物の輪郭を立ち上げ、四角に近い家には切妻か寄棟の屋根を載せる） ----------
 // 高さと屋根の形は元データに無いので推定：普通の家は2階建てが多め、堅ろう建物は3階、壁の無い建物（車庫・物置）は低く平ら
-const townChunks = [];   // 町の区画ごとの形：{o, x, z}。離れた区画は描かない
+const townChunks = [];
+const FLAT_USE = new Set(['commercial', 'retail', 'public', 'government', 'warehouse', 'industrial', 'train_station', 'apartments', 'school', 'hospital', 'office']);   // 平らな屋根の建物（OSM の用途）   // 町の区画ごとの形：{o, x, z}。離れた区画は描かない
 if (TOWN) {
   const nTown0 = scene.children.length;
   const r = rng(11);
@@ -1117,11 +1128,14 @@ if (TOWN) {
     const Wm = hiddenB.has(bi) || b.k ? junk : W, Rm = hiddenB.has(bi) || b.k ? junk : Rf;   // 特別な形の物は別に作る（乱数はほかの家と同じ順に使う）   // 建てない建物も乱数は同じ順に使う（ほかの家の色・高さを変えない）
     let gMin = 1e9, gMax = -1e9;
     for (const q of p) { const h = H(q[0], q[1]); gMin = Math.min(gMin, h); gMax = Math.max(gMax, h); }
-    const shed = b.t === 3111, solid = b.t === 3102 || b.t === 3103;
-    const wallH0 = shed ? 2.4 : solid ? (area > 400 ? 12 : 9) : (r() < 0.72 ? 5.8 : 3.1), wallH = b.h || wallH0;
+    const shed = b.t === 3111, solid0 = b.t === 3102 || b.t === 3103, solid = solid0 || FLAT_USE.has(b.use);
+    const wallH0 = shed ? 2.4 : solid0 ? (area > 400 ? 12 : 9) : (r() < 0.72 ? 5.8 : 3.1);   // 乱数はいつも同じ順に使う
+    let wallH = b.h || wallH0;
+    if (!b.h && b.ht && !b.k) { const o0 = obb(p), pitched = !shed && !solid && area / (4 * o0.a * o0.b) > 0.78 && o0.b < 9; wallH = Math.max(2.4, b.ht - (pitched ? o0.b * 0.42 : 0)); }   // 実際の高さは屋根のてっぺんまで
     if (b.k && !hiddenB.has(bi)) {   // 柱と屋根：roof は低い所から屋根まで、deck は柱の上に箱（跨線橋）
       const gray = new THREE.Color(b.k === 'deck' ? '#d6d8d6' : '#9a9ea2').convertSRGBToLinear(), post = new THREE.Color('#8c9094').convertSRGBToLinear(), P0 = [0.01, 0.5];
-      const y0 = b.k === 'deck' ? gMax + b.y0 : gMax + (b.h || 2.8), y1 = b.k === 'deck' ? gMax + b.y1 : y0 + 0.22;
+      const y0 = b.k === 'deck' ? gMax + b.y0 : gMax + (b.h || b.ht || 2.8), y1 = b.k === 'deck' ? gMax + b.y1 : y0 + 0.22;
+      if (b.rc && b.k === 'roof') gray.set(b.rc).convertSRGBToLinear();
       const tr = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
       for (const [i, j, k] of tr) { tri(W, [p[i][0], y1, p[i][1]], [p[j][0], y1, p[j][1]], [p[k][0], y1, p[k][1]], P0, P0, P0, gray); tri(W, [p[i][0], y0, p[i][1]], [p[k][0], y0, p[k][1]], [p[j][0], y0, p[j][1]], P0, P0, P0, gray); }
       const pil = (x, z) => { const d = 0.14, yb = H(x, z) - 0.2; quad(W, [x - d, yb, z - d], [x + d, yb, z - d], [x + d, y0, z - d], [x - d, y0, z - d], P0, P0, P0, P0, post); quad(W, [x + d, yb, z + d], [x - d, yb, z + d], [x - d, y0, z + d], [x + d, y0, z + d], P0, P0, P0, P0, post);
@@ -1150,7 +1164,9 @@ if (TOWN) {
     }
     // 屋根
     const o = obb(p), rect = area / (4 * o.a * o.b);
-    const roofCol = new THREE.Color(shed ? '#6f7377' : ROOFS[Math.floor(r() * ROOFS.length)]).convertSRGBToLinear();
+    const roofCol = new THREE.Color(shed ? '#6f7377' : ROOFS[Math.floor(r() * ROOFS.length)]);
+    if (b.rc) { roofCol.set(b.rc); const hs = roofCol.getHSL({}); roofCol.setHSL(hs.h, Math.min(1, hs.s * 1.25), hs.l * 0.92); }   // 航空写真の色（霞んで見えるので少し濃く）
+    roofCol.convertSRGBToLinear();
     const at = (u, v, y) => [o.ux * u - o.uz * v, y, o.uz * u + o.ux * v];   // 屋根の座標 → 世界
     if (!shed && !solid && rect > 0.78 && o.b < 9) {
       const E = 0.45, A = o.a + E, B = o.b + E, rise = o.b * 0.42, ridgeY = top + rise, eaveY = top - E * rise / o.b;
@@ -1291,7 +1307,7 @@ if (TOWN) {
         const wet = pts.map(([x, z]) => polys.some(p => inR(x, z, p)));
         for (let i = 0; i < pts.length; i++) {
           if (!wet[i]) continue;
-          let j = i; while (j + 1 < pts.length && wet[j + 1]) j++;
+          let j = i; for (let k = i + 1; k < pts.length && k <= j + 6; k++) if (wet[k]) j = k;   // 6m 以内の切れ目は1つの橋に
           const a = Math.max(0, i - 2), b = Math.min(pts.length - 1, j + 2), hw = r.w / 2, ys = pts.map(() => 0);
           for (let k = a; k <= b; k++) ys[k] = H(pts[k][0], pts[k][1]) + 0.03;
           const bp = pts.slice(a, b + 1).map((q, k) => [q[0], q[1], ys[a + k] - 0.03]), bx = bp.map(q => q[0]), bz = bp.map(q => q[1]);
@@ -1306,7 +1322,7 @@ if (TOWN) {
           i = j;
         }
       }
-      geo(deck, '#45464a'); geo(rail, '#c9ccc8', { cast: true });
+      geo(deck, '#5b5c60'); geo(rail, '#c9ccc8', { cast: true });
       townBridges = brs;
     }
   }
