@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v142</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v143</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v142 · -- fps</div>
+<div id="fps" class="ui">v143 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v142';
+const VERSION = 'v143';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1470,7 +1470,8 @@ if (TOWN) {
     // --- ブロック塀：家が道のすぐ奥（1.5〜7m）にある所だけ、道の縁に沿って。ところどころ車庫・門の切れ目、車庫には車
     const WL = { pos: [], uv: [], col: [] }, cars = [];
     const wallCol = new THREE.Color();
-    const houseBehind = (x, z, nx, nz) => { for (let d = 1.5; d <= 7; d += 0.5) if (townHigh(x + nx * d, z + nz * d)) return d; return 0; };
+    const isHouse = (x, z) => { if (!townHigh(x, z)) return false; const k = townCell(x, z); return k >= 0 && townTile.m[k * 3 + 2] < 128; };   // 入れない所のうち、水でない所（池の岸に塀や車を置かない）
+    const houseBehind = (x, z, nx, nz) => { for (let d = 1.5; d <= 7; d += 0.5) if (isHouse(x + nx * d, z + nz * d)) return d; return 0; };
     const capCol = new THREE.Color();
     const box = (x0, z0, x1, z1, yb0, yb1, yt0, yt1, t, nx, nz, c, uvL) => {   // 線分 x0→x1 に沿った厚さ 2t の箱（下端 yb・上端 yt は両端で別）
       const L = Math.hypot(x1 - x0, z1 - z0), ex = (x1 - x0) / L * 0.0, ez = 0;
@@ -1533,6 +1534,7 @@ if (TOWN) {
       const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }));
       m.castShadow = m.receiveShadow = true; scene.add(m);
     }
+    if (/[?&]test/.test(location.search)) window.__cars = cars;   // 確認用
     // --- 車：横から見た形を押し出して作る（ハッチバックの乗用車と、背の高い軽自動車）。窓は暗いガラスの箱、屋根は車体色
     if (cars.length) {
       const CAR_COLS = [0xf2f2ef, 0xf2f2ef, 0xe9e9e6, 0xb9bcc0, 0xb9bcc0, 0x2a2c30, 0x1f2a44, 0x7a1f22, 0x8a8d8f, 0xd8cdb4, 0x5d7d94, 0xc9b27a];
