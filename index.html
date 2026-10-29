@@ -175,14 +175,14 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v135</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v136</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v135 · -- fps</div>
+<div id="fps" class="ui">v136 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
-<button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
+<button type="button" id="tContinue" hidden>つづける</button><button type="button" id="tWalk" class="main">散歩にでかける</button><button type="button" id="tTownRun">町を走る</button><button type="button" id="tMeadow">草原を走る</button><div id="tVer"></div></div>
 <button type="button" id="fpvBtn" class="ui" hidden>一人称<span class="key">V</span></button>
 <button type="button" id="gyroBtn" class="ui" hidden>ジャイロ 切</button>
 <div id="dogArrow" class="ui" hidden>柴</div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v135';
+const VERSION = 'v136';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -249,9 +249,12 @@ if (!TOWN_ID && !/[?&]test/.test(location.search)) { try { TOWN_ID = localStorag
 if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
 // タイトル画面は町の読み込みを待たずに先に出す（遊びを選んでいる間に読み込む）。
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
+// 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
+const PAGE = /[?&]walk/.test(location.search) ? 'walk' : /[?&]town/.test(location.search) ? 'town' : 'meadow', MODE_BTN = { walk: 'tWalk', town: 'tTownRun', meadow: 'tMeadow' };
+const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : ''].filter(Boolean).join('&');
 const early = { on: !/[?&]test/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
 if (early.on) {
-  const walkPage = /[?&](town|walk)/.test(location.search), main = document.getElementById(walkPage ? 'tWalk' : 'tMeadow');
+  const main = document.getElementById(MODE_BTN[PAGE]);
   const full = () => { if (matchMedia('(pointer: coarse)').matches && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); };
   document.body.classList.add('early'); document.getElementById('title').hidden = false;
   early.main = main; early.label = main.textContent; main.textContent = '読み込み中…'; main.classList.add('wait');
@@ -261,14 +264,15 @@ if (early.on) {
       if (early.ready) return;
       try { localStorage.setItem('shiba-town', b.dataset.town); } catch (e) { /* 覚えられなくても URL で選ぶ */ }
       document.querySelectorAll('#tTown button').forEach(c => c.classList.toggle('on', c === b));
-      if (walkPage && b.dataset.town !== TOWN_ID) location.replace('?' + (location.search.replace(/[?&]town=\w+/, '').replace(/^\?/, '') || 'walk') + (/[?&]town=/.test(location.search) ? '&town=' + b.dataset.town : ''));
+      if (PAGE !== 'meadow' && b.dataset.town !== TOWN_ID) location.replace(modeURL(PAGE, b.dataset.town, false));
     });
   });
-  for (const [id, walk] of [['tWalk', true], ['tMeadow', false]]) document.getElementById(id).addEventListener('click', () => {
+  for (const [m, id] of Object.entries(MODE_BTN)) document.getElementById(id).addEventListener('click', () => {
     if (early.ready) return;
     full();
-    if (walk === walkPage) { early.want = id; return; }   // 今読み込んでいる遊び：済んだら始める
-    location.href = walk ? '?walk&go' : '?go';
+    const t = document.querySelector('#tTown button.on')?.dataset.town || TOWN_ID;
+    if (m === PAGE && (m === 'meadow' || t === TOWN_ID)) { early.want = id; return; }   // 今読み込んでいる遊び：済んだら始める
+    location.href = modeURL(m, t, true);
   });
   await new Promise(r => requestAnimationFrame(() => { window.__titleT = performance.now(); setTimeout(r, 0); }));   // タイトルを描いてから、重い読み込みに入る
 }
@@ -4608,6 +4612,10 @@ if (TOWN) {   // 町：中心に一番近い道路の上から
     let ba = 0, bs = -1; for (let a = 0; a < 6.283; a += 0.13) { const sc = free(a, 25) + 0.6 * Math.min(free(a + Math.PI, 6), 6); if (sc > bs) { bs = sc; ba = a; } }
     walker.yaw = st.yaw = camYaw = ba;
     if (!townBlocked(walker.x + Math.sin(ba) * 1.1, walker.z + Math.cos(ba) * 1.1)) { st.x = walker.x + Math.sin(ba) * 1.1; st.z = walker.z + Math.cos(ba) * 1.1; }
+  } else {   // 柴だけ：道が長く続き、後ろ（カメラの側）も空いている方を向いて始める
+    const free = (a, max) => { let d = 0; while (d < max && !townBlocked(st.x + Math.sin(a) * (d + 0.5), st.z + Math.cos(a) * (d + 0.5)) && townRoad(st.x + Math.sin(a) * (d + 0.5), st.z + Math.cos(a) * (d + 0.5)) > 0.3) d += 0.5; return d; };
+    let ba = 0, bs = -1; for (let a = 0; a < 6.283; a += 0.13) { const sc = free(a, 25) + 0.6 * Math.min(free(a + Math.PI, 6), 6); if (sc > bs) { bs = sc; ba = a; } }
+    st.yaw = camYaw = ba;
   }
 }
 step(0, 0);
@@ -4626,11 +4634,11 @@ if (!TEST) fetch(location.pathname + '?nocache=' + Date.now(), { cache: 'no-stor
   location.replace(location.pathname + '?' + (q ? q + '&' : '') + 'r=' + Date.now());
 }).catch(() => {});
 const titleEl = document.getElementById('title'), MODE = WALK ? 'walk' : TOWN ? 'town' : 'meadow';
-const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleFrames = 0; titleEl.hidden = !on; document.body.classList.toggle('titling', on); if (again) { titleAgain = true; document.getElementById('tContinue').hidden = false; document.getElementById(MODE === 'walk' ? 'tWalk' : 'tMeadow').textContent = MODE === 'walk' ? 'はじめから散歩' : 'はじめから走る'; } };
+const showTitle = (on, again = false) => { titleOn = on; camSnap = true; titleFrames = 0; titleEl.hidden = !on; document.body.classList.toggle('titling', on); if (again) { titleAgain = true; document.getElementById('tContinue').hidden = false; document.getElementById(MODE_BTN[MODE]).textContent = MODE === 'walk' ? 'はじめから散歩' : 'はじめから走る'; } };
 let titleAgain = false;   // 遊んでいる途中から戻った：同じ遊びを選ぶと、はじめからやり直す
 const goMode = m => {
   if (matchMedia('(pointer: coarse)').matches && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});   // Android：ブラウザの枠を隠す（iPhone はホーム画面に追加した時だけ）
-  if (m === MODE && !titleAgain && (m !== 'walk' || pickTown === TOWN_ID)) showTitle(false); else location.href = (m === 'walk' ? '?walk&go' + (/[?&]town=/.test(location.search) ? '&town=' + pickTown : '') : '?go');
+  if (m === MODE && !titleAgain && (m === 'meadow' || pickTown === TOWN_ID)) showTitle(false); else location.href = modeURL(m, pickTown, true);
 };
 titleEl.addEventListener('pointerdown', e => e.stopPropagation());
 let pickTown = TOWN_ID;
@@ -4640,6 +4648,7 @@ townBtns.forEach(b => b.addEventListener('click', () => { pickTown = b.dataset.t
 showPick();
 document.getElementById('tWalk').addEventListener('click', () => goMode('walk'));
 document.getElementById('tMeadow').addEventListener('click', () => goMode('meadow'));
+document.getElementById('tTownRun').addEventListener('click', () => goMode('town'));
 document.getElementById('tContinue').addEventListener('click', () => showTitle(false));
 document.getElementById('homeBtn').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); input.x = input.y = 0; showTitle(true, true); });
 document.getElementById('homeBtn').hidden = TEST;
