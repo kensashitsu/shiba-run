@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v148</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v149</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v148 · -- fps</div>
+<div id="fps" class="ui">v149 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v148';
+const VERSION = 'v149';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1575,6 +1575,7 @@ if (TOWN) {
                 const cx = px + onx * (0.6 + len / 2), cz = pz + onz * (0.6 + len / 2);
                 let free = true;
                 for (let a = -len / 2; a <= len / 2 && free; a += 0.5) for (const b of [-0.8, 0, 0.8]) if (townBlocked(cx + onx * a + ux * b, cz + onz * a + uz * b)) { free = false; break; }
+                if (free) { let lo = 1e9, hi = -1e9; for (const a of [-len / 2, len / 2]) for (const b of [-0.85, 0.85]) { const y = townHeight(cx + onx * a + ux * b, cz + onz * a + uz * b); lo = Math.min(lo, y); hi = Math.max(hi, y); } if (hi - lo > 1.2) free = false; }   // 急な斜面（四隅の地面の差が 1.2m 超）には置かない。それより緩い所は地面に合わせて傾ける
                 if (free) cars.push({ x: cx, z: cz, yaw: Math.atan2(-onx, -onz) + (r2() < 0.5 ? Math.PI : 0), ux, uz, onx, onz, len });
               }
             }
@@ -1646,8 +1647,12 @@ if (TOWN) {
         const D = TYPES[tn], n = list.length;
         const mk = (g, m, k) => { const im = new THREE.InstancedMesh(g, m, n * k); im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; scene.add(im); return im; };
         const body = mk(D.body, paint, 1), roof = mk(D.roof, paint, 1), gl = mk(D.glass, glass, 1), tires = mk(wheelG, tire, 4), hubs = mk(hubG, hubM, 4), heads = mk(lampG, headM, 2), tails = mk(lampG, tailM, 2), bump = mk(bumperG, blackM, 2);
+        const EU = new THREE.Euler();
         list.forEach((c, i) => {
-          Q.setFromAxisAngle(UP, c.yaw); M4.compose(T.set(c.x, H(c.x, c.z) - 0.02, c.z), Q, ONE);
+          const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw), L2 = c.len / 2 - 0.3, W2 = 0.75;   // 地面に合わせて傾ける（前後：車の z 軸、左右：x 軸）
+          const hF = H(c.x + sy * L2, c.z + cy * L2), hB = H(c.x - sy * L2, c.z - cy * L2), hR = H(c.x + cy * W2, c.z - sy * W2), hL = H(c.x - cy * W2, c.z + sy * W2);
+          EU.set(-Math.atan2(hF - hB, 2 * L2), c.yaw, Math.atan2(hR - hL, 2 * W2), 'YXZ'); Q.setFromEuler(EU);
+          M4.compose(T.set(c.x, (hF + hB + hR + hL) / 4 - 0.02, c.z), Q, ONE);
           body.setMatrixAt(i, M4); roof.setMatrixAt(i, M4); gl.setMatrixAt(i, M4); C.set(c.col); body.setColorAt(i, C); roof.setColorAt(i, C);
           let k = 0; for (const wx of [-1, 1]) for (const wz of [-D.wb, D.wb]) { P4.makeTranslation(wx * (D.w / 2 - 0.09), 0.32, wz); tires.setMatrixAt(i * 4 + k, P4.premultiply(M4)); P4.makeTranslation(wx * (D.w / 2 - 0.085), 0.32, wz); hubs.setMatrixAt(i * 4 + k++, P4.premultiply(M4)); }
           for (const [j, sx] of [[0, -1], [1, 1]]) {
