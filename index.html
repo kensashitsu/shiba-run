@@ -172,10 +172,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v132</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v133</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v132 · -- fps</div>
+<div id="fps" class="ui">v133 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="tomo">鞆の浦</button><button type="button" data-town="hakodate">函館</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -221,7 +221,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v132';
+const VERSION = 'v133';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -300,6 +300,7 @@ float heather(vec2 p){
 // 地面の塗り分け（GPU）は、まわり 512m の窓だけを描いて、離れたら描き直す
 const TOWN_PX = 0.5, TILE_P = 128, TILE_M = TILE_P * TOWN_PX, WIN_P = 1024, WIN_M = WIN_P * TOWN_PX;
 const townU = { uTownH: { value: null }, uTownMask: { value: null }, uTownXf: { value: new THREE.Vector3() }, uTownMc: { value: new THREE.Vector2() } };
+const carveU = { uCarveTex: { value: null }, uCarveXf: { value: new THREE.Vector4() } };   // 掘った水路：x,y=左上(m) z=一辺(m) w=1で有効
 let townMaskN = 0, townTile = null;   // townTile：直前の townCell が見た表
 const ringOf = flat => { const r = []; for (let i = 0; i < flat.length; i += 2) r.push([flat[i], flat[i + 1]]); return r; };
 let townFeat = null, townTiles = null, townWin = null;
@@ -317,7 +318,9 @@ if (TOWN) {
     TOWN.isSea = (i, j) => i >= 0 && j >= 0 && i < n && j < n && (bits[(j * n + i) >> 3] >> ((j * n + i) & 7) & 1) === 1;
   }
   const add = (k, p, w) => { let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } const m = w / 2 + 1; townFeat.push({ k, p, w, x0: x0 - m, x1: x1 + m, z0: z0 - m, z1: z1 + m }); };
-  for (const b of TOWN.bld) add('b', ringOf(b.p), 2.4);
+  for (const b of TOWN.bld) if (!b.k) add('b', ringOf(b.p), 2.4);   // 柱と屋根だけの物・跨線橋は通れる
+  for (const r of TOWN.rail || []) add('t', ringOf(r), 3.6);   // 線路（バラスト）
+  for (const p of TOWN.plat || []) add('p', ringOf(p), 1);     // ホーム
   for (const r of TOWN.road) add('r', ringOf(r.p), r.w);
   for (const w of TOWN.water) add('w', ringOf(w), 2);
   for (const r of TOWN.river) add('v', ringOf(r), 2);
@@ -332,6 +335,7 @@ if (TOWN) {
     const L = townFeat.filter(inside);
     c.strokeStyle = c.fillStyle = '#00ff00'; c.lineWidth = 2.4 / TOWN_PX;            // 家の周り（犬走り・駐車場）
     for (const F of L) if (F.k === 'b') { path(c, F.p, true); c.fill(); c.stroke(); }
+    for (const F of L) if (F.k === 't') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); } else if (F.k === 'p') { path(c, F.p, true); c.fill(); }   // 線路の砂利・ホーム
     c.strokeStyle = '#ff0000';
     for (const F of L) if (F.k === 'r') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); }
     c.fillStyle = c.strokeStyle = '#0000ff'; c.lineWidth = 2 / TOWN_PX;
@@ -347,7 +351,9 @@ if (TOWN) {
     c.fillStyle = '#0000ff'; seaCells(c);
     if (o) {   // 入れない所
       o.fillStyle = '#000'; o.fillRect(0, 0, W, W); o.fillStyle = '#fff';
-      for (const F of L) if (F.k === 'w') { path(o, F.p, true); o.fill(); }
+      for (const F of L) if (F.k === 'w' || F.k === 'p') { path(o, F.p, true); o.fill(); }
+      o.strokeStyle = '#fff'; o.lineCap = o.lineJoin = 'round';   // 線路には入らない（踏切は次の道で通れる）
+      for (const F of L) if (F.k === 't') { o.lineWidth = F.w / TOWN_PX; path(o, F.p); o.stroke(); }
       o.strokeStyle = '#000'; o.lineCap = o.lineJoin = 'round';   // 橋：池・川の上を通る道は渡れる（建物より先に消す）
       for (const F of L) if (F.k === 'r') { o.lineWidth = F.w / TOWN_PX; path(o, F.p); o.stroke(); }
       for (const F of L) if (F.k === 'b') { path(o, F.p, true); o.fill(); }
@@ -598,7 +604,7 @@ const groundTexU = {
 };
 const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
 groundMat.onBeforeCompile = sh => {
-  Object.assign(sh.uniforms, groundTexU, townU);
+  Object.assign(sh.uniforms, groundTexU, townU, carveU);
   sh.vertexShader = 'varying vec2 vGW;\n' + FIELD_GLSL + '\n' + sh.vertexShader
     .replace('#include <beginnormal_vertex>', `
       vec2 gw = (modelMatrix * vec4(position, 1.0)).xz;
@@ -607,7 +613,7 @@ groundMat.onBeforeCompile = sh => {
       vec3 objectNormal = normalize(vec3(H(gw - vec2(e, 0.0)) - H(gw + vec2(e, 0.0)), 2.0*e,
                                          H(gw - vec2(0.0, e)) - H(gw + vec2(0.0, e))));`)
     .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, hC - 0.02, position.z); vGW = gw;');
-  sh.fragmentShader = 'varying vec2 vGW;\nuniform sampler2D tMeadow, tFar, tPath, tBed; uniform vec3 uFarGrass; uniform float uBlend;\n' + FIELD_GLSL + `
+  sh.fragmentShader = 'varying vec2 vGW;\nuniform sampler2D tMeadow, tFar, tPath, tBed, uCarveTex; uniform vec3 uFarGrass; uniform float uBlend; uniform vec4 uCarveXf;\n' + FIELD_GLSL + `
     // 写真の質感は線形色で返る（sRGB テクスチャ）。同じ模様の繰り返しが目立たないよう縮尺違いを重ねる
     vec3 groundCol(vec2 p){
       float dist = length(p - cameraPosition.xz);
@@ -633,7 +639,7 @@ groundMat.onBeforeCompile = sh => {
       return g;
     }
     ` + sh.fragmentShader
-    .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb = groundCol(vGW);');
+    .replace('#include <color_fragment>', '#include <color_fragment>\n if (uCarveXf.w > 0.5) { vec2 cu = (vGW - uCarveXf.xy) / uCarveXf.z; if (cu.x > 0.0 && cu.y > 0.0 && cu.x < 1.0 && cu.y < 1.0 && texture2D(uCarveTex, cu).r > 0.5) discard; }\n diffuseColor.rgb = groundCol(vGW);');
 };
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.receiveShadow = true;
@@ -1072,11 +1078,27 @@ if (TOWN) {
     if (p.length < 3) continue;
     const area = areasB[bi];
     if (area < 4) continue;
-    const Wm = hiddenB.has(bi) ? junk : W, Rm = hiddenB.has(bi) ? junk : Rf;   // 建てない建物も乱数は同じ順に使う（ほかの家の色・高さを変えない）
+    const Wm = hiddenB.has(bi) || b.k ? junk : W, Rm = hiddenB.has(bi) || b.k ? junk : Rf;   // 特別な形の物は別に作る（乱数はほかの家と同じ順に使う）   // 建てない建物も乱数は同じ順に使う（ほかの家の色・高さを変えない）
     let gMin = 1e9, gMax = -1e9;
     for (const q of p) { const h = H(q[0], q[1]); gMin = Math.min(gMin, h); gMax = Math.max(gMax, h); }
     const shed = b.t === 3111, solid = b.t === 3102 || b.t === 3103;
-    const wallH = shed ? 2.4 : solid ? (area > 400 ? 12 : 9) : (r() < 0.72 ? 5.8 : 3.1);
+    const wallH0 = shed ? 2.4 : solid ? (area > 400 ? 12 : 9) : (r() < 0.72 ? 5.8 : 3.1), wallH = b.h || wallH0;
+    if (b.k && !hiddenB.has(bi)) {   // 柱と屋根：roof は低い所から屋根まで、deck は柱の上に箱（跨線橋）
+      const gray = new THREE.Color(b.k === 'deck' ? '#d6d8d6' : '#9a9ea2').convertSRGBToLinear(), post = new THREE.Color('#8c9094').convertSRGBToLinear(), P0 = [0.01, 0.5];
+      const y0 = b.k === 'deck' ? gMax + b.y0 : gMax + (b.h || 2.8), y1 = b.k === 'deck' ? gMax + b.y1 : y0 + 0.22;
+      const tr = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
+      for (const [i, j, k] of tr) { tri(W, [p[i][0], y1, p[i][1]], [p[j][0], y1, p[j][1]], [p[k][0], y1, p[k][1]], P0, P0, P0, gray); tri(W, [p[i][0], y0, p[i][1]], [p[k][0], y0, p[k][1]], [p[j][0], y0, p[j][1]], P0, P0, P0, gray); }
+      const pil = (x, z) => { const d = 0.14, yb = H(x, z) - 0.2; quad(W, [x - d, yb, z - d], [x + d, yb, z - d], [x + d, y0, z - d], [x - d, y0, z - d], P0, P0, P0, P0, post); quad(W, [x + d, yb, z + d], [x - d, yb, z + d], [x - d, y0, z + d], [x + d, y0, z + d], P0, P0, P0, P0, post);
+        quad(W, [x - d, yb, z + d], [x - d, yb, z - d], [x - d, y0, z - d], [x - d, y0, z + d], P0, P0, P0, P0, post); quad(W, [x + d, yb, z - d], [x + d, yb, z + d], [x + d, y0, z + d], [x + d, y0, z - d], P0, P0, P0, P0, post); };
+      for (let i = 0; i < p.length; i++) {
+        const a = p[i], c = p[(i + 1) % p.length], len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+        if (b.k === 'deck') { const v1 = (y1 - y0) / 2.9; quad(W, [a[0], y0, a[1]], [c[0], y0, c[1]], [c[0], y1, c[1]], [a[0], y1, a[1]], [0.2, 0.35], [0.2 + len / 7.2, 0.35], [0.2 + len / 7.2, 0.35 + v1], [0.2, 0.35 + v1], gray); }
+        else quad(W, [a[0], y0, a[1]], [c[0], y0, c[1]], [c[0], y1, c[1]], [a[0], y1, a[1]], P0, P0, P0, P0, gray);
+        const nP = Math.max(1, Math.round(len / (b.k === 'deck' ? 9 : 5)));   // 柱：角と、辺の途中に数m おき（内側へ少し寄せる）
+        const cx = p.reduce((s, q) => s + q[0], 0) / p.length, cz = p.reduce((s, q) => s + q[1], 0) / p.length;
+        for (let k = 0; k < nP; k++) { const t = k / nP, x = a[0] + (c[0] - a[0]) * t, z = a[1] + (c[1] - a[1]) * t, dl = Math.hypot(cx - x, cz - z) || 1, in_ = Math.min(0.3, dl * 0.2); pil(x + (cx - x) / dl * in_, z + (cz - z) / dl * in_); }
+      }
+    }
     const base = gMin - 0.4, top = gMax + wallH;
     col.set(shed ? '#9a9890' : WALLS[Math.floor(r() * WALLS.length)]).convertSRGBToLinear();
     // 壁：辺ごとに縦の四角。窓の模様は 7.2m×2.9m ごとに繰り返す（u=辺に沿った距離, v=1階の床からの高さ）。
@@ -1163,8 +1185,94 @@ if (TOWN) {
   mesh(W, new THREE.MeshStandardMaterial({ map: wallTex, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }));
   mesh(Rf, new THREE.MeshStandardMaterial({ map: roofTex, vertexColors: true, roughness: 0.7, side: THREE.DoubleSide }));
 
+  const carved = new Set();   // 手直しの範囲で、地面を掘って水面と護岸を作る池・水路（TOWN.water の番号）
+  if (TOWN.fix) {
+    const R = TOWN.fix.r, near = q => Math.hypot(q[0], q[1]) <= R;
+    TOWN.water.forEach((w, i) => { if (ringOf(w).some(near)) carved.add(i); });
+    const dense = (p, step) => { const o = []; for (let i = 0; i < p.length; i++) { const a = p[i], c = p[(i + 1) % p.length], n = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / step)); for (let k = 0; k < n; k++) o.push([a[0] + (c[0] - a[0]) * k / n, a[1] + (c[1] - a[1]) * k / n]); } return o; };
+    const geo = (pos, color, opt = {}) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), roughness: 0.9, side: THREE.DoubleSide, ...opt })); m.castShadow = !!opt.cast; m.receiveShadow = true; scene.add(m); return m; };
+    const qd = (A, a, b, c, d) => A.push(...a, ...b, ...c, ...a, ...c, ...d);
+    const box = (A, x, y, z, sx, sy, sz, yaw) => {   // 向き yaw（x 軸から z 軸へ）の箱
+      const cs = Math.cos(yaw), sn = Math.sin(yaw), P = (u, v, w) => [x + u * cs - w * sn, y + v, z + u * sn + w * cs];
+      const [hx, hz] = [sx / 2, sz / 2], c = [P(-hx, 0, -hz), P(hx, 0, -hz), P(hx, 0, hz), P(-hx, 0, hz), P(-hx, sy, -hz), P(hx, sy, -hz), P(hx, sy, hz), P(-hx, sy, hz)];
+      qd(A, c[4], c[5], c[6], c[7]); qd(A, c[0], c[1], c[5], c[4]); qd(A, c[1], c[2], c[6], c[5]); qd(A, c[2], c[3], c[7], c[6]); qd(A, c[3], c[0], c[4], c[7]);
+    };
+    // 線路：枕木と2本のレール（砂利は地面の塗り分け）
+    if (TOWN.rail) {
+      const sl = [], rl = [];
+      for (const fl of TOWN.rail) {
+        const p = ringOf(fl);
+        for (let i = 1; i < p.length; i++) {
+          const a = p[i - 1], c = p[i], yaw = Math.atan2(c[1] - a[1], c[0] - a[0]), len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+          for (const t of [0, 0.5]) { const x = a[0] + (c[0] - a[0]) * t, z = a[1] + (c[1] - a[1]) * t; box(sl, x, H(x, z) + 0.02, z, 0.2, 0.1, 2.0, yaw); }
+          const mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2, y = (H(a[0], a[1]) + H(c[0], c[1])) / 2 + 0.12;
+          for (const sd of [-0.53, 0.53]) box(rl, mx - Math.sin(yaw) * sd, y, mz + Math.cos(yaw) * sd, len + 0.02, 0.13, 0.07, yaw);
+        }
+      }
+      geo(sl, '#8e8a82'); geo(rl, '#5d5550', { metalness: 0.6, roughness: 0.45 });
+    }
+    // ホーム：高さ 0.9m のコンクリートの台
+    for (const fl of TOWN.plat || []) {
+      const p = dense(ringOf(fl), 2), top = [], side = [];
+      const tr = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
+      for (const t of tr) for (const i of t) top.push(p[i][0], H(p[i][0], p[i][1]) + 0.9, p[i][1]);
+      for (let i = 0; i < p.length; i++) { const a = p[i], c = p[(i + 1) % p.length], ya = H(a[0], a[1]), yc = H(c[0], c[1]); qd(side, [a[0], ya - 0.3, a[1]], [c[0], yc - 0.3, c[1]], [c[0], yc + 0.9, c[1]], [a[0], ya + 0.9, a[1]]); }
+      geo(top, '#bdbab2'); geo(side, '#8f8c86');
+    }
+    if (carved.size) {
+      // 道の線（橋の所は護岸を道の下までにする）
+      const roads = TOWN.road.map(r => ({ w: r.w, p: ringOf(r.p) })).filter(r => r.p.some(q => Math.hypot(q[0], q[1]) < R + 300));
+      const segD = (x, z, a, c) => { const dx = c[0] - a[0], dz = c[1] - a[1], L2 = dx * dx + dz * dz || 1e-9, u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)); return Math.hypot(x - a[0] - dx * u, z - a[1] - dz * u); };
+      const onRoad = (x, z, m) => roads.some(r => r.p.some((q, i) => i && segD(x, z, r.p[i - 1], q) < r.w / 2 + m));
+      const inR = (x, z, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; return c; };
+      const polys = [...carved].map(i => ringOf(TOWN.water[i]));
+      let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of polys) for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      const side = Math.max(x1 - x0, z1 - z0) + 4, X0 = x0 - 2, Z0 = z0 - 2, N = Math.min(4096, Math.ceil(side / 0.5));
+      const cv = document.createElement('canvas'); cv.width = cv.height = N; const c = cv.getContext('2d');
+      c.fillStyle = '#000'; c.fillRect(0, 0, N, N); c.fillStyle = '#fff';
+      for (const p of polys) { c.beginPath(); p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.closePath(); c.fill(); c.lineWidth = 1.0 / side * N; c.strokeStyle = '#fff'; c.lineJoin = 'round'; c.stroke(); }   // 岸の外へ 0.5m 広げて掘る（すき間は護岸の天端でふさぐ）
+      const tex = new THREE.CanvasTexture(cv); tex.flipY = false; tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+      carveU.uCarveTex.value = tex; carveU.uCarveXf.value.set(X0, Z0, side, 1);
+      // 水面（岸の高さから 1.3m 下、流れに沿って下る）・底・護岸
+      const wat = [], bed = [], wall = [];
+      for (const p0 of polys) {
+        const p = dense(p0, 2), tr = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []), hy = p.map(([x, z]) => H(x, z));
+        for (const t of tr) for (const i of t) { wat.push(p[i][0], hy[i] - 1.3, p[i][1]); bed.push(p[i][0], hy[i] - 2.1, p[i][1]); }
+        for (let i = 0; i < p.length; i++) {
+          const j = (i + 1) % p.length, a = p[i], b = p[j], mxp = (a[0] + b[0]) / 2, mzp = (a[1] + b[1]) / 2, under = onRoad(mxp, mzp, 0.6);
+          const ta = under ? hy[i] - 0.7 : hy[i] + 0.25, tb = under ? hy[j] - 0.7 : hy[j] + 0.25;
+          qd(wall, [a[0], hy[i] - 2.1, a[1]], [b[0], hy[j] - 2.1, b[1]], [b[0], tb, b[1]], [a[0], ta, a[1]]);
+          if (!under) { const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, ox = -dz / L * 0.9, oz = dx / L * 0.9, s = inR(mxp + ox * 0.3, mzp + oz * 0.3, p0) ? -1 : 1;   // 護岸の天端（外側へ 90cm、掘った所の縁を覆う）
+            qd(wall, [a[0], ta, a[1]], [b[0], tb, b[1]], [b[0] + ox * s, tb, b[1] + oz * s], [a[0] + ox * s, ta, a[1] + oz * s]); }
+        }
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wat, 3)); scene.add(new THREE.Mesh(g, water.material));
+      geo(bed, '#3d3a30'); geo(wall, '#a5a39b', { cast: true });
+      // 橋：水路の上を通る道に、床板（厚さ 0.5m）と欄干
+      const deck = [], rail = [];
+      for (const r of roads) {
+        const pts = []; for (let k = 1; k < r.p.length; k++) { const a = r.p[k - 1], b = r.p[k], L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let d = 0; d < L; d += 1) pts.push([a[0] + (b[0] - a[0]) * d / L, a[1] + (b[1] - a[1]) * d / L]); }
+        const wet = pts.map(([x, z]) => polys.some(p => inR(x, z, p)));
+        for (let i = 0; i < pts.length; i++) {
+          if (!wet[i]) continue;
+          let j = i; while (j + 1 < pts.length && wet[j + 1]) j++;
+          const a = Math.max(0, i - 2), b = Math.min(pts.length - 1, j + 2), hw = r.w / 2;
+          for (let k = a; k < b; k++) {
+            const [xa, za] = pts[k], [xb, zb] = pts[k + 1], dx = xb - xa, dz = zb - za, L = Math.hypot(dx, dz) || 1, nx = -dz / L, nz = dx / L, ya = H(xa, za) + 0.03, yb = H(xb, zb) + 0.03;
+            qd(deck, [xa + nx * hw, ya, za + nz * hw], [xb + nx * hw, yb, zb + nz * hw], [xb - nx * hw, yb, zb - nz * hw], [xa - nx * hw, ya, za - nz * hw]);
+            for (const sd of [-1, 1]) { qd(deck, [xa + nx * hw * sd, ya - 0.5, za + nz * hw * sd], [xb + nx * hw * sd, yb - 0.5, zb + nz * hw * sd], [xb + nx * hw * sd, yb, zb + nz * hw * sd], [xa + nx * hw * sd, ya, za + nz * hw * sd]);
+              if (k > a && k < b - 1) { box(rail, xa + nx * (hw - 0.1) * sd, ya, za + nz * (hw - 0.1) * sd, 0.1, 1.0, 0.1, Math.atan2(dz, dx)); box(rail, (xa + xb) / 2 + nx * (hw - 0.1) * sd, (ya + yb) / 2 + 0.92, (za + zb) / 2 + nz * (hw - 0.1) * sd, L + 0.05, 0.1, 0.12, Math.atan2(dz, dx)); } }
+            qd(deck, [xa + nx * hw, ya - 0.5, za + nz * hw], [xb + nx * hw, yb - 0.5, zb + nz * hw], [xb - nx * hw, yb - 0.5, zb - nz * hw], [xa - nx * hw, ya - 0.5, za - nz * hw]);
+          }
+          i = j;
+        }
+      }
+      geo(deck, '#45464a'); geo(rail, '#c9ccc8', { cast: true });
+    }
+  }
   // 池：水面は岸の一番低い所より少し下
-  for (const w of TOWN.water) {
+  for (const [wi, w] of TOWN.water.entries()) {
+    if (carved.has(wi)) continue;
     const p = ringOf(w);
     let lvl = 1e9; for (const q of p) lvl = Math.min(lvl, H(q[0], q[1]));
     const tris = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []);
