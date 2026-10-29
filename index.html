@@ -38,6 +38,9 @@
   #title { inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 12px;
     padding: 0 24px calc(env(safe-area-inset-bottom, 0px) + 9vh); background: linear-gradient(to bottom, rgba(20,18,14,.35), rgba(20,18,14,0) 30%, rgba(20,18,14,0) 55%, rgba(20,18,14,.55)); }
   #title[hidden] { display: none; }
+  body.early #title { z-index: 60; }   /* 読み込み中：読み込み画面の上にタイトルを出す */
+  body.early #boot > * { visibility: hidden; }
+  #title button.wait { opacity: .7; }
   #title h1 { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 11vh); left: 0; right: 0; margin: 0; text-align: center; color: #fffaf0;
     font: 700 clamp(44px, 13vw, 76px) var(--font-ui); letter-spacing: .08em; text-shadow: 0 2px 14px rgba(0,0,0,.45); }
   #title h1 small { display: block; margin-top: 6px; font-size: clamp(13px, 3.6vw, 17px); font-weight: 500; letter-spacing: .12em; opacity: .9; }
@@ -172,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v134</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v135</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v134 · -- fps</div>
+<div id="fps" class="ui">v135 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -221,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v134';
+const VERSION = 'v135';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -244,13 +247,42 @@ const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, set
 let TOWN_ID = (location.search.match(/[?&]town=(\w+)/) || [])[1];
 if (!TOWN_ID && !/[?&]test/.test(location.search)) { try { TOWN_ID = localStorage.getItem('shiba-town'); } catch (e) { /* 覚えられない時はいつもの町 */ } }
 if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
+// タイトル画面は町の読み込みを待たずに先に出す（遊びを選んでいる間に読み込む）。
+// 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
+const early = { on: !/[?&]test/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
+if (early.on) {
+  const walkPage = /[?&](town|walk)/.test(location.search), main = document.getElementById(walkPage ? 'tWalk' : 'tMeadow');
+  const full = () => { if (matchMedia('(pointer: coarse)').matches && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); };
+  document.body.classList.add('early'); document.getElementById('title').hidden = false;
+  early.main = main; early.label = main.textContent; main.textContent = '読み込み中…'; main.classList.add('wait');
+  document.querySelectorAll('#tTown button').forEach(b => {
+    b.classList.toggle('on', b.dataset.town === TOWN_ID);
+    b.addEventListener('click', () => {
+      if (early.ready) return;
+      try { localStorage.setItem('shiba-town', b.dataset.town); } catch (e) { /* 覚えられなくても URL で選ぶ */ }
+      document.querySelectorAll('#tTown button').forEach(c => c.classList.toggle('on', c === b));
+      if (walkPage && b.dataset.town !== TOWN_ID) location.replace('?' + (location.search.replace(/[?&]town=\w+/, '').replace(/^\?/, '') || 'walk') + (/[?&]town=/.test(location.search) ? '&town=' + b.dataset.town : ''));
+    });
+  });
+  for (const [id, walk] of [['tWalk', true], ['tMeadow', false]]) document.getElementById(id).addEventListener('click', () => {
+    if (early.ready) return;
+    full();
+    if (walk === walkPage) { early.want = id; return; }   // 今読み込んでいる遊び：済んだら始める
+    location.href = walk ? '?walk&go' : '?go';
+  });
+  await new Promise(r => requestAnimationFrame(() => { window.__titleT = performance.now(); setTimeout(r, 0); }));   // タイトルを描いてから、重い読み込みに入る
+}
 const TOWN = /[?&](town|walk)/.test(location.search) ? await (await fetch(TOWNS[TOWN_ID].file)).json() : null;
-let townH = null;
+let townH = null, townBridges = null;   // townBridges：掘った水路に架けた橋（その上は床板の高さを歩く）
 if (TOWN) {
   const raw = Uint8Array.from(atob(TOWN.height), c => c.charCodeAt(0));
   townH = Float32Array.from(new Int16Array(raw.buffer), v => v * TOWN.hScale);
 }
 function townHeight(x, z) {   // 標高の格子を双線形で読む（範囲の外は端の値）
+  if (townBridges) for (const B of townBridges) if (x >= B.x0 && x <= B.x1 && z >= B.z0 && z <= B.z1) {   // 橋の上：道の中心線の高さ（格子が粗く、橋の端が川底へ下がるので）
+    for (let k = 1; k < B.p.length; k++) { const a = B.p[k - 1], c = B.p[k], dx = c[0] - a[0], dz = c[1] - a[1], L2 = dx * dx + dz * dz || 1e-9, u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2));
+      if (Math.hypot(x - a[0] - dx * u, z - a[1] - dz * u) < B.hw) return a[2] + (c[2] - a[2]) * u; }
+  }
   const n = TOWN.n, fx = Math.min(Math.max((x + TOWN.half) / TOWN.step, 0), n - 1.001), fz = Math.min(Math.max((z + TOWN.half) / TOWN.step, 0), n - 1.001);
   const i = Math.floor(fx), j = Math.floor(fz), ax = fx - i, az = fz - j, k = j * n + i;
   return (townH[k] * (1 - ax) + townH[k + 1] * ax) * (1 - az) + (townH[k + n] * (1 - ax) + townH[k + n + 1] * ax) * az;
@@ -1190,7 +1222,7 @@ if (TOWN) {
     const R = TOWN.fix.r, near = q => Math.hypot(q[0], q[1]) <= R;
     TOWN.water.forEach((w, i) => { if (ringOf(w).some(near)) carved.add(i); });
     const dense = (p, step) => { const o = []; for (let i = 0; i < p.length; i++) { const a = p[i], c = p[(i + 1) % p.length], n = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / step)); for (let k = 0; k < n; k++) o.push([a[0] + (c[0] - a[0]) * k / n, a[1] + (c[1] - a[1]) * k / n]); } return o; };
-    const geo = (pos, color, opt = {}) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), roughness: 0.9, side: THREE.DoubleSide, ...opt })); m.castShadow = !!opt.cast; m.receiveShadow = true; scene.add(m); return m; };
+    const geo = (pos, color, opt = {}) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); const { cast, ...mo } = opt, m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), roughness: 0.9, side: THREE.DoubleSide, ...mo })); m.castShadow = !!cast; m.receiveShadow = true; scene.add(m); return m; };
     const qd = (A, a, b, c, d) => A.push(...a, ...b, ...c, ...a, ...c, ...d);
     const box = (A, x, y, z, sx, sy, sz, yaw) => {   // 向き yaw（x 軸から z 軸へ）の箱
       const cs = Math.cos(yaw), sn = Math.sin(yaw), P = (u, v, w) => [x + u * cs - w * sn, y + v, z + u * sn + w * cs];
@@ -1233,15 +1265,15 @@ if (TOWN) {
       for (const p of polys) { c.beginPath(); p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.closePath(); c.fill(); c.lineWidth = 1.0 / side * N; c.strokeStyle = '#fff'; c.lineJoin = 'round'; c.stroke(); }   // 岸の外へ 0.5m 広げて掘る（すき間は護岸の天端でふさぐ）
       const tex = new THREE.CanvasTexture(cv); tex.flipY = false; tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
       carveU.uCarveTex.value = tex; carveU.uCarveXf.value.set(X0, Z0, side, 1);
-      // 水面（岸の高さから 1.3m 下、流れに沿って下る）・底・護岸
+      // 深く掘った水路：底は岸の高さから 3m 下、水は浅く（深さ 0.4m）、流れに沿って下る。両側に護岸
       const wat = [], bed = [], wall = [];
       for (const p0 of polys) {
         const p = dense(p0, 2), tr = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []), hy = p.map(([x, z]) => H(x, z));
-        for (const t of tr) for (const i of t) { wat.push(p[i][0], hy[i] - 1.3, p[i][1]); bed.push(p[i][0], hy[i] - 2.1, p[i][1]); }
+        for (const t of tr) for (const i of t) { wat.push(p[i][0], hy[i] - 2.6, p[i][1]); bed.push(p[i][0], hy[i] - 3.0, p[i][1]); }
         for (let i = 0; i < p.length; i++) {
           const j = (i + 1) % p.length, a = p[i], b = p[j], mxp = (a[0] + b[0]) / 2, mzp = (a[1] + b[1]) / 2, under = onRoad(mxp, mzp, 0.6);
           const ta = under ? hy[i] - 0.7 : hy[i] + 0.25, tb = under ? hy[j] - 0.7 : hy[j] + 0.25;
-          qd(wall, [a[0], hy[i] - 2.1, a[1]], [b[0], hy[j] - 2.1, b[1]], [b[0], tb, b[1]], [a[0], ta, a[1]]);
+          qd(wall, [a[0], hy[i] - 3.0, a[1]], [b[0], hy[j] - 3.0, b[1]], [b[0], tb, b[1]], [a[0], ta, a[1]]);
           if (!under) { const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, ox = -dz / L * 0.9, oz = dx / L * 0.9, s = inR(mxp + ox * 0.3, mzp + oz * 0.3, p0) ? -1 : 1;   // 護岸の天端（外側へ 90cm、掘った所の縁を覆う）
             qd(wall, [a[0], ta, a[1]], [b[0], tb, b[1]], [b[0] + ox * s, tb, b[1] + oz * s], [a[0] + ox * s, ta, a[1] + oz * s]); }
         }
@@ -1249,16 +1281,19 @@ if (TOWN) {
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wat, 3)); scene.add(new THREE.Mesh(g, water.material));
       geo(bed, '#3d3a30'); geo(wall, '#a5a39b', { cast: true });
       // 橋：水路の上を通る道に、床板（厚さ 0.5m）と欄干
-      const deck = [], rail = [];
+      const deck = [], rail = [], brs = [];
       for (const r of roads) {
         const pts = []; for (let k = 1; k < r.p.length; k++) { const a = r.p[k - 1], b = r.p[k], L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let d = 0; d < L; d += 1) pts.push([a[0] + (b[0] - a[0]) * d / L, a[1] + (b[1] - a[1]) * d / L]); }
         const wet = pts.map(([x, z]) => polys.some(p => inR(x, z, p)));
         for (let i = 0; i < pts.length; i++) {
           if (!wet[i]) continue;
           let j = i; while (j + 1 < pts.length && wet[j + 1]) j++;
-          const a = Math.max(0, i - 2), b = Math.min(pts.length - 1, j + 2), hw = r.w / 2;
+          const a = Math.max(0, i - 2), b = Math.min(pts.length - 1, j + 2), hw = r.w / 2, ys = pts.map(() => 0);
+          for (let k = a; k <= b; k++) ys[k] = H(pts[k][0], pts[k][1]) + 0.03;
+          const bp = pts.slice(a, b + 1).map((q, k) => [q[0], q[1], ys[a + k] - 0.03]), bx = bp.map(q => q[0]), bz = bp.map(q => q[1]);
+          brs.push({ p: bp, hw: hw + 0.3, x0: Math.min(...bx) - hw - 0.3, x1: Math.max(...bx) + hw + 0.3, z0: Math.min(...bz) - hw - 0.3, z1: Math.max(...bz) + hw + 0.3 });
           for (let k = a; k < b; k++) {
-            const [xa, za] = pts[k], [xb, zb] = pts[k + 1], dx = xb - xa, dz = zb - za, L = Math.hypot(dx, dz) || 1, nx = -dz / L, nz = dx / L, ya = H(xa, za) + 0.03, yb = H(xb, zb) + 0.03;
+            const [xa, za] = pts[k], [xb, zb] = pts[k + 1], dx = xb - xa, dz = zb - za, L = Math.hypot(dx, dz) || 1, nx = -dz / L, nz = dx / L, ya = ys[k], yb = ys[k + 1];
             qd(deck, [xa + nx * hw, ya, za + nz * hw], [xb + nx * hw, yb, zb + nz * hw], [xb - nx * hw, yb, zb - nz * hw], [xa - nx * hw, ya, za - nz * hw]);
             for (const sd of [-1, 1]) { qd(deck, [xa + nx * hw * sd, ya - 0.5, za + nz * hw * sd], [xb + nx * hw * sd, yb - 0.5, zb + nz * hw * sd], [xb + nx * hw * sd, yb, zb + nz * hw * sd], [xa + nx * hw * sd, ya, za + nz * hw * sd]);
               if (k > a && k < b - 1) { box(rail, xa + nx * (hw - 0.1) * sd, ya, za + nz * (hw - 0.1) * sd, 0.1, 1.0, 0.1, Math.atan2(dz, dx)); box(rail, (xa + xb) / 2 + nx * (hw - 0.1) * sd, (ya + yb) / 2 + 0.92, (za + zb) / 2 + nz * (hw - 0.1) * sd, L + 0.05, 0.1, 0.12, Math.atan2(dz, dx)); } }
@@ -1268,6 +1303,7 @@ if (TOWN) {
         }
       }
       geo(deck, '#45464a'); geo(rail, '#c9ccc8', { cast: true });
+      townBridges = brs;
     }
   }
   // 池：水面は岸の一番低い所より少し下
@@ -2686,7 +2722,12 @@ new RGBELoader().load('assets/sky.hdr', tex => {
   bootDone();
 }, undefined, () => { hintEl.textContent = '空の写真を読み込めませんでした'; bootDone(); });
 // 読み込み画面を外す：空の色が決まって、1コマ描いた後で（描きかけの画面を見せない）
-function bootDone() { requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('boot')?.remove())); }
+function bootDone() { requestAnimationFrame(() => requestAnimationFrame(() => {
+  document.getElementById('boot')?.remove();
+  if (!early.on || early.ready) return;
+  early.ready = true; document.body.classList.remove('early'); early.main.textContent = early.label; early.main.classList.remove('wait');
+  if (early.want) document.getElementById(early.want).click();   // 読み込み中に押されていた
+})); }
 
 // ---------- 散歩（?walk）：飼い主を動かし、リードでつないだ柴を連れて歩く ----------
 // 柴は黒柴を見つけるとロックオンする：視線が相手に固定され、足を踏ん張って吠え続け、真後ろへ引いてもテコでも動かない。
