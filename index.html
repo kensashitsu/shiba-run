@@ -361,7 +361,7 @@ if (TOWN) {
   let pavedCv = null;   // 航空写真で舗装に見える地面（1m 升）：緑の画素の絵にしておき、塗り分けに重ねる
   if (TOWN.paved) {
     const P = TOWN.paved, bits = Uint8Array.from(atob(P.bits), ch => ch.charCodeAt(0)), asph = P.asph ? Uint8Array.from(atob(P.asph), ch => ch.charCodeAt(0)) : null;   // 暗い灰色はアスファルト（赤）
-    pavedCv = document.createElement('canvas'); pavedCv.width = pavedCv.height = P.n; const g = pavedCv.getContext('2d'), im = g.createImageData(P.n, P.n);
+    pavedCv = document.createElement('canvas'); pavedCv.width = pavedCv.height = P.n; const g = pavedCv.getContext('2d', { willReadFrequently: true }), im = g.createImageData(P.n, P.n);
     for (let k = 0; k < P.n * P.n; k++) { if (bits[k >> 3] >> (k & 7) & 1) { im.data[k * 4 + 1] = 255; im.data[k * 4 + 3] = 255; } if (asph && asph[k >> 3] >> (k & 7) & 1) { im.data[k * 4] = 255; im.data[k * 4 + 3] = 255; } }
     g.putImageData(im, 0, 0);
   }
@@ -380,7 +380,7 @@ if (TOWN) {
     c.strokeStyle = c.fillStyle = '#00ff00'; c.lineWidth = 2.4 / TOWN_PX;            // 家の周り（犬走り・駐車場）
     for (const F of L) if (F.k === 'b') { path(c, F.p, true); c.fill(); c.stroke(); }
     for (const F of L) if (F.k === 't') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); } else if (F.k === 'p') { path(c, F.p, true); c.fill(); }   // 線路の砂利・ホーム
-    if (pavedCv) { const P = TOWN.paved; c.imageSmoothingEnabled = true; c.drawImage(pavedCv, (P.x0 - 0.5 - X0) / TOWN_PX, (P.z0 - 0.5 - Z0) / TOWN_PX, P.n / TOWN_PX, P.n / TOWN_PX); }
+    if (pavedCv && X1 > TOWN.paved.x0 && X0 < TOWN.paved.x0 + TOWN.paved.n && Z1 > TOWN.paved.z0 && Z0 < TOWN.paved.z0 + TOWN.paved.n) { const P = TOWN.paved; c.imageSmoothingEnabled = true; c.drawImage(pavedCv, (P.x0 - 0.5 - X0) / TOWN_PX, (P.z0 - 0.5 - Z0) / TOWN_PX, P.n / TOWN_PX, P.n / TOWN_PX); }
     c.strokeStyle = '#ff0000'; c.fillStyle = '#ff0000';
     for (const F of L) if (F.k === 'a') { path(c, F.p, true); c.fill(); }
     for (const F of L) if (F.k === 'r') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); }
