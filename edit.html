@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>柵の編集</title>
+<style>
+:root { --bg: #1d1f22; --fg: #eee; --panel: rgba(30, 32, 36, .93); --btn: #3a3d42; --accent: #ff4fc8; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px system-ui, sans-serif; overflow: hidden; }
+canvas { display: block; touch-action: none; }
+#bar { position: fixed; left: 8px; top: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: var(--panel); padding: 6px 8px; border-radius: 8px; }
+#bar b { margin-right: 4px; }
+button, select { font: inherit; color: var(--fg); background: var(--btn); border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+button.on { background: var(--accent); color: #000; }
+button:disabled { opacity: .4; cursor: default; }
+#save { background: #2f7d4f; }
+#info { position: fixed; left: 8px; bottom: 8px; right: 8px; background: var(--panel); padding: 6px 8px; border-radius: 6px; line-height: 1.5; }
+#xy { font-variant-numeric: tabular-nums; color: #ffd27a; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="bar">
+  <b>柵の編集</b>
+  <select id="town"><option value="home">いつもの町</option><option value="seto">瀬戸</option></select>
+  <button id="mEdit" class="on">動かす・足す</button>
+  <button id="mDel">点を消す</button>
+  <button id="mNew">新しい柵</button>
+  <button id="delRing" disabled>選んだ柵を消す</button>
+  <button id="undo" disabled>元に戻す</button>
+  <button id="reset">自動に戻す</button>
+  <button id="save">保存</button>
+</div>
+<div id="info"><span id="xy">x, z</span>　<span id="msg"></span></div>
+<script>
+// ため池などの「入れない区域」の輪郭（＝柵）を平面図の上で直す。保存した fence-町.json を tools に置くと、町データを作るときに自動の区域の代わりに使う
+const TOWNS = { home: { file: 'assets/town.json', c: [-60, 290] }, seto: { file: 'assets/town-seto.json', c: [-27, -48] } };
+const key = TOWNS[new URLSearchParams(location.search).get('town')] ? new URLSearchParams(location.search).get('town') : 'home', TW = TOWNS[key];
+document.getElementById('town').value = key;
+document.getElementById('town').onchange = e => { location.search = '?town=' + e.target.value; };
+const cv = document.getElementById('cv'), g = cv.getContext('2d'), $ = id => document.getElementById(id);
+const HELP = {
+  edit: '点をドラッグで動かす・線の途中を押すと点が増える・柵の内側を押すと選ぶ・何もない所のドラッグで移動・ホイール／2本指で拡大',
+  del: '消したい点を押す（右クリックでも消せます）',
+  new: '柵の角を順に押す。最初の点を押すと閉じる（Esc でやめる）',
+};
+let T = null, rings = [], hist = [], mode = 'edit', sel = -1, drawing = null, terrain = null;
+const view = { x: TW.c[0], z: TW.c[1], s: 2 };   // s：1m あたりの画面の点
+const ringOf = f => { const r = []; for (let i = 0; i < f.length; i += 2) r.push([f[i], f[i + 1]]); return r; };
+const bboxOf = p => { let a = 1e9, b = -1e9, c = 1e9, d = -1e9; for (const [x, z] of p) { a = Math.min(a, x); b = Math.max(b, x); c = Math.min(c, z); d = Math.max(d, z); } return [a, b, c, d]; };
+const inRing = (x, z, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; return c; };
+const draftKey = 'fence-draft-' + key;
+const store = { get() { try { return localStorage.getItem(draftKey); } catch { return null; } }, set(v) { try { localStorage.setItem(draftKey, v); } catch {} }, del() { try { localStorage.removeItem(draftKey); } catch {} } };
+let feats = null;
+
+fetch(TW.file).then(r => r.json()).then(t => {
+  T = t;
+  const d = store.get();
+  rings = d ? JSON.parse(d) : (t.pzone || []).map(ringOf);
+  if (d) msg('前回の編集の続きです（「自動に戻す」で町データの区域に戻ります）');
+  feats = {
+    road: t.road.map(r => ({ w: r.w, p: ringOf(r.p) })).map(f => ({ ...f, b: bboxOf(f.p) })),
+    bld: t.bld.map(b => ({ p: ringOf(b.p) })).map(f => ({ ...f, b: bboxOf(f.p) })),
+    water: t.water.map(w => ({ p: ringOf(w) })).map(f => ({ ...f, b: bboxOf(f.p) })),
+  };
+  makeTerrain(); resize();
+}).catch(e => msg('町データを読めませんでした：' + e.message));
+
+// 地面：1m 升で高さの濃淡と 1m ごとの等高線（5m ごとは濃く）
+function makeTerrain() {
+  const raw = atob(T.height), buf = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+  const hh = new Int16Array(buf.buffer), N = T.n, M = T.half, S = T.step, hs = T.hScale;
+  const H = (x, z) => { const fx = Math.min(Math.max((x + M) / S, 0), N - 1.001), fz = Math.min(Math.max((z + M) / S, 0), N - 1.001), i = Math.floor(fx), j = Math.floor(fz), a = fx - i, b = fz - j, k = j * N + i;
+    return ((hh[k] * (1 - a) + hh[k + 1] * a) * (1 - b) + (hh[k + N] * (1 - a) + hh[k + N + 1] * a) * b) * hs; };
+  const R = 1, W = Math.round(2 * M / R), hv = new Float32Array(W * W);
+  let lo = 1e9, hi = -1e9;
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) { const v = H(-M + i * R, -M + j * R); hv[j * W + i] = v; lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const c = document.createElement('canvas'); c.width = c.height = W; const x = c.getContext('2d'), im = x.createImageData(W, W);
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, v = hv[k], vr = hv[j * W + Math.min(i + 1, W - 1)], vd = hv[Math.min(j + 1, W - 1) * W + i];
+    const shade = Math.max(-1, Math.min(1, ((v - vr) - (v - vd)) * 0.6));   // 左上から光
+    let gr = 70 + 120 * (v - lo) / (hi - lo || 1) + shade * 25, col = [gr * 0.92, gr, gr * 0.9];
+    if (Math.floor(v) !== Math.floor(vr) || Math.floor(v) !== Math.floor(vd)) { const a = Math.floor(Math.max(v, vr, vd)) % 5 === 0 ? 0.55 : 0.25; col = col.map((c, i) => c * (1 - a) + [200, 120, 90][i] * a); }
+    im.data.set([col[0], col[1], col[2], 255], k * 4);
+  }
+  x.putImageData(im, 0, 0); terrain = c;
+}
+
+function resize() { const d = devicePixelRatio || 1; cv.width = innerWidth * d; cv.height = innerHeight * d; cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px'; draw(); }
+addEventListener('resize', resize);
+const toW = (px, py) => [view.x + (px - innerWidth / 2) / view.s, view.z + (py - innerHeight / 2) / view.s];
+const toS = (x, z) => [(x - view.x) * view.s + innerWidth / 2, (z - view.z) * view.s + innerHeight / 2];
+
+function draw() {
+  if (!T) return;
+  const d = devicePixelRatio || 1, s = view.s;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#1d1f22'; g.fillRect(0, 0, cv.width, cv.height);
+  g.setTransform(d * s, 0, 0, d * s, d * (innerWidth / 2 - view.x * s), d * (innerHeight / 2 - view.z * s));
+  g.imageSmoothingEnabled = s < 1;
+  g.drawImage(terrain, -T.half, -T.half, 2 * T.half, 2 * T.half);
+  const [x0, z0] = toW(0, 0), [x1, z1] = toW(innerWidth, innerHeight), vis = b => b[1] >= x0 - 20 && b[0] <= x1 + 20 && b[3] >= z0 - 20 && b[2] <= z1 + 20;
+  const path = (p, close) => { g.beginPath(); p.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); if (close) g.closePath(); };
+  g.lineCap = g.lineJoin = 'round';
+  g.fillStyle = 'rgba(60,130,230,.85)'; for (const f of feats.water) if (vis(f.b)) { path(f.p, true); g.fill(); }
+  g.strokeStyle = '#cdb878'; for (const f of feats.road) if (vis(f.b)) { g.lineWidth = f.w; path(f.p); g.stroke(); }
+  g.fillStyle = 'rgba(40,40,40,.85)'; g.strokeStyle = '#111'; g.lineWidth = 0.4; for (const f of feats.bld) if (vis(f.b)) { path(f.p, true); g.fill(); g.stroke(); }
+  // 柵
+  rings.forEach((p, ri) => {
+    path(p, true);
+    if (ri === sel) { g.fillStyle = 'rgba(255,79,200,.18)'; g.fill(); }
+    g.strokeStyle = ri === sel ? '#fff' : '#ff4fc8'; g.lineWidth = (ri === sel ? 3 : 2) / s; g.stroke();
+    if (s >= 0.8) { g.fillStyle = ri === sel ? '#fff' : '#ff4fc8'; const r = (ri === sel ? 4 : 2.5) / s; for (const q of p) { g.beginPath(); g.arc(q[0], q[1], r, 0, 7); g.fill(); } }
+  });
+  if (drawing) {
+    path(drawing); g.strokeStyle = '#7dffb0'; g.lineWidth = 2 / s; g.stroke();
+    g.fillStyle = '#7dffb0'; drawing.forEach((q, i) => { g.beginPath(); g.arc(q[0], q[1], (i ? 3.5 : 6) / s, 0, 7); g.fill(); });
+  }
+  // 縮尺（左下）
+  g.setTransform(d, 0, 0, d, 0, 0);
+  const m = [10, 20, 50, 100, 200, 500].find(v => v * s >= 60) || 500;
+  g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(16, innerHeight - 60); g.lineTo(16 + m * s, innerHeight - 60); g.stroke();
+  g.fillStyle = '#fff'; g.font = '12px system-ui'; g.fillText(m + 'm', 16, innerHeight - 66);
+}
+
+// 当たり：画面の点で近い頂点・辺
+function hitVertex(px, py, r = 10) { let best = null, bd = r; rings.forEach((p, ri) => p.forEach((q, vi) => { const [sx, sy] = toS(q[0], q[1]), dd = Math.hypot(sx - px, sy - py); if (dd < bd) { bd = dd; best = { ri, vi }; } })); return best; }
+function hitEdge(px, py, r = 8) {
+  let best = null, bd = r;
+  rings.forEach((p, ri) => p.forEach((a, vi) => { const b = p[(vi + 1) % p.length], [ax, ay] = toS(a[0], a[1]), [bx, by] = toS(b[0], b[1]), dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
+    const u = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)), dd = Math.hypot(px - ax - dx * u, py - ay - dy * u);
+    if (dd < bd) { bd = dd; best = { ri, vi, u }; } }));
+  return best;
+}
+const snap = () => JSON.stringify(rings);
+function pushHist() { hist.push(snap()); if (hist.length > 200) hist.shift(); $('undo').disabled = false; }
+function changed() { store.set(snap()); draw(); }
+function msg(t) { $('msg').textContent = t; }
+function setMode(m) { mode = m; drawing = null; for (const [id, v] of [['mEdit', 'edit'], ['mDel', 'del'], ['mNew', 'new']]) $(id).classList.toggle('on', v === m); msg(HELP[m]); draw(); }
+function delVertex(ri, vi) { pushHist(); rings[ri].splice(vi, 1); if (rings[ri].length < 3) { rings.splice(ri, 1); sel = -1; $('delRing').disabled = true; } changed(); }
+
+const ptrs = new Map(); let drag = null;
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('pointerdown', e => {
+  if (!T) return;
+  cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; drag = { pinch: true, d0: Math.hypot(a[0] - b[0], a[1] - b[1]), s0: view.s, w: toW((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) }; return; }
+  const px = e.clientX, py = e.clientY, w = toW(px, py);
+  if (mode === 'new') {
+    if (drawing && drawing.length >= 3) { const [sx, sy] = toS(drawing[0][0], drawing[0][1]); if (Math.hypot(sx - px, sy - py) < 12) { pushHist(); rings.push(drawing); sel = rings.length - 1; $('delRing').disabled = false; drawing = null; changed(); setMode('edit'); return; } }
+    (drawing = drawing || []).push(w); draw(); return;
+  }
+  const v = hitVertex(px, py);
+  if (mode === 'del' || e.button === 2) { if (v) delVertex(v.ri, v.vi); return; }
+  if (v) { pushHist(); drag = { v }; sel = v.ri; $('delRing').disabled = false; draw(); return; }
+  const ed = hitEdge(px, py);
+  if (ed) { pushHist(); rings[ed.ri].splice(ed.vi + 1, 0, w); drag = { v: { ri: ed.ri, vi: ed.vi + 1 } }; sel = ed.ri; $('delRing').disabled = false; changed(); return; }
+  drag = { pan: true, px, py, x: view.x, z: view.z, moved: false };
+});
+cv.addEventListener('pointermove', e => {
+  if (!T) return;
+  const w = toW(e.clientX, e.clientY); $('xy').textContent = Math.round(w[0]) + ', ' + Math.round(w[1]);
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (!drag) return;
+  if (drag.pinch && ptrs.size === 2) { const [a, b] = [...ptrs.values()], dd = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    view.s = Math.max(0.2, Math.min(20, drag.s0 * dd / drag.d0)); view.x = drag.w[0] - (mx - innerWidth / 2) / view.s; view.z = drag.w[1] - (my - innerHeight / 2) / view.s; draw(); return; }
+  if (drag.v) { rings[drag.v.ri][drag.v.vi] = w; draw(); return; }
+  if (drag.pan) { if (Math.hypot(e.clientX - drag.px, e.clientY - drag.py) > 4) drag.moved = true; view.x = drag.x - (e.clientX - drag.px) / view.s; view.z = drag.z - (e.clientY - drag.py) / view.s; draw(); }
+});
+const up = e => {
+  ptrs.delete(e.pointerId);
+  if (!drag) return;
+  if (drag.v) changed();
+  else if (drag.pan && !drag.moved) { const w = toW(e.clientX, e.clientY); sel = rings.findIndex(p => inRing(w[0], w[1], p)); $('delRing').disabled = sel < 0; draw(); }
+  if (!drag.pinch || ptrs.size === 0) drag = null;
+};
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+cv.addEventListener('wheel', e => { e.preventDefault(); const w = toW(e.clientX, e.clientY); view.s = Math.max(0.2, Math.min(20, view.s * Math.exp(-e.deltaY * 0.0015))); view.x = w[0] - (e.clientX - innerWidth / 2) / view.s; view.z = w[1] - (e.clientY - innerHeight / 2) / view.s; draw(); }, { passive: false });
+
+function undo() { if (!hist.length) return; rings = JSON.parse(hist.pop()); sel = -1; drawing = null; $('undo').disabled = !hist.length; $('delRing').disabled = true; changed(); }
+addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+  else if (e.key === 'Escape') { drawing = null; draw(); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && sel >= 0) { pushHist(); rings.splice(sel, 1); sel = -1; $('delRing').disabled = true; changed(); }
+});
+$('mEdit').onclick = () => setMode('edit'); $('mDel').onclick = () => setMode('del'); $('mNew').onclick = () => setMode('new');
+$('undo').onclick = undo;
+$('delRing').onclick = () => { if (sel < 0) return; pushHist(); rings.splice(sel, 1); sel = -1; $('delRing').disabled = true; changed(); };
+$('reset').onclick = () => { if (!confirm('編集を捨てて、町データの自動の区域に戻しますか？')) return; pushHist(); rings = (T.pzone || []).map(ringOf); sel = -1; store.del(); draw(); };
+$('save').onclick = () => {
+  const data = { town: key, v: 1, pzone: rings.map(p => p.flatMap(q => [+q[0].toFixed(2), +q[1].toFixed(2)])) };
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' })); a.download = 'fence-' + key + '.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  msg('fence-' + key + '.json を保存しました。このファイルを渡してください');
+};
+setMode('edit');
+</script>
+</body>
+</html>
