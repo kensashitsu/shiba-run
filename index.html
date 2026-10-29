@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v147</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v148</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v147 · -- fps</div>
+<div id="fps" class="ui">v148 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v147';
+const VERSION = 'v148';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -363,7 +363,7 @@ if (TOWN) {
     TOWN.isSea = (i, j) => i >= 0 && j >= 0 && i < n && j < n && (bits[(j * n + i) >> 3] >> ((j * n + i) & 7) & 1) === 1;
   }
   const add = (k, p, w) => { let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of p) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } const m = w / 2 + 1; townFeat.push({ k, p, w, x0: x0 - m, x1: x1 + m, z0: z0 - m, z1: z1 + m }); };
-  for (const b of TOWN.bld) if (!b.k) add('b', ringOf(b.p), 2.4);   // 柱と屋根だけの物・跨線橋は通れる
+  for (const b of TOWN.bld) if (!b.k) { const p = ringOf(b.p); let a = 0; for (let i = 0; i < p.length; i++) { const q = p[i], r = p[(i + 1) % p.length]; a += q[0] * r[1] - r[0] * q[1]; } if (Math.abs(a) / 2 >= 4) add('b', p, 2.4); }   // 柱と屋根だけの物・跨線橋は通れる。4m² 未満は描かないので入れない所にもしない
   for (const r of TOWN.rail || []) add('t', ringOf(r), 4.2);   // 線路（バラスト）。2.1m 外まで入れない（柵は 1.9m）
   for (const p of TOWN.plat || []) add('p', ringOf(p), 1);     // ホーム
   for (const p of TOWN.pave || []) add('a', ringOf(p), 1);     // 駐車場・駅前広場
@@ -1288,7 +1288,10 @@ if (TOWN) {
       const RL = TOWN.rail.map(ringOf), PL = (TOWN.plat || []).map(ringOf);
       const inPl = (x, z) => PL.some(q => { let c = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > z) !== (q[j][1] > z) && x < (q[j][0] - q[i][0]) * (z - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) c = !c; return c || q.some((a, k) => segD(x, z, a, q[(k + 1) % q.length]) < 0.8); });
       const RD = TOWN.road.map(r => ({ w: r.w, p: ringOf(r.p) })).filter(r => r.p.some(q => near(q)));
-      const okF = (x, z) => near([x, z]) && !RL.some(q => q.some((a, k) => k && segD(x, z, q[k - 1], a) < 1.85)) && !inPl(x, z) && !RD.some(r => r.p.some((a, k) => k && segD(x, z, r.p[k - 1], a) < r.w / 2 + 0.8));   // 踏切は開ける
+      const XS = [];   // 踏切：道と線路が交わる点 [x, z, 開ける半径]
+      const cross = (a, b, c, d) => { const r = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]); if (Math.abs(r) < 1e-9) return null; const t = ((c[0] - a[0]) * (d[1] - c[1]) - (c[1] - a[1]) * (d[0] - c[0])) / r, u = ((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / r; return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t] : null; };
+      for (const r of RD) for (let i = 1; i < r.p.length; i++) for (const q of RL) for (let k = 1; k < q.length; k++) { const c = cross(r.p[i - 1], r.p[i], q[k - 1], q[k]); if (c) XS.push([c[0], c[1], r.w / 2 + 6]); }
+      const okF = (x, z) => near([x, z]) && !RL.some(q => q.some((a, k) => k && segD(x, z, q[k - 1], a) < 1.85)) && !inPl(x, z) && !(XS.some(c => Math.hypot(x - c[0], z - c[1]) < c[2]) && RD.some(r => r.p.some((a, k) => k && segD(x, z, r.p[k - 1], a) < r.w / 2 + 0.8)));   // 踏切は開ける（線路に沿って並ぶ道の横には立てる）
       for (const q of RL) for (const sd of [-1.9, 1.9]) for (let k = 2; k < q.length; k += 2) {
         const a = q[k - 2], b = q[k], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, nx = -dz / L * sd, nz = dx / L * sd;
         const xa = a[0] + nx, za = a[1] + nz, xb = b[0] + nx, zb = b[1] + nz;
