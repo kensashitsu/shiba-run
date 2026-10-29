@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v146</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v147</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v146 · -- fps</div>
+<div id="fps" class="ui">v147 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v146';
+const VERSION = 'v147';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1373,6 +1373,18 @@ if (TOWN) {
           if (onDeck(xa, za, 0.4) || onDeck(xb, zb, 0.4) || others.some(q => inR(xa, za, q) || inR(xb, zb, q))) continue;
           fenceSeg(xa, za, xb, zb);
         }
+      }
+    }
+    // 池（ため池など）のまわり：水際から 0.8m 外に柵（池は岸から 1m まで入れない）
+    for (const k of Object.keys(TOWN.wlev || {})) {
+      const p0 = ringOf(TOWN.water[k]), p = dense(p0, 3);
+      const inW = (x, z, q) => { let c = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > z) !== (q[j][1] > z) && x < (q[j][0] - q[i][0]) * (z - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) c = !c; return c; };
+      for (let i = 0; i < p.length; i++) {
+        const a = p[i], b = p[(i + 1) % p.length], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+        let ox = -dz / L * 0.8, oz = dx / L * 0.8; if (inW(mx + ox * 0.4, mz + oz * 0.4, p0)) { ox = -ox; oz = -oz; }
+        const xa = a[0] + ox, za = a[1] + oz, xb = b[0] + ox, zb = b[1] + oz;
+        if (inW(xa, za, p0) || inW(xb, zb, p0)) continue;   // 入り組んだ所で水の中に入る柵は立てない
+        fenceSeg(xa, za, xb, zb);
       }
     }
     if (fence.length) geo(fence, '#c9ccc8', { cast: true });
