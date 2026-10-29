@@ -175,10 +175,10 @@
 </script>
 </head>
 <body>
-<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v139</small></div>
+<div id="boot"><b>しば草原</b><i>言うことをきかない柴と、町を散歩する</i><span>読み込み中…</span><small>v140</small></div>
 
 <canvas id="c"></canvas>
-<div id="fps" class="ui">v139 · -- fps</div>
+<div id="fps" class="ui">v140 · -- fps</div>
 <button type="button" id="homeBtn" class="ui">タイトル</button>
 <div id="title" class="ui" hidden><h1>しば草原<small>言うことをきかない柴と、町を散歩する</small></h1>
 <div id="tTown"><span>町</span><button type="button" data-town="home">いつもの町</button><button type="button" data-town="seto">瀬戸</button></div>
@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v139';
+const VERSION = 'v140';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -243,7 +243,7 @@ const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0),
 
 // 町（?town）：実在の住宅地の起伏・建物・道路・池。assets/town.json は中心からの距離(m)だけで、地名や緯度経度は持たない
 // 元データ：国土地理院（標高タイル・ベクトルタイル）、© OpenStreetMap contributors（林）
-const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, seto: { file: 'assets/town-seto.json', name: '瀬戸' } };
+const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, seto: { file: 'assets/town-seto.json', name: '瀬戸', start: [-27, -48] } };
 let TOWN_ID = (location.search.match(/[?&]town=(\w+)/) || [])[1];
 if (!TOWN_ID && !/[?&]test/.test(location.search)) { try { TOWN_ID = localStorage.getItem('shiba-town'); } catch (e) { /* 覚えられない時はいつもの町 */ } }
 if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
@@ -4622,12 +4622,12 @@ function stepInner(dt, t) {
 
 // 最初の一枚：小道の上、犬の斜め後ろから
 st.x = pathX(0); st.yaw = 0.6; camYaw = 0.6;
-if (TOWN) {   // 町：中心に一番近い道路の上から
+if (TOWN) {   // 町：出発地点（無ければ中心）に一番近い道路の上から
   groundTexU.uFarGrass.value.set(0x6f7c3a).convertSRGBToLinear();   // 町の庭や空き地は草原より落ち着いた緑
   water.visible = false;
-  let best = 1e9;
-  for (let z = -60; z <= 60; z += 1) for (let x = -60; x <= 60; x += 1) {
-    const d = x * x + z * z;
+  let best = 1e9; const [sx0, sz0] = TOWNS[TOWN_ID].start || [0, 0];   // 瀬戸は駅舎の北のロータリー
+  for (let z = sz0 - 60; z <= sz0 + 60; z += 1) for (let x = sx0 - 60; x <= sx0 + 60; x += 1) {
+    const d = (x - sx0) ** 2 + (z - sz0) ** 2;
     if (d < best && townRoad(x, z) > 0.9 && !townBlocked(x, z)) { best = d; st.x = x; st.z = z; }
   }
   document.getElementById('credit').hidden = false;
