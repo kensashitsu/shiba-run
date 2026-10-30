@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v153';
+const VERSION = 'v154';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1365,7 +1365,7 @@ if (TOWN) {
       }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wat, 3)); scene.add(new THREE.Mesh(g, water.material));
       // 掘った道：床（舗装）、両側の壁（床から地面の 0.2m 上まで）、くぐる区間の天井（線路を載せる箱、厚さ 0.6m）
-      const ufl = [];
+      const ufl = [], gird = [];   // gird：天井＝線路を載せる鋼の桁（さびた緑）
       for (const U of townUnder) {
         const P = U.p, hw = U.hw, nrm = k => { const a = P[Math.max(0, k - 1)], b = P[Math.min(P.length - 1, k + 1)], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1; return [-dz / L, dx / L]; };
         for (let k = 1; k < P.length; k++) {
@@ -1378,13 +1378,13 @@ if (TOWN) {
             const ox = na[0] * 0.25 * sd, oz = na[1] * 0.25 * sd;   // 壁の厚さ 25cm の天端
             qd(wall, [xa, ta, za], [xb, tb, zb], [xb + ox, tb, zb + oz], [xa + ox, ta, za + oz]);
           }
-          if (k - 1 >= U.r[0] && k <= U.r[1]) {   // 天井（箱には底の面が無いので、下から見える面を足す）
-            box(wall, (a[0] + b[0]) / 2, U.top - 0.6, (a[1] + b[1]) / 2, Math.hypot(b[0] - a[0], b[1] - a[1]) + 0.05, 0.6, U.w + 2.4, Math.atan2(b[1] - a[1], b[0] - a[0]));
-            const yb = U.top - 0.6, e = hw + 1.2; qd(wall, [a[0] + na[0] * e, yb, a[1] + na[1] * e], [b[0] + nb[0] * e, yb, b[1] + nb[1] * e], [b[0] - nb[0] * e, yb, b[1] - nb[1] * e], [a[0] - na[0] * e, yb, a[1] - na[1] * e]);
+          if (k - 1 >= U.r[0] && k <= U.r[1]) {   // 天井（鋼の桁。箱には底の面が無いので、下から見える面を足す）
+            box(gird, (a[0] + b[0]) / 2, U.top - 0.7, (a[1] + b[1]) / 2, Math.hypot(b[0] - a[0], b[1] - a[1]) + 0.05, 0.7, U.w + 2.4, Math.atan2(b[1] - a[1], b[0] - a[0]));
+            const yb = U.top - 0.7, e = hw + 1.2; qd(gird, [a[0] + na[0] * e, yb, a[1] + na[1] * e], [b[0] + nb[0] * e, yb, b[1] + nb[1] * e], [b[0] - nb[0] * e, yb, b[1] - nb[1] * e], [a[0] - na[0] * e, yb, a[1] - na[1] * e]);
           }
         }
       }
-      if (ufl.length) geo(ufl, '#4f5054');
+      if (ufl.length) { geo(ufl, '#6b6a66'); geo(gird, '#5d6a4f', { cast: true, metalness: 0.3, roughness: 0.75 }); }
       geo(bed, '#3d3a30'); geo(wall, '#a5a39b', { cast: true });
       // 橋：町データの床板（decks）から。厚さ 0.5m の床板と、両側に欄干
       const deck = [], rail = [];
