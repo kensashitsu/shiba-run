@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v164';
+const VERSION = 'v165';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -291,6 +291,9 @@ const townUnder = TOWN && TOWN.under ? TOWN.under.map(u => {   // 線路の下�
 }) : [];
 const brST = (B, x, z) => { const dx = x - B.o[0], dz = z - B.o[1]; return [dx * B.d[0] + dz * B.d[1], -dx * B.d[1] + dz * B.d[0]]; };   // 手で決めた鉄橋の座標（s：くぐる道の向き、t：直角・南向き）
 const inBridge = (x, z, m = 0) => townUnder.some(U => { if (!U.br) return false; const [s, t] = brST(U.br, x, z); return s >= U.br.sA - m && s <= U.br.sB + m && t >= U.br.tN - m && t <= U.br.tS + m; });
+const brAt = (B, s, t) => [B.o[0] + B.d[0] * s - B.d[1] * t, B.o[1] + B.d[1] * s + B.d[0] * t];
+const brLedge = U => U.br ? [[-16.2, -1.6], [-14.1, 2.2], [-12.5, 3.1], [U.br.sB, 3.3], [U.br.sB, 0.9], [-10.5, 0.7], [-12.8, 0.3], [-15.2, -1.9]].map(([s, t]) => brAt(U.br, s, t)) : null;   // 鉄橋の口：小道と川の間の低い帯（線路の土手の地面を描かない）
+const inLedge = (x, z) => townUnder.some(U => U.br && inPolyXZ(x, z, brLedge(U)));
 const waterCap = (x, z) => { let c = 1e9; for (const U of townUnder) if (U.wl !== undefined && U.br) c = Math.min(c, U.wl + 2.6 + Math.max(0, Math.hypot(x - U.br.o[0], z - U.br.o[1]) - 35) * 0.1); return c; };   // 掘った水路の水面は岸の 2.6m 下。手で決めた所は近くだけ低く（離れると元へ）
 const canalSet = new Set(TOWN && TOWN.canal || []);   // 掘る水路（TOWN.water の番号）
 if (TOWN) {
@@ -411,6 +414,7 @@ if (TOWN) {
     c.strokeStyle = c.fillStyle = '#00ff00'; c.lineWidth = 2.4 / TOWN_PX;            // 家の周り（犬走り・駐車場）
     for (const F of L) if (F.k === 'b') { path(c, F.p, true); c.fill(); c.stroke(); }
     for (const F of L) if (F.k === 't') { c.lineWidth = F.w / TOWN_PX; path(c, F.p); c.stroke(); } else if (F.k === 'p') { path(c, F.p, true); c.fill(); }   // 線路の砂利・ホーム
+    for (const U of townUnder) if (U.br && U.pt) { c.globalCompositeOperation = 'source-over'; c.fillStyle = '#000'; for (const q of [U.pt.poly, brLedge(U)]) { path(c, q, true); c.fill(); } c.globalCompositeOperation = 'lighter'; }   // 川沿いの低い小道に線路の砂利を塗らない
     if (pavedCv && X1 > TOWN.paved.x0 && X0 < TOWN.paved.x0 + TOWN.paved.n && Z1 > TOWN.paved.z0 && Z0 < TOWN.paved.z0 + TOWN.paved.n) { const P = TOWN.paved; c.imageSmoothingEnabled = true; c.drawImage(pavedCv, (P.x0 - 0.5 - X0) / TOWN_PX, (P.z0 - 0.5 - Z0) / TOWN_PX, P.n / TOWN_PX, P.n / TOWN_PX); }
     c.strokeStyle = '#ff0000'; c.fillStyle = '#ff0000';
     for (const F of L) if (F.k === 'a') { path(c, F.p, true); c.fill(); }
@@ -1488,7 +1492,7 @@ if (TOWN) {
         if (!pb.some(b => hit(b, 2)) && !townUnder.some(U => hit([U.x0, U.x1, U.z0, U.z1], 0) || U.pt && hit([U.pt.x0, U.pt.x1, U.pt.z0, U.pt.z1], 0))) continue;
         c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#000'; c.fillRect(0, 0, T, T); c.setTransform(1, 0, 0, 1, -tx, -ty); c.fillStyle = c.strokeStyle = '#fff';
         polys.forEach((p, k) => { if (!hit(pb[k], 2)) return; c.beginPath(); p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.closePath(); c.fill(); c.lineWidth = 1.0 / side * N; c.lineJoin = 'round'; c.stroke(); });   // 岸の外へ 0.5m 広げて掘る（すき間は護岸の天端でふさぐ）
-        for (const U of townUnder) if (U.pt) { c.beginPath(); U.pt.poly.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.closePath(); c.fill(); }   // 細かい地面の所も元の地面を描かない
+        for (const U of townUnder) for (const q of [U.pt && U.pt.poly, brLedge(U)]) if (q) { c.beginPath(); q.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.closePath(); c.fill(); }   // 細かい地面・鉄橋の口の帯も元の地面を描かない
         c.lineCap = 'butt'; for (const U of townUnder) { c.lineWidth = (U.w + 0.1) / side * N; c.beginPath(); U.p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.stroke(); }   // 掘った道：床の幅だけ地面を描かない
         for (const B of townBridges || []) { if (!hit([B.x0, B.x1, B.z0, B.z1], B.w)) continue; c.lineWidth = (B.w + 0.1) / side * N; c.beginPath(); B.p.forEach(([x, z], i) => { const u = (x - X0) / side * N, v = (z - Z0) / side * N; i ? c.lineTo(u, v) : c.moveTo(u, v); }); c.stroke(); }   // 橋の床板の下の地面も描かない（床板がいちばん上の面）
         const id = c.getImageData(0, 0, T, T).data, w = Math.min(T, N - tx), h = Math.min(T, N - ty);
@@ -1506,8 +1510,9 @@ if (TOWN) {
           const j = (i + 1) % p.length, a = p[i], b = p[j], mxp = (a[0] + b[0]) / 2, mzp = (a[1] + b[1]) / 2, under = onDeck(mxp, mzp, 0.3);
           let ta = under ? hy[i] - 0.7 : hy[i] + 0.25, tb = under ? hy[j] - 0.7 : hy[j] + 0.25;
           const capB = townUnder.find(U => U.br && inBridge(mxp, mzp, 0.5)); if (capB) { ta = Math.min(ta, capB.top - capB.br.dep); tb = Math.min(tb, capB.top - capB.br.dep); }   // 鉄橋の下の護岸は桁の下まで
+          const lowU = townUnder.find(U => U.br && inPolyXZ(mxp, mzp, brLedge(U).map(([x, z]) => { const [s, t] = brST(U.br, x, z); return brAt(U.br, s, t < 2 ? t - 0.6 : t + 0.6); }))); if (lowU) { const f = Math.min(...lowU.p.map(q => q[2])); ta = tb = f; }   // 小道の側の護岸は床の高さまで（小道と川が同じ口に並ぶ）
           qd(wall, [a[0], wy[i] - 3.0, a[1]], [b[0], wy[j] - 3.0, b[1]], [b[0], tb, b[1]], [a[0], ta, a[1]]);
-          if (!under) { const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, ox = -dz / L * 0.9, oz = dx / L * 0.9, s = inR(mxp + ox * 0.3, mzp + oz * 0.3, p0) ? -1 : 1;   // 護岸の天端（外側へ 90cm、掘った所の縁を覆う。掘る絵は町全体で約 0.6m 升と粗いので。外の縁は地面の高さまで下げる）
+          if (!under && !lowU) { const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, ox = -dz / L * 0.9, oz = dx / L * 0.9, s = inR(mxp + ox * 0.3, mzp + oz * 0.3, p0) ? -1 : 1;   // 護岸の天端（外側へ 90cm、掘った所の縁を覆う。掘る絵は町全体で約 0.6m 升と粗いので。外の縁は地面の高さまで下げる）
             qd(wall, [a[0], ta, a[1]], [b[0], tb, b[1]], [b[0] + ox * s, tb - 0.27, b[1] + oz * s], [a[0] + ox * s, ta - 0.27, a[1] + oz * s]); }
         }
       }
@@ -1523,6 +1528,7 @@ if (TOWN) {
             const xa = a[0] + na[0] * hw * sd, za = a[1] + na[1] * hw * sd, xb = b[0] + nb[0] * hw * sd, zb = b[1] + nb[1] * hw * sd;
             let ta = Math.max(townGrid(a[0] + na[0] * (hw + 0.6) * sd, a[1] + na[1] * (hw + 0.6) * sd) + 0.2, a[2] + 0.2), tb = Math.max(townGrid(b[0] + nb[0] * (hw + 0.6) * sd, b[1] + nb[1] * (hw + 0.6) * sd) + 0.2, b[2] + 0.2);
             if (U.br && inBridge(xa, za, 0.3)) ta = Math.min(ta, U.top - U.br.dep); if (U.br && inBridge(xb, zb, 0.3)) tb = Math.min(tb, U.top - U.br.dep);
+            if (U.br && brST(U.br, xa, za)[1] > brST(U.br, a[0], a[1])[1] && (inBridge(xa, za, 0.3) || inLedge(xa, za))) { qd(wall, [xa, a[2] - 0.2, za], [xb, b[2] - 0.2, zb], [xb, b[2] + 0.03, zb], [xa, a[2] + 0.03, za]); continue; }   // 川の側は壁を立てない
             qd(wall, [xa, a[2] - 0.2, za], [xb, b[2] - 0.2, zb], [xb, tb, zb], [xa, ta, za]);
             const ox = na[0] * 0.25 * sd, oz = na[1] * 0.25 * sd;   // 壁の厚さ 25cm の天端
             qd(wall, [xa, ta, za], [xb, tb, zb], [xb + ox, tb, zb + oz], [xa + ox, ta, za + oz]);
@@ -1539,16 +1545,28 @@ if (TOWN) {
         const bot = U.top - B.dep, fl = Math.min(...U.p.map(q => q[2])), bed = (U.wl !== undefined ? U.wl : fl - 1.3) - 0.6;
         const [cx, cz] = at(sm, (B.tN + B.tS) / 2); box(gird, cx, bot, cz, sl, B.dep - 0.04, B.tS - B.tN + 0.4, yaw);
         const q = [at(B.sA, B.tN - 0.2), at(B.sB, B.tN - 0.2), at(B.sB, B.tS + 0.2), at(B.sA, B.tS + 0.2)].map(([x, z]) => [x, bot, z]); qd(gird, q[0], q[1], q[2], q[3]);   // 桁の下の面
-        for (const [t, th, y0, s0] of [[B.tN - 0.35, 0.7, fl - 0.4, B.sA + (B.nA || 0)], [B.tS + 0.35, 0.7, bed, B.sA], [B.tPier, 0.9, bed, B.sA]]) { const [x, z] = at((s0 + B.sB) / 2, t); box(wall, x, y0, z, B.sB - s0, bot - y0, th, yaw); }   // nA：北の橋台を西の端から短く（小道が北へ曲がる所）
+        for (const [t, th, y0, s0] of [[B.tN - 0.35, 0.7, fl - 0.4, B.sA + (B.nA || 0)], [B.tS + 0.35, 0.7, bed, B.sA]]) { const [x, z] = at((s0 + B.sB) / 2, t); box(wall, x, y0, z, B.sB - s0, bot - y0, th, yaw); }   // nA：北の橋台を西の端から短く（小道が北へ曲がる所）
       }
       for (const U of townUnder) {   // 細かい地面：範囲（0.8m 広め）にかかる升
         const Q = U.pt; if (!Q) continue;
         const near = (x, z) => inPolyXZ(x, z, Q.poly) || Q.poly.some((q, k) => segD(x, z, q, Q.poly[(k + 1) % Q.poly.length]) < 0.8), pos = new Float32Array(Q.nx * Q.nz * 3), idx = [];   // 点を共有してなめらかな向きに（斜面の草の境目がぎざぎざにならない）
-        for (let j = 0; j < Q.nz; j++) for (let i = 0; i < Q.nx; i++) pos.set([Q.x0 + i * Q.st, Q.h[j * Q.nx + i], Q.z0 + j * Q.st], (j * Q.nx + i) * 3);
+        const lowFl = U.br ? Math.min(...U.p.map(q => q[2])) : 0, lowP = brLedge(U), nearLow = (x, z) => lowP && (inPolyXZ(x, z, lowP) || lowP.some((q, k) => segD(x, z, q, lowP[(k + 1) % lowP.length]) < 1.2));   // 口の帯のまわりは細かい地面が帯より上に出ない
+        for (let j = 0; j < Q.nz; j++) for (let i = 0; i < Q.nx; i++) { const x = Q.x0 + i * Q.st, z = Q.z0 + j * Q.st, y = Q.h[j * Q.nx + i]; pos.set([x, nearLow(x, z) ? Math.min(y, lowFl) : y, z], (j * Q.nx + i) * 3); }
         for (let j = 0; j + 1 < Q.nz; j++) for (let i = 0; i + 1 < Q.nx; i++) { if (!near(Q.x0 + (i + 0.5) * Q.st, Q.z0 + (j + 0.5) * Q.st)) continue; const k = j * Q.nx + i; idx.push(k, k + Q.nx, k + Q.nx + 1, k, k + Q.nx + 1, k + 1); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
         const m = new THREE.Mesh(g, patchMat); m.receiveShadow = true; scene.add(m);
       }
+      const whiteRail = [];
+      for (const U of townUnder) {   // 口の帯（床の高さ）と白い手すり
+        const B = U.br; if (!B) continue;
+        const fl = Math.min(...U.p.map(q => q[2])), L = brLedge(U), tr = THREE.ShapeUtils.triangulateShape(L.map(q => new THREE.Vector2(q[0], q[1])), []);
+        for (const t of tr) { const [a, b, c] = t.map(i => L[i]), up = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) > 0; for (const q of up ? [a, b, c] : [a, c, b]) ufl.push(q[0], fl + 0.01, q[1]); }
+        const line = [[-15, -2], [-13.4, 1.45], [-11, 1.4], [B.sB - 0.3, 1.4]].map(([s, t]) => brAt(B, s, t));
+        for (let k = 1; k < line.length; k++) { const a = line[k - 1], b = line[k], dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), yaw = Math.atan2(dz, dx), n = Math.max(1, Math.round(len / 2.2));
+          for (const y of [0.55, 1.0]) box(whiteRail, (a[0] + b[0]) / 2, fl + y, (a[1] + b[1]) / 2, len, 0.05, 0.05, yaw);
+          for (let i = k === 1 ? 0 : 1; i <= n; i++) box(whiteRail, a[0] + dx * i / n, fl, a[1] + dz * i / n, 0.07, 1.03, 0.07, yaw); }
+      }
+      geo(whiteRail, '#e8ebe8');
       if (ufl.length) { geo(ufl, '#6b6a66'); geo(gird, '#5d6a4f', { cast: true, metalness: 0.3, roughness: 0.75 }); }
       geo(bed, '#3d3a30'); geo(wall, '#a5a39b', { cast: true });
       // 橋：町データの床板（decks）から。厚さ 0.5m の床板と、両側に欄干
@@ -1573,7 +1591,8 @@ if (TOWN) {
     // ため池のまわり：土手の斜面を登りきった所（道の縁など）に柵。斜面は立ち入り禁止（町データの pzone）
     for (const z of TOWN.pzone || []) { const p = dense(ringOf(z), 3); for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; fenceSeg(a[0], a[1], b[0], b[1]); } }
     // 線路の両側・掘った水路の縁・広い水の縁の柵：町データの fence（人が来る所だけ。tools/fences.cjs が決める）
-    for (const f of TOWN.fence || []) { const p = ringOf(f); for (let i = 1; i < p.length; i++) fenceSeg(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]); }
+    const fenceSkip = (x, z) => townUnder.some(U => U.br && (() => { const [s, t] = brST(U.br, x, z); return s > -16.5 && s < U.br.sB + 0.5 && t > -2.5 && t < 3.6; })());   // 鉄橋の口は手作りの手すり
+    for (const f of TOWN.fence || []) { const p = ringOf(f); for (let i = 1; i < p.length; i++) if (!fenceSkip((p[i - 1][0] + p[i][0]) / 2, (p[i - 1][1] + p[i][1]) / 2)) fenceSeg(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]); }
     for (const A of fenceM.values()) geo(A, '#c9ccc8', { cast: true });
   }
   // 池：水面は岸の一番低い所より少し下
