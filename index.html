@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v171';
+const VERSION = 'v172';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -440,6 +440,7 @@ if (TOWN) {
       g.fill();
     };
     c.fillStyle = '#0000ff'; seaCells(c);
+    c.globalCompositeOperation = 'source-over'; c.strokeStyle = '#ff0000'; c.lineCap = 'butt'; for (const F of L) if (F.k === 'dk') { c.lineWidth = (F.w + 0.4) / TOWN_PX; path(c, F.p); c.stroke(); } c.lineCap = 'round'; c.globalCompositeOperation = 'lighter';   // 床板の所は道路の色
     if (o) {   // 入れない所
       o.fillStyle = '#000'; o.fillRect(0, 0, W, W); o.fillStyle = '#fff';
       for (const F of L) if (F.k === 'w') { path(o, F.p, true); o.fill(); }
@@ -1533,7 +1534,7 @@ if (TOWN) {
       }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wat, 3)); scene.add(new THREE.Mesh(g, water.material));
       // 掘った道：床（舗装）、両側の壁（床から地面の 0.2m 上まで）、くぐる区間の天井（線路を載せる箱、厚さ 0.6m）
-      const ufl = [], gird = [];   // gird：天井＝線路を載せる鋼の桁（さびた緑）
+      const ufl = [], gird = [], rustM = [], frameM = [];   // gird：天井＝線路を載せる鋼の桁（さびた緑）
       for (const U of townUnder) {
         const P = U.p, hw = U.hw, nrm = k => { const a = P[Math.max(0, k - 1)], b = P[Math.min(P.length - 1, k + 1)], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1; return [-dz / L, dx / L]; };
         for (let k = 1; k < P.length; k++) {
@@ -1562,7 +1563,19 @@ if (TOWN) {
         const tCut = (13.2 - B.sB) / 0.38 + 1.5, gp = [[B.sA, B.tN - 0.2], [B.sB, B.tN - 0.2], [B.sB, tCut], [brEnd(B, B.tS + 0.2), B.tS + 0.2], [B.sA, B.tS + 0.2]].map(([s, t]) => at(s, t)), ytop = bot + B.dep - 0.04;   // 桁の形（東南の角を落とす）
         for (let k = 1; k + 1 < gp.length; k++) for (const y of [bot, ytop]) gird.push(gp[0][0], y, gp[0][1], gp[k][0], y, gp[k][1], gp[k + 1][0], y, gp[k + 1][1]);
         for (let k = 0; k < gp.length; k++) { const a = gp[k], b = gp[(k + 1) % gp.length]; qd(gird, [a[0], bot, a[1]], [b[0], bot, b[1]], [b[0], ytop, b[1]], [a[0], ytop, a[1]]); }
-        for (const [t, th, y0, s0] of [[B.tN - 0.35, 0.7, fl - 0.4, B.sA + (B.nA || 0)], [B.tS + 0.35, 0.7, bed, B.sA], [B.tPier, 1.2, bed, B.sA]]) { const e = brEnd(B, t + th / 2), [x, z] = at((s0 + e) / 2, t); box(wall, x, y0, z, e - s0, bot - y0, th, yaw); }   // nA：北の橋台を西の端から短く（小道が北へ曲がる所）
+        for (const [i, j] of [[4, 0], [1, 2], [2, 3]]) {   // 西と東の面：下のさびた帯、上の緑の手すり枠（写真の鋼の桁）
+          const a = gp[i], b = gp[j], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), y2 = Math.atan2(dz, dx), mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+          box(rustM, mx, bot - 0.02, mz, L + 0.12, 0.2, 0.2, y2); box(rustM, mx, ytop - 0.08, mz, L + 0.12, 0.12, 0.16, y2);
+          const n = Math.max(1, Math.round(L / 2.4)); for (let k = 0; k <= n; k++) box(frameM, a[0] + dx * k / n, ytop, a[1] + dz * k / n, 0.12, 1.05, 0.12, y2);
+          for (const y of [0.5, 1.0]) box(frameM, mx, ytop + y, mz, L, 0.09, 0.09, y2);
+        }
+        { const s0 = -10.05, s1 = s0 + 0.6, y = (s, t) => at(s, t), t0 = -1.7, t1 = t0 - 2.2, yEnd = bot - 0.5, Y = bot + 0.1;   // 口の左：手前へ続く擁壁（上は土手へ下がる）
+          const f = (s, tA, yA, tB, yB) => { const a = y(s, tA), b = y(s, tB); qd(wall, [a[0], fl - 0.2, a[1]], [b[0], fl - 0.2, b[1]], [b[0], yB, b[1]], [a[0], yA, a[1]]); };
+          f(s0, t0, Y, t1, yEnd); f(s1, t0, Y, t1, yEnd); const a = y(s0, t0), b = y(s0, t1), c = y(s1, t1), d = y(s1, t0); qd(wall, [a[0], Y, a[1]], [b[0], yEnd, b[1]], [c[0], yEnd, c[1]], [d[0], Y, d[1]]); qd(wall, [b[0], fl - 0.2, b[1]], [c[0], fl - 0.2, c[1]], [c[0], yEnd, c[1]], [b[0], yEnd, b[1]]);
+          const cv = document.createElement('canvas'); cv.width = 128; cv.height = 256; const g2 = cv.getContext('2d'); g2.fillStyle = '#b9ae9c'; g2.fillRect(0, 0, 128, 256); for (let r = 0; r < 16; r++) for (let q = -1; q < 4; q++) { const v = (r * 7 + q * 13) % 5; g2.fillStyle = ['#7c4331', '#8a4c36', '#6f3b2c', '#945640', '#83462f'][(v + 5) % 5]; g2.fillRect(q * 32 + (r % 2 ? 16 : 0) + 1, r * 16 + 1, 30, 14); }
+          const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(1, Math.max(1, (bot - fl) / 1.2));
+          const pm = new THREE.Mesh(new THREE.BoxGeometry(0.55, bot - fl + 0.2, 0.75), new THREE.MeshStandardMaterial({ map: tx, roughness: 1 })), [px, pz] = at(-10.05, -1.45); pm.position.set(px, fl - 0.2 + (bot - fl + 0.2) / 2, pz); pm.rotation.y = -yaw; pm.castShadow = pm.receiveShadow = true; scene.add(pm); }   // レンガの柱
+        for (const [t, th, y0, s0] of [[B.tN - 0.35, 0.7, fl - 0.4, B.sA + (B.nA || 0)], [B.tS + 0.35, 0.7, bed, B.sA], [B.tPier, 1.2, bed, B.sA]]) { const e = t < 0 ? Math.min(10.3, brEnd(B, t)) : brEnd(B, t + th / 2), [x, z] = at((s0 + e) / 2, t); box(wall, x, y0, z, e - s0, bot - y0, th, yaw); }   // nA：北の橋台を西の端から短く（小道が北へ曲がる所）
       }
       for (const U of townUnder) {   // 細かい地面：範囲（0.8m 広め）にかかる升
         const Q = U.pt; if (!Q) continue;
@@ -1580,15 +1593,17 @@ if (TOWN) {
       }
       if (ufl.length) { for (let i = 0; i < ufl.length; i += 9) { const v = ufl, up = (v[i + 5] - v[i + 2]) * (v[i + 6] - v[i]) - (v[i + 3] - v[i]) * (v[i + 8] - v[i + 2]) > 0; if (!up) for (let k = 0; k < 3; k++) { const t = v[i + 3 + k]; v[i + 3 + k] = v[i + 6 + k]; v[i + 6 + k] = t; } }
         const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(ufl, 3)); fg.computeVertexNormals(); const fm = new THREE.Mesh(fg, patchMat); fm.receiveShadow = true; scene.add(fm);   // 床も地面と同じ材質（つなぎ目で色が変わらない）
-        geo(gird, '#5d6a4f', { cast: true, metalness: 0.3, roughness: 0.75 }); }
+        geo(gird, '#66755a', { cast: true, roughness: 0.8 }); geo(rustM, '#8d5b3c', { roughness: 1 }); geo(frameM, '#607157', { cast: true, roughness: 0.8 }); }
       geo(bed, '#3d3a30'); geo(wall, '#a5a39b', { cast: true });
       // 橋：町データの床板（decks）から。厚さ 0.5m の床板と、両側に欄干
-      const deck = [], rail = [];
+      const deck = [], rail = [], deckTop = [];
       for (const B of townBridges || []) {
         const P = B.p, hw = B.w / 2;
         for (let k = 0; k + 1 < P.length; k++) {
           const [xa, za, y0] = P[k], [xb, zb, y1] = P[k + 1], dx = xb - xa, dz = zb - za, L = Math.hypot(dx, dz) || 1, nx = -dz / L, nz = dx / L, ya = y0 + 0.03, yb = y1 + 0.03, yaw = Math.atan2(dz, dx);
-          qd(deck, [xa + nx * hw, ya, za + nz * hw], [xb + nx * hw, yb, zb + nz * hw], [xb - nx * hw, yb, zb - nz * hw], [xa - nx * hw, ya, za - nz * hw]);
+          qd(deckTop, [xa + nx * hw, ya, za + nz * hw], [xb + nx * hw, yb, zb + nz * hw], [xb - nx * hw, yb, zb - nz * hw], [xa - nx * hw, ya, za - nz * hw]);
+          if (k === 0) { const ex = xa - dx / L * 0.9, ez = za - dz / L * 0.9; qd(deckTop, [ex + nx * hw, ya, ez + nz * hw], [xa + nx * hw, ya, za + nz * hw], [xa - nx * hw, ya, za - nz * hw], [ex - nx * hw, ya, ez - nz * hw]); }   // 両端を少し伸ばして道路と重ねる（掘った絵が粗く、すき間が黒い筋に見える）
+          if (k + 2 === P.length) { const ex = xb + dx / L * 0.9, ez = zb + dz / L * 0.9; qd(deckTop, [xb + nx * hw, yb, zb + nz * hw], [ex + nx * hw, yb, ez + nz * hw], [ex - nx * hw, yb, ez - nz * hw], [xb - nx * hw, yb, zb - nz * hw]); }
           qd(deck, [xa + nx * hw, ya - 0.5, za + nz * hw], [xb + nx * hw, yb - 0.5, zb + nz * hw], [xb - nx * hw, yb - 0.5, zb - nz * hw], [xa - nx * hw, ya - 0.5, za - nz * hw]);
           for (const sd of [-1, 1]) {
             qd(deck, [xa + nx * hw * sd, ya - 0.5, za + nz * hw * sd], [xb + nx * hw * sd, yb - 0.5, zb + nz * hw * sd], [xb + nx * hw * sd, yb, zb + nz * hw * sd], [xa + nx * hw * sd, ya, za + nz * hw * sd]);
@@ -1599,6 +1614,8 @@ if (TOWN) {
           }
         }
       }
+      for (let i = 0; i < deckTop.length; i += 9) { const v = deckTop, up = (v[i + 5] - v[i + 2]) * (v[i + 6] - v[i]) - (v[i + 3] - v[i]) * (v[i + 8] - v[i + 2]) > 0; if (!up) for (let k = 0; k < 3; k++) { const t = v[i + 3 + k]; v[i + 3 + k] = v[i + 6 + k]; v[i + 6 + k] = t; } }
+      if (deckTop.length) { const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.Float32BufferAttribute(deckTop, 3)); dg.computeVertexNormals(); const dm = new THREE.Mesh(dg, patchMat); dm.receiveShadow = true; scene.add(dm); }   // 床板の上は地面と同じ材質（道路との境目で色が変わらない）
       geo(deck, '#5b5c60'); geo(rail, '#c9ccc8', { cast: true });
     }
     // ため池のまわり：土手の斜面を登りきった所（道の縁など）に柵。斜面は立ち入り禁止（町データの pzone）
