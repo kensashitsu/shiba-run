@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v160';
+const VERSION = 'v161';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -243,7 +243,7 @@ const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0),
 
 // 町（?town）：実在の住宅地の起伏・建物・道路・池。assets/town.json は中心からの距離(m)だけで、地名や緯度経度は持たない
 // 元データ：国土地理院（標高タイル・ベクトルタイル）、© OpenStreetMap contributors（林）
-const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, seto: { file: 'assets/town-seto.json', name: '瀬戸', start: [-27, -48] }, daido: { file: 'assets/town-daido.json', name: '大道' } };
+const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, seto: { file: 'assets/town-seto.json', name: '瀬戸', start: [-27, -48] }, daido: { file: 'assets/town-daido.json', name: '大道', start: [112, -50], face: -2.775 } };
 let TOWN_ID = (location.search.match(/[?&]town=(\w+)/) || [])[1];
 if (!TOWN_ID && !/[?&]test/.test(location.search)) { try { TOWN_ID = localStorage.getItem('shiba-town'); } catch (e) { /* 覚えられない時はいつもの町 */ } }
 if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
@@ -1168,7 +1168,7 @@ if (TOWN) {
     if (p.length < 3) continue;
     const area = areasB[bi];
     if (area < 4) continue;
-    const Wm = hiddenB.has(bi) || b.k ? junk : W, Rm = hiddenB.has(bi) || b.k ? junk : Rf;   // 特別な形の物は別に作る（乱数はほかの家と同じ順に使う）   // 建てない建物も乱数は同じ順に使う（ほかの家の色・高さを変えない）
+    const Wm = hiddenB.has(bi) || b.k || b.site ? junk : W, Rm = hiddenB.has(bi) || b.k || b.site ? junk : Rf;   // 特別な形の物は別に作る（乱数はほかの家と同じ順に使う）   // 建てない建物も乱数は同じ順に使う（ほかの家の色・高さを変えない）
     let gMin = 1e9, gMax = -1e9;
     for (const q of p) { const h = H(q[0], q[1]); gMin = Math.min(gMin, h); gMax = Math.max(gMax, h); }
     const shed = b.t === 3111, solid0 = b.t === 3102 || b.t === 3103, solid = solid0 || FLAT_USE.has(b.use);
@@ -1279,6 +1279,82 @@ if (TOWN) {
   })();
   mesh(W, new THREE.MeshStandardMaterial({ map: wallTex, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }));
   mesh(Rf, new THREE.MeshStandardMaterial({ map: roofTex, vertexColors: true, roughness: 0.7, side: THREE.DoubleSide }));
+
+  if (TOWN.site) {   // 手作りの建物（tools/site-町.json）：長方形の棟に屋根・壁・窓・庇。材料は実寸の模様
+    const siteRnd = rng(77);
+    const texOf = (draw, size = 256, m = 2) => { const cv = document.createElement('canvas'); cv.width = cv.height = size; const x = cv.getContext('2d'); draw(x, size); const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.__m = m; return t; };
+    const speck = (x, S, n, a, c = '0,0,0') => { for (let i = 0; i < n; i++) { x.fillStyle = `rgba(${c},${a * siteRnd()})`; x.fillRect(siteRnd() * S, siteRnd() * S, 1 + siteRnd() * 4, 1 + siteRnd() * 4); } };
+    const tiles = (base, line, hi) => (x, S) => { x.fillStyle = base; x.fillRect(0, 0, S, S); const n = 7, c = S / n; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { x.fillStyle = `rgba(${hi},${0.05 + siteRnd() * 0.12})`; x.fillRect(i * c, j * c, c, c); } x.fillStyle = line; for (let j = 0; j < n; j++) x.fillRect(0, j * c, S, 3); for (let i = 0; i < n; i++) { x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(i * c, 0, 2, S); x.fillStyle = `rgba(${hi},.16)`; x.fillRect(i * c + c * 0.45, 0, 3, S); } };
+    const vert = (base, n, dark, a) => (x, S) => { x.fillStyle = base; x.fillRect(0, 0, S, S); for (let i = 0; i < n; i++) { x.fillStyle = `rgba(${dark},${a})`; x.fillRect(i * S / n, 0, Math.max(1, S / n * 0.3), S); x.fillStyle = `rgba(255,255,255,${0.04 + siteRnd() * 0.05})`; x.fillRect((i + 0.5) * S / n, 0, S / n * 0.25, S); } speck(x, S, 120, 0.06); };
+    const TX = {
+      kawara: texOf(tiles('#2e3236', 'rgba(15,17,20,.75)', '110,120,130')),
+      redtile: texOf(tiles('#a4553c', 'rgba(60,25,15,.65)', '230,160,120')),
+      tinroof: texOf(vert('#65676a', 14, '40,42,46', 0.28)),
+      white: texOf((x, S) => { x.fillStyle = '#d6d2c6'; x.fillRect(0, 0, S, S); speck(x, S, 90, 0.035, '90,80,60'); }, 256, 3),
+      yakisugi: texOf((x, S) => { x.fillStyle = '#1e1b1a'; x.fillRect(0, 0, S, S); const n = 11; for (let i = 0; i < n; i++) { x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(i * S / n, 0, 2, S); x.fillStyle = `rgba(120,105,90,${siteRnd() * 0.12})`; x.fillRect(i * S / n + 2, 0, S / n - 2, S); } }),
+      tin: texOf(vert('#aeb3b4', 20, '70,76,80', 0.22)),
+      tingray: texOf((x, S) => { vert('#8f8d84', 20, '45,42,38', 0.3)(x, S); for (let i = 0; i < 9; i++) { x.fillStyle = `rgba(110,70,40,${0.08 + siteRnd() * 0.14})`; x.fillRect(siteRnd() * S, 0, 4 + siteRnd() * 16, S); } }, 256, 4),
+      brownplank: texOf((x, S) => { x.fillStyle = '#8c5c3e'; x.fillRect(0, 0, S, S); const n = 11; for (let j = 0; j < n; j++) { x.fillStyle = `rgba(255,220,180,${siteRnd() * 0.08})`; x.fillRect(0, j * S / n, S, S / n); x.fillStyle = 'rgba(30,15,8,.55)'; x.fillRect(0, j * S / n, S, 3); } }),
+      redwood: texOf(vert('#87463a', 9, '50,20,14', 0.4)),
+      concrete: texOf((x, S) => { x.fillStyle = '#c0bdb2'; x.fillRect(0, 0, S, S); speck(x, S, 300, 0.05); }, 256, 3),
+      block: texOf((x, S) => { x.fillStyle = '#6f716b'; x.fillRect(0, 0, S, S); speck(x, S, 260, 0.08); x.fillStyle = 'rgba(40,40,38,.55)'; for (let j = 0; j < 5; j++) x.fillRect(0, j * S / 5, S, 2); for (let j = 0; j < 5; j++) for (let i = 0; i < 3; i++) x.fillRect((i + (j % 2) * 0.5) * S / 2.5, j * S / 5, 2, S / 5); }),
+      gravel: texOf((x, S) => { x.fillStyle = '#a49a84'; x.fillRect(0, 0, S, S); for (let i = 0; i < 1400; i++) { const v = 120 + siteRnd() * 110 | 0; x.fillStyle = `rgba(${v},${v - 6},${v - 18},.55)`; x.fillRect(siteRnd() * S, siteRnd() * S, 1 + siteRnd() * 4, 1 + siteRnd() * 3); } }, 256, 3),
+      dark: texOf((x, S) => { x.fillStyle = '#1d1f22'; x.fillRect(0, 0, S, S); }, 8, 1),
+    };
+    // 窓など：512 の絵を 4 分割
+    const DEC = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 512; const x = cv.getContext('2d'), c = 256;
+      const frame = (ox, oy, col) => { x.strokeStyle = col; x.lineWidth = 12; x.strokeRect(ox + 6, oy + 6, c - 12, c - 12); };
+      x.fillStyle = '#4a3528'; x.fillRect(0, 0, c, c); x.fillStyle = '#6d5240'; for (let j = 0; j < 7; j++) x.fillRect(14, 16 + j * 33, c - 28, 19); frame(0, 0, '#2c2019');
+      x.fillStyle = '#7f8f96'; x.fillRect(c, 0, c, c); x.fillStyle = 'rgba(255,255,255,.2)'; x.fillRect(c + 20, 10, 80, 236); x.strokeStyle = '#d8d6cc'; x.lineWidth = 8; for (let i = 1; i < 3; i++) { x.beginPath(); x.moveTo(c + i * c / 3, 0); x.lineTo(c + i * c / 3, c); x.stroke(); } x.beginPath(); x.moveTo(c, c / 2); x.lineTo(2 * c, c / 2); x.stroke(); frame(c, 0, '#d8d6cc');
+      x.fillStyle = '#c9b16a'; x.fillRect(0, c, c, c); x.strokeStyle = '#8a8d8c'; x.lineWidth = 10; x.beginPath(); x.moveTo(c / 2, c); x.lineTo(c / 2, 2 * c); x.stroke(); x.fillStyle = '#7a7d7a'; x.fillRect(0, c + c * 0.72, c, c * 0.28); frame(0, c, '#8a8d8c');
+      x.fillStyle = '#54332a'; x.fillRect(c, c, c, c); x.fillStyle = 'rgba(0,0,0,.35)'; for (let j = 0; j < 13; j++) x.fillRect(c, c + j * 20, c, 5);
+      const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+    // canvas の上が v=1 なので、絵の上段（louver, glass）は v 0.5〜1
+    const DUV = { louver: [0, 0.5], glass: [0.5, 0.5], door: [0, 0], shutter: [0.5, 0] };
+    const buf = {}, slot = key => buf[key] = buf[key] || { pos: [], uv: [] };
+    // 四角 a,b,c,d（a→b が横、b→c が上）。模様は実寸
+    const quad = (key, a, b, c, d) => { const m = TX[key].__m, w = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / m, h = Math.hypot(d[0] - a[0], d[1] - a[1], d[2] - a[2]) / m, S = slot(key); S.pos.push(...a, ...b, ...c, ...a, ...c, ...d); S.uv.push(0, 0, w, 0, w, h, 0, 0, w, h, 0, h); };
+    const tri = (key, a, b, c) => { const m = TX[key].__m, w = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / m, S = slot(key); S.pos.push(...a, ...b, ...c); S.uv.push(0, 0, w, 0, w / 2, Math.hypot(c[0] - (a[0] + b[0]) / 2, c[1] - (a[1] + b[1]) / 2, c[2] - (a[2] + b[2]) / 2) / m); };
+    for (const B of TOWN.site.blds) {
+      const r = B.a * Math.PI / 180, ux = Math.sin(r), uz = Math.cos(r), vx = uz, vz = -ux, L2 = B.L / 2, W2 = B.W / 2, cx = B.c[0], cz = B.c[1];
+      const at = (u, v, y) => [cx + ux * u + vx * v, y, cz + uz * u + vz * v];
+      let g0 = 1e9, g1 = -1e9; for (const [s, t] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const h = H(cx + ux * s * L2 + vx * t * W2, cz + uz * s * L2 + vz * t * W2); g0 = Math.min(g0, h); g1 = Math.max(g1, h); }
+      const y0 = g0 - 0.3, yb = g1, yw = yb + B.h, yr = yw + B.rh, wall = B.wall, low = B.low, lh = yb + (B.lowH || 0);
+      const face = (u0, v0, u1, v1) => { if (low) { quad(low, at(u0, v0, y0), at(u1, v1, y0), at(u1, v1, lh), at(u0, v0, lh)); quad(wall, at(u0, v0, lh), at(u1, v1, lh), at(u1, v1, yw), at(u0, v0, yw)); } else quad(wall, at(u0, v0, y0), at(u1, v1, y0), at(u1, v1, yw), at(u0, v0, yw)); };
+      face(-L2, -W2, L2, -W2); face(L2, W2, -L2, W2); face(L2, -W2, L2, W2); face(-L2, W2, -L2, -W2);
+      const e = 0.55, drop = B.rh / W2 * e, ye = yw - drop, rt = B.rt, LE = L2 + e, WE = W2 + e;
+      if (B.roof === 'hip') {
+        const R = Math.max(0.3, L2 - Math.min(W2, L2 - 0.3));   // 棟は長手の両端から内側
+        quad(rt, at(-LE, -WE, ye), at(LE, -WE, ye), at(R, 0, yr), at(-R, 0, yr)); quad(rt, at(LE, WE, ye), at(-LE, WE, ye), at(-R, 0, yr), at(R, 0, yr));
+        tri(rt, at(LE, -WE, ye), at(LE, WE, ye), at(R, 0, yr)); tri(rt, at(-LE, WE, ye), at(-LE, -WE, ye), at(-R, 0, yr));
+        for (const [a, b] of [[at(-R, 0, yr), at(R, 0, yr)], [at(R, 0, yr), at(LE, -WE, ye)], [at(R, 0, yr), at(LE, WE, ye)], [at(-R, 0, yr), at(-LE, -WE, ye)], [at(-R, 0, yr), at(-LE, WE, ye)]]) { const dx = b[2] - a[2], dz = a[0] - b[0], l = Math.hypot(dx, dz) || 1, wx = dx / l * 0.14, wz = dz / l * 0.14; quad('dark', [a[0] - wx, a[1] + 0.09, a[2] - wz], [b[0] - wx, b[1] + 0.09, b[2] - wz], [b[0] + wx, b[1] + 0.09, b[2] + wz], [a[0] + wx, a[1] + 0.09, a[2] + wz]); }
+      } else {
+        quad(rt, at(-LE, -WE, ye), at(LE, -WE, ye), at(LE, 0, yr), at(-LE, 0, yr)); quad(rt, at(LE, WE, ye), at(-LE, WE, ye), at(-LE, 0, yr), at(LE, 0, yr));
+        tri(wall, at(L2, -W2, yw), at(L2, W2, yw), at(L2, 0, yr)); tri(wall, at(-L2, W2, yw), at(-L2, -W2, yw), at(-L2, 0, yr));
+        if (rt === 'kawara') quad('dark', at(-LE, -0.16, yr + 0.08), at(LE, -0.16, yr + 0.08), at(LE, 0.16, yr + 0.08), at(-LE, 0.16, yr + 0.08));
+        for (const s of [-1, 1]) { const u = s * LE; quad('dark', at(u, -WE, ye - 0.14), at(u, 0, yr - 0.14), at(u, 0, yr), at(u, -WE, ye)); quad('dark', at(u, 0, yr - 0.14), at(u, WE, ye - 0.14), at(u, WE, ye), at(u, 0, yr)); }
+      }
+      const pt = (s, a, o, y) => s === '+W' ? at(a, W2 + o, y) : s === '-W' ? at(a, -W2 - o, y) : s === '+L' ? at(L2 + o, a, y) : at(-L2 - o, a, y);
+      for (const w of B.win || []) { const [du, dv] = DUV[w.k], A = pt(w.s, w.at - w.w / 2, 0.04, yb + w.y), Bb = pt(w.s, w.at + w.w / 2, 0.04, yb + w.y), C = pt(w.s, w.at + w.w / 2, 0.04, yb + w.y + w.h), D = pt(w.s, w.at - w.w / 2, 0.04, yb + w.y + w.h), S = slot('decal'); S.pos.push(...A, ...Bb, ...C, ...A, ...C, ...D); S.uv.push(du, dv, du + 0.5, dv, du + 0.5, dv + 0.5, du, dv, du + 0.5, dv + 0.5, du, dv + 0.5); }
+      for (const h of B.his || []) { const y1 = yb + h.y, y2 = y1 - h.d * 0.35; quad(h.rt, pt(h.s, h.from, 0, y1), pt(h.s, h.to, 0, y1), pt(h.s, h.to, h.d, y2), pt(h.s, h.from, h.d, y2)); }
+    }
+    for (const Wl of TOWN.site.walls) for (let k = 1; k < Wl.p.length; k++) {
+      const a = Wl.p[k - 1], b = Wl.p[k], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz), nx = -dz / l * Wl.t / 2, nz = dx / l * Wl.t / 2, n = Math.ceil(l / 2);
+      for (let i = 0; i < n; i++) { const x0 = a[0] + dx * i / n, z0 = a[1] + dz * i / n, x1 = a[0] + dx * (i + 1) / n, z1 = a[1] + dz * (i + 1) / n, h0 = H(x0, z0), h1 = H(x1, z1), T0 = h0 + Wl.h, T1 = h1 + Wl.h; for (const s of [-1, 1]) quad(Wl.tex, [x0 + nx * s, h0 - 0.3, z0 + nz * s], [x1 + nx * s, h1 - 0.3, z1 + nz * s], [x1 + nx * s, T1, z1 + nz * s], [x0 + nx * s, T0, z0 + nz * s]); quad(Wl.tex, [x0 - nx, T0, z0 - nz], [x1 - nx, T1, z1 - nz], [x1 + nx, T1, z1 + nz], [x0 + nx, T0, z0 + nz]); }
+    }
+    for (const [key, A] of Object.entries(buf)) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(A.pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(A.uv, 2)); g.computeVertexNormals(); const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: key === 'decal' ? DEC : TX[key], roughness: key === 'tin' || key === 'tinroof' ? 0.55 : 0.88, side: THREE.DoubleSide })); m.castShadow = key !== 'decal'; m.receiveShadow = true; scene.add(m); }
+    // 地面の張り物（砂利など）：1m 升の板を地面に沿わせ、縁は透明にぼかす
+    for (const Gd of TOWN.site.ground) {
+      const p = Gd.p, inp = (x, z) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; return c; };
+      const sd = (x, z, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(x - a[0] - dx * u, z - a[1] - dz * u); };
+      const al = (x, z) => { if (!inp(x, z)) return 0; let d = 1e9; for (let i = 0; i < p.length; i++) d = Math.min(d, sd(x, z, p[i], p[(i + 1) % p.length])); return Math.min(1, d / 1.2); };
+      const xs = p.map(q => q[0]), zs = p.map(q => q[1]), X0 = Math.floor(Math.min(...xs)), X1 = Math.ceil(Math.max(...xs)), Z0 = Math.floor(Math.min(...zs)), Z1 = Math.ceil(Math.max(...zs)), pos = [], uv = [], col = [], m = TX[Gd.tex].__m;
+      const V = (x, z) => { pos.push(x, H(x, z) + 0.06, z); uv.push(x / m, z / m); col.push(1, 1, 1, al(x, z)); };
+      for (let z = Z0; z < Z1; z++) for (let x = X0; x < X1; x++) { if (al(x, z) + al(x + 1, z) + al(x, z + 1) + al(x + 1, z + 1) === 0) continue; V(x, z); V(x, z + 1); V(x + 1, z + 1); V(x, z); V(x + 1, z + 1); V(x + 1, z); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.computeVertexNormals();
+      const m0 = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: TX[Gd.tex], vertexColors: true, transparent: true, depthWrite: false, roughness: 1, side: THREE.DoubleSide })); m0.receiveShadow = true; scene.add(m0);
+    }
+  }
 
   const carved = new Set();   // 手直しの範囲で、地面を掘って水面と護岸を作る池・水路（TOWN.water の番号）
   if (TOWN.fix) {
@@ -4754,6 +4830,7 @@ if (TOWN) {   // 町：出発地点（無ければ中心）に一番近い道路
     // 向き：道が長く続き、後ろ（カメラの側）も空いている方へ。柴は飼い主の少し前に
     const free = (a, max) => { let d = 0; while (d < max && !townBlocked(walker.x + Math.sin(a) * (d + 0.5), walker.z + Math.cos(a) * (d + 0.5)) && townRoad(walker.x + Math.sin(a) * (d + 0.5), walker.z + Math.cos(a) * (d + 0.5)) > 0.3) d += 0.5; return d; };
     let ba = 0, bs = -1; for (let a = 0; a < 6.283; a += 0.13) { const sc = free(a, 25) + 0.6 * Math.min(free(a + Math.PI, 6), 6); if (sc > bs) { bs = sc; ba = a; } }
+    if (TOWNS[TOWN_ID].face !== undefined) ba = TOWNS[TOWN_ID].face;   // 町ごとに決めた向き
     walker.yaw = st.yaw = camYaw = ba;
     if (!townBlocked(walker.x + Math.sin(ba) * 1.1, walker.z + Math.cos(ba) * 1.1)) { st.x = walker.x + Math.sin(ba) * 1.1; st.z = walker.z + Math.cos(ba) * 1.1; }
   } else {   // 柴だけ：道が長く続き、後ろ（カメラの側）も空いている方を向いて始める
