@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v161';
+const VERSION = 'v162';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1340,7 +1340,69 @@ if (TOWN) {
     }
     for (const Wl of TOWN.site.walls) for (let k = 1; k < Wl.p.length; k++) {
       const a = Wl.p[k - 1], b = Wl.p[k], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz), nx = -dz / l * Wl.t / 2, nz = dx / l * Wl.t / 2, n = Math.ceil(l / 2);
+      lowAdd({ t: 0, x0: a[0], z0: a[1], x1: b[0], z1: b[1], r: Wl.t / 2 }, Math.min(a[0], b[0]) - 0.4, Math.min(a[1], b[1]) - 0.4, Math.max(a[0], b[0]) + 0.4, Math.max(a[1], b[1]) + 0.4);
       for (let i = 0; i < n; i++) { const x0 = a[0] + dx * i / n, z0 = a[1] + dz * i / n, x1 = a[0] + dx * (i + 1) / n, z1 = a[1] + dz * (i + 1) / n, h0 = H(x0, z0), h1 = H(x1, z1), T0 = h0 + Wl.h, T1 = h1 + Wl.h; for (const s of [-1, 1]) quad(Wl.tex, [x0 + nx * s, h0 - 0.3, z0 + nz * s], [x1 + nx * s, h1 - 0.3, z1 + nz * s], [x1 + nx * s, T1, z1 + nz * s], [x0 + nx * s, T0, z0 + nz * s]); quad(Wl.tex, [x0 - nx, T0, z0 - nz], [x1 - nx, T1, z1 - nz], [x1 + nx, T1, z1 + nz], [x0 + nx, T0, z0 + nz]); }
+    }
+    // 植え込み：松（横に広がる枝と葉の塊）・ヤシ・ソテツ・丸い庭木・生垣・石。当たりは幹と生垣だけ
+    {
+      const pr = rng(91), leafTex = texOf((x, S) => { x.fillStyle = '#b9b9b9'; x.fillRect(0, 0, S, S); for (let i = 0; i < 2600; i++) { const v = 90 + pr() * 165 | 0, a = pr() * 6.28, l = 3 + pr() * 9, X = pr() * S, Y = pr() * S; x.strokeStyle = `rgb(${v},${v},${v})`; x.lineWidth = 1 + pr(); x.beginPath(); x.moveTo(X, Y); x.lineTo(X + Math.cos(a) * l, Y + Math.sin(a) * l); x.stroke(); } }, 256, 1.2);
+      const frondTex = (() => { const cv = document.createElement('canvas'); cv.width = 128; cv.height = 256; const x = cv.getContext('2d'); x.strokeStyle = '#fff'; for (let j = 4; j < 252; j += 7) { const k = 1 - Math.abs(j / 256 - 0.35) * 1.2, w = 60 * Math.max(0.15, k); x.lineWidth = 4; x.beginPath(); x.moveTo(64, j); x.lineTo(64 - w, j + 16); x.moveTo(64, j); x.lineTo(64 + w, j + 16); x.stroke(); } x.lineWidth = 5; x.beginPath(); x.moveTo(64, 0); x.lineTo(64, 256); x.stroke(); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+      const F = { pos: [], col: [], uv: [], nrm: [] }, W = { pos: [], col: [], uv: [] }, T = { pos: [], col: [], uv: [] };   // 葉の塊・ヤシの葉・幹と石
+      const push = (A, p, c, u) => { A.pos.push(...p); A.col.push(...c); A.uv.push(...u); };
+      const hex = s => { const c = new THREE.Color(s).convertSRGBToLinear(); return [c.r, c.g, c.b]; };
+      const blob = (A, x, y, z, sx, sy, sz, col, top = col, jit = 0.14, det = 1) => {   // 少しいびつな塊。上は明るく下は暗い
+        const g = new THREE.IcosahedronGeometry(1, det).toNonIndexed(), P = g.attributes.position, off = new Map(), kk = v => `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`, v = new THREE.Vector3();
+        for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i); const k = kk(v); if (!off.has(k)) off.set(k, 1 + (pr() - 0.5) * 2 * jit); const o = off.get(k), n = v.y * 0.5 + 0.5, C = [0, 1, 2].map(q => col[q] + (top[q] - col[q]) * n); push(A, [x + v.x * sx * o, y + v.y * sy * o, z + v.z * sz * o], C, [(x + v.x * sx) / 1.2, (z + v.z * sz + v.y * sy) / 1.2]); if (A.nrm) { const nl = Math.hypot(v.x / sx, v.y / sy, v.z / sz); A.nrm.push(v.x / sx / nl, v.y / sy / nl, v.z / sz / nl); } }
+      };
+      const tube = (a, b, r0, r1, col, n = 7) => {   // 幹の一節
+        const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], d = new THREE.Vector3(dx, dy, dz).normalize(), s = new THREE.Vector3(1, 0, 0).cross(d).normalize(), t = d.clone().cross(s);
+        for (let i = 0; i < n; i++) { const A0 = i / n * 6.283, A1 = (i + 1) / n * 6.283, q = (e, r) => { const c = Math.cos(e) * r, sn = Math.sin(e) * r; return [s.x * c + t.x * sn, s.y * c + t.y * sn, s.z * c + t.z * sn]; }, p0 = q(A0, r0), p1 = q(A1, r0), p2 = q(A1, r1), p3 = q(A0, r1), v0 = [a[0] + p0[0], a[1] + p0[1], a[2] + p0[2]], v1 = [a[0] + p1[0], a[1] + p1[1], a[2] + p1[2]], v2 = [b[0] + p2[0], b[1] + p2[1], b[2] + p2[2]], v3 = [b[0] + p3[0], b[1] + p3[1], b[2] + p3[2]]; for (const w of [v0, v1, v2, v0, v2, v3]) push(T, w, col, [w[0], w[1]]); }
+      };
+      const frond = (x, y, z, yaw, len, wid, up, col) => {   // 根元から持ち上がって垂れる帯（5節）
+        const sy = Math.sin(yaw), cy = Math.cos(yaw), n = 5; let px = x, py = y, pz = z, slope = up;
+        for (let i = 0; i < n; i++) { const st = len / n, nx = px + sy * st, nz = pz + cy * st, ny = py + slope * st, w0 = wid * (i === 0 ? 0.5 : 1 - (i - 1) / n * 0.7), w1 = wid * (1 - i / n * 0.7), a = [px - cy * w0, py, pz + sy * w0], b = [px + cy * w0, py, pz - sy * w0], c = [nx + cy * w1, ny, nz - sy * w1], d = [nx - cy * w1, ny, nz + sy * w1], v0 = i / n, v1 = (i + 1) / n; push(W, a, col, [0, v0]); push(W, b, col, [1, v0]); push(W, c, col, [1, v1]); push(W, a, col, [0, v0]); push(W, c, col, [1, v1]); push(W, d, col, [0, v1]); px = nx; py = ny; pz = nz; slope -= 2.0 / n * (1 + up * 0.4); }
+      };
+      const bark = hex('#4a3b30'), palmB = hex('#6b5a48'), cyB = hex('#3a3128');
+      for (const P of TOWN.site.plants || []) {
+        const g = H(P.x, P.z), S0 = P.s || 1;
+        if (P.k === 'pine') {   // 曲がった幹から、数段の平たい葉の塊を左右へ
+          const hT = 4.2 * S0; let px = P.x, py = g - 0.2, pz = P.z, lean = pr() * 6.28, top; const segs = 5;
+          for (let i = 0; i < segs; i++) { const k = (i + 1) / segs, nx = P.x + Math.sin(lean + i * 1.1) * 0.5 * S0 * k, nz = P.z + Math.cos(lean + i * 1.1) * 0.5 * S0 * k, ny = g + hT * k; tube([px, py, pz], [nx, ny, nz], 0.2 * S0 * (1 - i / segs * 0.6), 0.2 * S0 * (1 - (i + 1) / segs * 0.6), bark); px = nx; py = ny; pz = nz; }
+          top = [px, py, pz];
+          const dark = hex('#2f5a2a'), lite = hex('#74a34c'), tiers = P.tiers || 6;
+          for (let i = 0; i < tiers; i++) { const k = i / (tiers - 1), yy = g + hT * (0.42 + k * 0.62), a = i * 2.4 + lean, rr = (1 - k * 0.6) * 2.5 * S0, ex = Math.sin(a) * rr, ez = Math.cos(a) * rr; tube([P.x + ex * 0.08, yy - 0.5 * S0, P.z + ez * 0.08], [P.x + ex * 0.8, yy - 0.05, P.z + ez * 0.8], 0.09 * S0, 0.035 * S0, bark, 5); blob(F, P.x + ex, yy, P.z + ez, 1.25 * S0 * (1 - k * 0.3), 0.36 * S0, 1.05 * S0 * (1 - k * 0.3), dark, lite, 0.2, 2); blob(F, P.x + ex * 0.45, yy + 0.08, P.z + ez * 0.45, 0.8 * S0, 0.28 * S0, 0.75 * S0, dark, lite, 0.2, 1); }
+          blob(F, top[0], top[1] + 0.1, top[2], 1.1 * S0, 0.42 * S0, 1.1 * S0, dark, lite, 0.2);
+          lowAdd({ t: 1, x: P.x, z: P.z, r: 0.25 * S0 }, P.x - 0.5, P.z - 0.5, P.x + 0.5, P.z + 0.5);
+        } else if (P.k === 'palm') {   // 細く高い幹、頭に放射状の葉（わずかに傾く）
+          const hT = (P.h || 8), lean = pr() * 6.28, tilt = 0.06 * hT, top = [P.x + Math.sin(lean) * tilt, g + hT, P.z + Math.cos(lean) * tilt]; let a = [P.x, g - 0.2, P.z];
+          for (let i = 1; i <= 7; i++) { const k = i / 7, b = [P.x + Math.sin(lean) * tilt * k * k, g + hT * k, P.z + Math.cos(lean) * tilt * k * k]; tube(a, b, 0.2 * (1.25 - k * 0.5), 0.2 * (1.25 - (k + 0.14) * 0.5), palmB); a = b; }
+          const col = hex('#5a8240');
+          for (let i = 0; i < 18; i++) { const u = i < 9, yaw = i * 2.399 + lean; frond(top[0], top[1] + (u ? 0.1 : -0.15), top[2], yaw, u ? 2.6 : 3, 0.55, u ? 1.0 : 0.25, col); }
+          lowAdd({ t: 1, x: P.x, z: P.z, r: 0.24 }, P.x - 0.5, P.z - 0.5, P.x + 0.5, P.z + 0.5);
+        } else if (P.k === 'cycad') {   // 太く短い幹から、硬い葉を広げる
+          const n = 2 + (pr() * 2 | 0), col = hex('#53883b');
+          for (let j = 0; j < n; j++) { const dx = j ? (pr() - 0.5) * 1.6 * S0 : 0, dz = j ? (pr() - 0.5) * 1.6 * S0 : 0, hT = (j ? 0.7 + pr() * 0.8 : 1.5) * S0, x0 = P.x + dx, z0 = P.z + dz; tube([x0, g - 0.2, z0], [x0, g + hT, z0], 0.3 * S0, 0.24 * S0, cyB, 8); for (let i = 0; i < 15; i++) frond(x0, g + hT, z0, i * 2.399 + j, 1.9 * S0, 0.42 * S0, i % 2 ? 1.1 : 0.45, col); }
+          lowAdd({ t: 1, x: P.x, z: P.z, r: 0.45 * S0 }, P.x - 1, P.z - 1, P.x + 1, P.z + 1);
+        } else if (P.k === 'broad') {   // 背の高い広葉樹
+          const hT = 5 * S0; tube([P.x, g - 0.2, P.z], [P.x, g + hT * 0.6, P.z], 0.3 * S0, 0.2 * S0, bark); const d = hex('#22401f'), l = hex('#4a6d31'); blob(F, P.x, g + hT, P.z, 3.6 * S0, 3 * S0, 3.6 * S0, d, l, 0.16, 2); for (let i = 0; i < 4; i++) blob(F, P.x + Math.sin(i * 1.7) * 2.6 * S0, g + hT - 0.8 * S0, P.z + Math.cos(i * 1.7) * 2.6 * S0, 2 * S0, 1.7 * S0, 2 * S0, d, l, 0.16); lowAdd({ t: 1, x: P.x, z: P.z, r: 0.34 * S0 }, P.x - 0.6, P.z - 0.6, P.x + 0.6, P.z + 0.6);
+        } else {   // 丸く刈った低い庭木
+          blob(F, P.x, g + 0.55 * S0, P.z, 0.95 * S0, 0.7 * S0, 0.95 * S0, hex('#26481f'), hex('#5b8a3b'), 0.12);
+        }
+      }
+      for (const R of TOWN.site.rocks || []) { const g = H(R.x, R.z), c = hex(R.c || '#6f6a60'), s = R.s || 1; blob(T, R.x, g + 0.2 * s, R.z, 0.85 * s, 0.5 * s, 0.65 * s, c.map(v => v * 0.7), c, 0.2, 0); }
+      for (const Hd of TOWN.site.hedges || []) for (let k = 1; k < Hd.p.length; k++) {   // 刈り込んだ生垣：表面が少しでこぼこの塊を並べる
+        const a = Hd.p[k - 1], b = Hd.p[k], l = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.ceil(l / 1.1), d = hex('#2a4a21'), lt = hex('#65873f'), yaw = Math.atan2(b[0] - a[0], b[1] - a[1]), ca = Math.cos(yaw), sa = Math.sin(yaw);
+        for (let i = 0; i <= n; i++) { const x = a[0] + (b[0] - a[0]) * i / n, z = a[1] + (b[1] - a[1]) * i / n, g = H(x, z), hw = Hd.t / 2; blob(F, x, g + Hd.h * 0.52, z, Math.abs(sa) * 0.95 + Math.abs(ca) * (hw + 0.1), Hd.h * 0.56, Math.abs(ca) * 0.95 + Math.abs(sa) * (hw + 0.1), d, lt, 0.04, 2); }
+        lowAdd({ t: 0, x0: a[0], z0: a[1], x1: b[0], z1: b[1], r: Hd.t / 2 + 0.05 }, Math.min(a[0], b[0]) - Hd.t, Math.min(a[1], b[1]) - Hd.t, Math.max(a[0], b[0]) + Hd.t, Math.max(a[1], b[1]) + Hd.t);
+      }
+      for (const Cb of TOWN.site.curbs || []) for (let k = 1; k < Cb.p.length; k++) {   // 白い縁石：長い石を少しずつ高さを変えて並べる（低いので当たりなし）
+        const a = Cb.p[k - 1], b = Cb.p[k], l = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.ceil(l / 1.8), dx = (b[0] - a[0]) / n, dz = (b[1] - a[1]) / n, ex = -dz / (l / n) * 0.2, ez = dx / (l / n) * 0.2;
+        for (let i = 0; i < n; i++) { const x0 = a[0] + dx * i + dx * 0.02, z0 = a[1] + dz * i + dz * 0.02, x1 = a[0] + dx * (i + 0.97), z1 = a[1] + dz * (i + 0.97), h0 = H(x0, z0), h1 = H(x1, z1), t = 0.3 + pr() * 0.08; for (const s of [-1, 1]) quad('concrete', [x0 + ex * s, h0 - 0.2, z0 + ez * s], [x1 + ex * s, h1 - 0.2, z1 + ez * s], [x1 + ex * s, h1 + t, z1 + ez * s], [x0 + ex * s, h0 + t, z0 + ez * s]); quad('concrete', [x0 - ex, h0 + t, z0 - ez], [x1 - ex, h1 + t, z1 - ez], [x1 + ex, h1 + t, z1 + ez], [x0 + ex, h0 + t, z0 + ez]); }
+      }
+      const mk = (A, mat, shadow = true) => { if (!A.pos.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(A.pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(A.col, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(A.uv, 2)); if (A.nrm) g.setAttribute('normal', new THREE.Float32BufferAttribute(A.nrm, 3)); else g.computeVertexNormals(); const m = new THREE.Mesh(g, mat); m.castShadow = shadow; m.receiveShadow = true; scene.add(m); };
+      mk(F, new THREE.MeshStandardMaterial({ map: leafTex, vertexColors: true, roughness: 0.95 }));
+      mk(T, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+      mk(W, new THREE.MeshStandardMaterial({ alphaMap: frondTex, alphaTest: 0.4, vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }));
     }
     for (const [key, A] of Object.entries(buf)) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(A.pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(A.uv, 2)); g.computeVertexNormals(); const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: key === 'decal' ? DEC : TX[key], roughness: key === 'tin' || key === 'tinroof' ? 0.55 : 0.88, side: THREE.DoubleSide })); m.castShadow = key !== 'decal'; m.receiveShadow = true; scene.add(m); }
     // 地面の張り物（砂利など）：1m 升の板を地面に沿わせ、縁は透明にぼかす
