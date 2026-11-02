@@ -22,7 +22,7 @@ button:disabled { opacity: .4; cursor: default; }
 <canvas id="cv"></canvas>
 <div id="bar">
   <b>柵の編集</b>
-  <select id="town"><option value="home">いつもの町</option><option value="seto">瀬戸</option></select>
+  <select id="town"><option value="home">いつもの町</option><option value="seto">瀬戸</option><option value="daido">大道</option></select>
   <button id="mEdit" class="on">動かす・足す</button>
   <button id="mDel">点を消す</button>
   <button id="mNew">新しい柵</button>
@@ -36,7 +36,7 @@ button:disabled { opacity: .4; cursor: default; }
 <script>
 // ため池などの「入れない区域」の輪郭（＝柵）を平面図の上で直す。保存した fence-町.json を tools に置くと、町データを作るときに自動の区域の代わりに使う
 // 線路・水路・広い水の縁の柵（町データの fence＝立てる／fenceX＝立てない候補）は、区間ごとに立てる・立てないを切り替える（off / on：区間の真ん中の点）
-const TOWNS = { home: { file: 'assets/town.json', c: [-60, 290] }, seto: { file: 'assets/town-seto.json', c: [-27, -48] } };
+const TOWNS = { home: { file: 'assets/town.json', c: [-60, 290] }, seto: { file: 'assets/town-seto.json', c: [-27, -48] }, daido: { file: 'assets/town-daido.json', c: [0, 0] } };
 const key = TOWNS[new URLSearchParams(location.search).get('town')] ? new URLSearchParams(location.search).get('town') : 'home', TW = TOWNS[key];
 document.getElementById('town').value = key;
 document.getElementById('town').onchange = e => { location.search = '?town=' + e.target.value; };
