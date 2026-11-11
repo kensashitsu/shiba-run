@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v191';
+const VERSION = 'v192';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2321,7 +2321,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
   const _v = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3(), _q = new THREE.Quaternion();
   // 足先（世界座標）に届くよう3節の角度を決める。最後の節（中手・中足）は地面に対してほぼ立てておく
-  function solveLeg(L, footW) {
+  function solveLeg(L, footW, lie = 0) {   // lie：ふせ。最後の節（前足の先）を立てず、前へ寝かせて地面に置く
     const parent = L.hip.parent;
     parent.worldToLocal(_v.copy(footW)).sub(L.hip.position);
     L.hip.rotation.z = clamp(Math.atan2(_v.x, -_v.y), -2.7, 2.7);   // 片脚上げでは真上近くまで開く
@@ -2331,7 +2331,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     _f.set(0, 0, 1).applyQuaternion(root.quaternion).setY(0).normalize().applyQuaternion(_q);   // 親から見た「前（水平）」
     const [a, b, c] = L.lens;
     const back = L.isFront ? 0.012 : -0.035;             // 手首は足先の少し前、かかとは少し後ろ
-    const jy = ty + _u.y * c + _f.y * back, jz = tz + _u.z * c + _f.z * back;
+    const cu = c * (1 - lie) + 0.006 * lie, cf = back * (1 - lie) - c * lie;
+    const jy = ty + _u.y * cu + _f.y * cf, jz = tz + _u.z * cu + _f.z * cf;
     L.reach = Math.hypot(jy, jz) / (a + b);              // 1を超えると足が届いていない
     const D = clamp(Math.hypot(jy, jz), 0.03, a + b - 0.002);
     const phi = Math.atan2(jz, -jy);
@@ -2367,7 +2368,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   // ----- 姿勢と仕草 -----
   // 形は「数値の束」で表し、立ち姿→姿勢→仕草の順に重みで混ぜる
   const basePose = () => ({
-    y: 0, z: 0, pitch: 0, roll: 0, rearRoll: 0, flex: 0, neck: 0, headYaw: 0, headRoll: 0, headPitch: 0,
+    y: 0, z: 0, lie: 0, pitch: 0, roll: 0, rearRoll: 0, flex: 0, neck: 0, headYaw: 0, headRoll: 0, headPitch: 0,
     jaw: 0, tongue: 0, eyes: 1, earsBack: 0, earsSide: 0, puff: 0, tailDown: 0, wag: 0.05, wagHz: 5, breath: 0, look: 0,
     legs: [null, null, null, null],
   });
@@ -2390,8 +2391,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       P.legs = [V(0.072, 0, 0.21), V(-0.072, 0, 0.21), V(0.1, 0, -0.03), V(-0.1, 0, -0.03)];
     },
     down: (P, t) => {
-      if (F2) { const Z = POSEF; Object.assign(P, { y: Z.downY, pitch: Z.downPitch, neck: Z.downNeck, headPitch: Z.downHead, wag: 0.08, wagHz: 5 }); P.legs = [V(0.075, 0, Z.downFront), V(-0.075, 0, Z.downFront), V(Z.downRearX, 0, Z.downRear), V(-Z.downRearX, 0, Z.downRear)]; return; }
-      Object.assign(P, { y: -0.195, pitch: 0.06, neck: -0.25, wag: 0.08, wagHz: 5 });
+      if (F2) { const Z = POSEF; Object.assign(P, { y: Z.downY, pitch: Z.downPitch, neck: Z.downNeck, headPitch: Z.downHead, lie: 1, wag: 0.08, wagHz: 5 }); P.legs = [V(0.075, 0, Z.downFront), V(-0.075, 0, Z.downFront), V(Z.downRearX, 0, Z.downRear), V(-Z.downRearX, 0, Z.downRear)]; return; }
+      Object.assign(P, { y: -0.195, pitch: 0.06, neck: -0.25, lie: 1, wag: 0.08, wagHz: 5 });
       P.legs = [V(0.075, 0, 0.42), V(-0.075, 0, 0.42), V(0.15, 0, -0.06), V(-0.15, 0, -0.06)];
     },
     sleep: (P, t) => {
@@ -3078,7 +3079,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
         fw = tmp.copy(F.foot).lerp(ow, o.w);
         if (o.w > 0.98) { F.plant.set(fw.x, H(fw.x, fw.z) + FOOT_UP, fw.z); F.swing = false; }
       }
-      solveLeg(legs[i], fw);
+      solveLeg(legs[i], fw, i < 2 ? clamp(P.lie, 0, 1) : 0);
     });
 
     // 粒
