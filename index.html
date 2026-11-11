@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v172';
+const VERSION = 'v173';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -243,10 +243,14 @@ const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0),
 
 // 町（?town）：実在の住宅地の起伏・建物・道路・池。assets/town.json は中心からの距離(m)だけで、地名や緯度経度は持たない
 // 元データ：国土地理院（標高タイル・ベクトルタイル）、© OpenStreetMap contributors（林）
+// 柴（仮）版（kari.html）：いつもの町だけ・散歩と町を走るだけ。kari.html は tools/kari.cjs が index.html から作る（LITE を true にし、題字とアプリ名を替える）
+const LITE = false;
+if (LITE && !/[?&](walk|town|test)/.test(location.search)) { location.replace('?walk' + (location.search ? '&' + location.search.slice(1) : '')); await new Promise(() => {}); }   // 草原は無いので、無印は散歩
+if (LITE) for (const id of ['tTown', 'tMeadow']) document.getElementById(id).style.display = 'none';
 const TOWNS = { home: { file: 'assets/town.json', name: 'いつもの町' }, seto: { file: 'assets/town-seto.json', name: '瀬戸', start: [-27, -48] }, daido: { file: 'assets/town-daido.json', name: '大道', start: [112, -50], face: -2.775 } };
 let TOWN_ID = (location.search.match(/[?&]town=(\w+)/) || [])[1];
 if (!TOWN_ID && !/[?&]test/.test(location.search)) { try { TOWN_ID = localStorage.getItem('shiba-town'); } catch (e) { /* 覚えられない時はいつもの町 */ } }
-if (!TOWNS[TOWN_ID]) TOWN_ID = 'home';
+if (!TOWNS[TOWN_ID] || LITE) TOWN_ID = 'home';
 // タイトル画面は町の読み込みを待たずに先に出す（遊びを選んでいる間に読み込む）。
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
 // 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
