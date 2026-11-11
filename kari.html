@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v190';
+const VERSION = 'v191';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1988,6 +1988,13 @@ const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 1
 // 柴の形のつまみ（?tune で動かす。倍率は 1＝v181 の部品の大きさ、ずらしは 0＝なし）
 const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
 const FORM = { ...FORM_DEF };
+// 柴の姿勢のつまみ（?tune で動かす。長さは m、角度は rad）
+const POSE_DEF = { sitY: -0.125, sitPitch: 0.72, sitNeck: -0.5, sitHead: 0, sitFront: 0.21, sitRear: -0.03, sitRearX: 0.1,
+  downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.42, downRear: -0.06, downRearX: 0.15,
+  peeUp: 0.62, peeOut: 0.14, peeBack: 0.04, peeRearRoll: 0.45, peeRoll: 0.1, peeY: -0.02, peeNeck: 0, peeHeadYaw: 0.3, peeTail: -0.25,
+  poopY: -0.13, poopPitch: 0.42, poopFlex: -0.4, poopNeck: -0.1, poopHead: 0, poopOut: 0.11, poopFwd: 0.12, poopFront: 0.04, poopTail: -0.6 };
+const POSEF = { ...POSE_DEF };
+try { const sv = JSON.parse(localStorage.getItem('shiba-pose') || '{}'); for (const k in POSE_DEF) if (typeof sv[k] === 'number' && isFinite(sv[k])) POSEF[k] = sv[k]; } catch (e) { /* 覚えていなければ元の姿勢 */ }
 try { const sv = JSON.parse(localStorage.getItem('shiba-form') || '{}'); for (const k in FORM_DEF) if (typeof sv[k] === 'number' && isFinite(sv[k])) FORM[k] = sv[k]; } catch (e) { /* 覚えていなければ元の形 */ }
 const toonFill = (m, k = 0.42) => { m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * ' + k.toFixed(2) + ';'); }; return m; };   // 段の陰影は空の明かり（環境光）を受けないので、地の色を少し足して陰を黒くしない
 function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.005, split = [], rough = 0.85, shade = 0, fur = 0, furDens = 0.5, furW = 0.28, toon = false } = {}) {
@@ -2378,10 +2385,12 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const POSTURES = {
     sit: (P, t) => {
-      Object.assign(P, { y: F2 ? -0.125 : -0.1, pitch: F2 ? 0.72 : 0.62, neck: F2 ? -0.5 : -0.42, wag: 0.16, wagHz: 7 });
+      if (F2) { const Z = POSEF; Object.assign(P, { y: Z.sitY, pitch: Z.sitPitch, neck: Z.sitNeck, headPitch: Z.sitHead, wag: 0.16, wagHz: 7 }); P.legs = [V(0.072, 0, Z.sitFront), V(-0.072, 0, Z.sitFront), V(Z.sitRearX, 0, Z.sitRear), V(-Z.sitRearX, 0, Z.sitRear)]; return; }
+      Object.assign(P, { y: -0.1, pitch: 0.62, neck: -0.42, wag: 0.16, wagHz: 7 });
       P.legs = [V(0.072, 0, 0.21), V(-0.072, 0, 0.21), V(0.1, 0, -0.03), V(-0.1, 0, -0.03)];
     },
     down: (P, t) => {
+      if (F2) { const Z = POSEF; Object.assign(P, { y: Z.downY, pitch: Z.downPitch, neck: Z.downNeck, headPitch: Z.downHead, wag: 0.08, wagHz: 5 }); P.legs = [V(0.075, 0, Z.downFront), V(-0.075, 0, Z.downFront), V(Z.downRearX, 0, Z.downRear), V(-Z.downRearX, 0, Z.downRear)]; return; }
       Object.assign(P, { y: -0.195, pitch: 0.06, neck: -0.25, wag: 0.08, wagHz: 5 });
       P.legs = [V(0.075, 0, 0.42), V(-0.075, 0, 0.42), V(0.15, 0, -0.06), V(-0.15, 0, -0.06)];
     },
@@ -2481,8 +2490,9 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       if (ph === 'sniff') { P.neck = 0.85; P.headPitch = 0.15 + sniffTwitch(t); P.headYaw = d.lookYaw; P.wag = 0.08; }
       if (ph === 'lift' || ph === 'pee' || ph === 'lower') {
         const w = ph === 'lift' ? smooth(0, PH_DUR.lift, k) : ph === 'lower' ? 1 - smooth(0, PH_DUR.lower, k) : 1;
-        P.roll = s * 0.1 * w; P.rearRoll = s * 0.45 * w; P.y = -0.02 * w; P.tailDown = -0.25 * w; P.headYaw = -s * 0.3 * w; P.eyes = 1 - 0.25 * w; P.wag = 0;
-        P.legs[s > 0 ? 2 : 3] = V(s * (0.08 + 0.14 * w), 0.62 * w, -0.2 + 0.04 * w);       // 木の側の後脚を高く上げる（脚が垂直近くまで立つ）
+        const Z = F2 ? POSEF : POSE_DEF;
+        P.roll = s * Z.peeRoll * w; P.rearRoll = s * Z.peeRearRoll * w; P.y = Z.peeY * w; P.tailDown = Z.peeTail * w; P.headYaw = -s * Z.peeHeadYaw * w; P.neck += Z.peeNeck * w; P.eyes = 1 - 0.25 * w; P.wag = 0;
+        P.legs[s > 0 ? 2 : 3] = V(s * (0.08 + Z.peeOut * w), Z.peeUp * w, -0.2 + Z.peeBack * w);       // 木の側の後脚を高く上げる（脚が垂直近くまで立つ）
         P.legs[s > 0 ? 3 : 2] = V(-s * (0.08 - 0.08 * w), 0, -0.17);                       // 反対の後脚は体の下へ寄せて支える
       }
       if (ph === 'kick') kickPose(P, t);
@@ -2495,10 +2505,11 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
         const w = ph === 'squat' ? smooth(0, PH_DUR.squat, k) : ph === 'rise' ? 1 - smooth(0, PH_DUR.rise, k) : 1;
         // 背中を丸めて腰を落とし、後脚を前へ寄せ、尾を上げる。力んでいる間は小刻みに震える
         // 相撲の四股のように：後脚を左右へ大きく開いて深く腰を落とし、上体を起こす
-        P.y = -0.13 * w + (ph === 'push' ? 0.003 * Math.sin(t * 45) : 0); P.pitch = 0.42 * w; P.flex = -0.4 * w;
-        P.tailDown = -0.6 * w; P.earsBack = 0.3 * w; P.eyes = 1 - 0.35 * w; P.neck = -0.1 * w; P.wag = 0;
-        P.legs[0] = V(0.075 + 0.01 * w, 0, 0.2 + 0.04 * w); P.legs[1] = V(-0.075 - 0.01 * w, 0, 0.2 + 0.04 * w);   // 前脚は突っ張る
-        P.legs[2] = V(0.08 + 0.11 * w, 0, -0.2 + 0.12 * w); P.legs[3] = V(-0.08 - 0.11 * w, 0, -0.2 + 0.12 * w);
+        const Z = F2 ? POSEF : POSE_DEF;
+        P.y = Z.poopY * w + (ph === 'push' ? 0.003 * Math.sin(t * 45) : 0); P.pitch = Z.poopPitch * w; P.flex = Z.poopFlex * w;
+        P.tailDown = Z.poopTail * w; P.earsBack = 0.3 * w; P.eyes = 1 - 0.35 * w; P.neck = Z.poopNeck * w; P.headPitch = Z.poopHead * w; P.wag = 0;
+        P.legs[0] = V(0.075 + 0.01 * w, 0, 0.2 + Z.poopFront * w); P.legs[1] = V(-0.075 - 0.01 * w, 0, 0.2 + Z.poopFront * w);   // 前脚は突っ張る
+        P.legs[2] = V(0.08 + Z.poopOut * w, 0, -0.2 + Z.poopFwd * w); P.legs[3] = V(-0.08 - Z.poopOut * w, 0, -0.2 + Z.poopFwd * w);
       }
       if (ph === 'kick') kickPose(P, t);
     } },
@@ -5269,13 +5280,17 @@ if (TUNE) {
     ['顔'], ['顔の幅', 'faceW', 0.7, 1.2, 0.01], ['額の段差', 'stop', 0, 1.6, 0.02], ['眉の出っ張り', 'brow', 0, 1.5, 0.02], ['鼻すじの高さ', 'bridge', -0.012, 0.02, 0.001], ['下あごの長さ', 'jawLen', 0.5, 1.2, 0.01], ['下あごの厚み', 'jawThick', 0.5, 1.5, 0.01], ['下あごの高さ', 'jawUp', -0.012, 0.012, 0.001], ['あご下のふくらみ', 'jowl', 0.4, 1.3, 0.01],
     ['耳と目'], ['耳の大きさ', 'earSize', 0.6, 1.5, 0.01], ['耳の間隔', 'earSpread', -0.025, 0.025, 0.001], ['目の大きさ', 'eyeSize', 0.5, 1.8, 0.01], ['目の間隔', 'eyeSpread', -0.02, 0.02, 0.001], ['目の高さ', 'eyeUp', -0.02, 0.02, 0.001],
     ['尾と毛'], ['尾の大きさ', 'tailSize', 0.6, 1.5, 0.01], ['尾の高さ', 'tailUp', -0.04, 0.06, 0.002], ['毛の長さ', 'fur', 0, 2.5, 0.05],
+    ['姿勢：おすわり', 'sit'], ['腰の高さ', 'sitY', -0.22, -0.04, 0.005], ['体の起こし', 'sitPitch', 0.2, 1.2, 0.02], ['首の角度（−で起こす）', 'sitNeck', -1.2, 0.6, 0.02], ['頭の上下（＋で下向き）', 'sitHead', -0.8, 0.8, 0.02], ['前足の前後', 'sitFront', 0.05, 0.4, 0.005], ['後ろ足の前後', 'sitRear', -0.2, 0.15, 0.005], ['後ろ足の開き', 'sitRearX', 0.04, 0.2, 0.005],
+    ['姿勢：ふせ', 'down'], ['体の高さ', 'downY', -0.3, -0.1, 0.005], ['体の傾き', 'downPitch', -0.3, 0.4, 0.02], ['首の角度（−で起こす）', 'downNeck', -1.2, 0.8, 0.02], ['頭の上下（＋で下向き）', 'downHead', -0.8, 0.8, 0.02], ['前足の前後', 'downFront', 0.25, 0.6, 0.005], ['後ろ足の前後', 'downRear', -0.25, 0.15, 0.005], ['後ろ足の開き', 'downRearX', 0.06, 0.25, 0.005],
+    ['姿勢：おしっこ', 'pee'], ['上げる脚の高さ', 'peeUp', 0.1, 0.9, 0.01], ['上げる脚の横への開き', 'peeOut', 0, 0.3, 0.005], ['上げる脚の前後', 'peeBack', -0.15, 0.2, 0.005], ['腰のひねり', 'peeRearRoll', 0, 0.9, 0.01], ['体の傾き', 'peeRoll', -0.2, 0.4, 0.01], ['体の高さ', 'peeY', -0.1, 0.04, 0.005], ['首の角度（−で起こす）', 'peeNeck', -0.8, 0.8, 0.02], ['顔の向き', 'peeHeadYaw', -0.8, 0.8, 0.02], ['尾の上げ下げ（−で上げる）', 'peeTail', -1, 0.6, 0.02],
+    ['姿勢：うんち', 'poop'], ['腰の高さ', 'poopY', -0.25, -0.03, 0.005], ['体の起こし', 'poopPitch', 0, 0.9, 0.02], ['背中の丸め（−で丸める）', 'poopFlex', -1, 0.3, 0.02], ['首の角度（−で起こす）', 'poopNeck', -0.8, 0.8, 0.02], ['頭の上下（＋で下向き）', 'poopHead', -0.8, 0.8, 0.02], ['後ろ足の開き', 'poopOut', 0, 0.2, 0.005], ['後ろ足を前へ', 'poopFwd', -0.05, 0.25, 0.005], ['前足を前へ', 'poopFront', -0.08, 0.15, 0.005], ['尾の上げ下げ（−で上げる）', 'poopTail', -1, 0.6, 0.02],
   ];
   const css = document.createElement('style');
-  css.textContent = '.ui,#fps{display:none!important}#tune{position:fixed;right:0;top:0;bottom:0;width:300px;overflow-y:auto;background:rgba(24,22,18,.88);color:#f4efe6;font:13px var(--font-ui,sans-serif);padding:10px 12px 40px;z-index:60;box-sizing:border-box;-webkit-user-select:none;user-select:none}#tune h3{margin:14px 0 4px;font-size:13px;color:#ffd9a0;border-bottom:1px solid rgba(255,255,255,.2)}#tune label{display:grid;grid-template-columns:1fr 46px;align-items:center;margin-top:5px}#tune label b{font-weight:400}#tune label i{font-style:normal;text-align:right;opacity:.8}#tune input[type=range]{grid-column:1/3;width:100%;margin:2px 0 0}#tune .row{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}#tune button{background:#f4efe6;color:#2b2118;border:0;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)}#tune button.on{background:#ffb347}#tune textarea{width:100%;height:70px;box-sizing:border-box;font:11px monospace;margin-top:6px}#tune p{margin:6px 0;opacity:.85;line-height:1.5}@media(max-width:700px){#tune{top:52%;width:100%;left:0}}';
+  css.textContent = '.ui,#fps{display:none!important}#tune{position:fixed;right:0;top:0;bottom:0;width:300px;overflow-y:auto;background:rgba(24,22,18,.88);color:#f4efe6;font:13px var(--font-ui,sans-serif);padding:10px 12px 40px;z-index:60;box-sizing:border-box;-webkit-user-select:none;user-select:none}#tune h3{margin:14px 0 4px;font-size:13px;color:#ffd9a0;border-bottom:1px solid rgba(255,255,255,.2)}#tune label{display:grid;grid-template-columns:1fr 46px;align-items:center;margin-top:5px}#tune label b{font-weight:400}#tune label i{font-style:normal;text-align:right;opacity:.8}#tune input[type=range]{grid-column:1/3;width:100%;margin:2px 0 0}#tune .row{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}#tune button{background:#f4efe6;color:#2b2118;border:0;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)}#tune button.on{background:#ffb347}#tune textarea{width:100%;height:110px;box-sizing:border-box;font:11px monospace;margin-top:6px}#tune p{margin:6px 0;opacity:.85;line-height:1.5}@media(max-width:700px){#tune{top:52%;width:100%;left:0}}';
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'tune';
-  el.innerHTML = '<p>つまみを動かすと柴の形が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。</p><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
-    SL.map(a => a.length === 1 ? '<h3>' + a[0] + '</h3>' : '<label><b>' + a[0] + '</b><i id="tv_' + a[1] + '"></i><input type="range" data-k="' + a[1] + '" min="' + a[2] + '" max="' + a[3] + '" step="' + a[4] + '"></label>').join('') +
+  el.innerHTML = '<p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
+    SL.map(a => a.length <= 2 ? '<h3>' + a[0] + '</h3>' : '<label><b>' + a[0] + '</b><i id="tv_' + a[1] + '"></i><input type="range" data-k="' + a[1] + '" min="' + a[2] + '" max="' + a[3] + '" step="' + a[4] + '"></label>').join('') +
     '<h3>決まったら</h3><div class="row"><button id="tCopy">値をコピー</button><button id="tReset">最初に戻す</button></div><textarea id="tOut" readonly></textarea><p>値はこの端末に覚えさせてあり、散歩（?walk&toon）の柴にもそのまま使われます。「値をコピー」した文字を Claude に貼ると、正式な形として組み込みます。</p>';
   document.body.appendChild(el);
   for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart', 'touchmove']) el.addEventListener(ev, e => e.stopPropagation());
@@ -5286,16 +5301,21 @@ if (TUNE) {
     if (td) { scene.remove(td.object, td.points, td.extras); td.object.traverse(o => { if (o.isSkinnedMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     td = makeDog(); scene.add(td.object, td.points, td.extras);
     if (pose === 'sit' || pose === 'down') td.command(pose, ts);
+    if (pose === 'pee') td.__start('mark', { ph: 4, pt: 1, side: 1 });   // おしっこ・うんちは、している最中の形で止める
+    if (pose === 'poop') td.__start('poop', { ph: 3, pt: 1 });
   };
-  const out = () => { const d = {}; for (const k in FORM_DEF) if (Math.abs(FORM[k] - FORM_DEF[k]) > 1e-6) d[k] = +FORM[k].toFixed(3); document.getElementById('tOut').value = 'shiba-form ' + JSON.stringify(d); try { localStorage.setItem('shiba-form', JSON.stringify(d)); } catch (e) { /* 覚えられなくても、この画面では使える */ } };
-  const show = () => el.querySelectorAll('input[type=range]').forEach(i => { i.value = FORM[i.dataset.k]; document.getElementById('tv_' + i.dataset.k).textContent = (+FORM[i.dataset.k]).toFixed(i.step < 0.01 ? 3 : 2); });
+  const VAL = k => k in POSE_DEF ? POSEF : FORM;
+  const out = () => { const d = {}, q = {}; for (const k in FORM_DEF) if (Math.abs(FORM[k] - FORM_DEF[k]) > 1e-6) d[k] = +FORM[k].toFixed(3); for (const k in POSE_DEF) if (Math.abs(POSEF[k] - POSE_DEF[k]) > 1e-6) q[k] = +POSEF[k].toFixed(3); document.getElementById('tOut').value = 'shiba-form ' + JSON.stringify(d) + '\nshiba-pose ' + JSON.stringify(q); try { localStorage.setItem('shiba-form', JSON.stringify(d)); localStorage.setItem('shiba-pose', JSON.stringify(q)); } catch (e) { /* 覚えられなくても、この画面では使える */ } };
+  const show = () => el.querySelectorAll('input[type=range]').forEach(i => { const v = VAL(i.dataset.k)[i.dataset.k]; i.value = v; document.getElementById('tv_' + i.dataset.k).textContent = (+v).toFixed(i.step < 0.01 ? 3 : 2); });
   el.querySelectorAll('input[type=range]').forEach(i => {
-    i.addEventListener('input', () => { FORM[i.dataset.k] = +i.value; document.getElementById('tv_' + i.dataset.k).textContent = (+i.value).toFixed(i.step < 0.01 ? 3 : 2); busy = performance.now() + 350; });   // 手を止めて少ししたら作り直す
+    i.addEventListener('input', () => { const k = i.dataset.k; VAL(k)[k] = +i.value; document.getElementById('tv_' + k).textContent = (+i.value).toFixed(i.step < 0.01 ? 3 : 2); if (k in POSE_DEF) { out(); const want = k.match(/^(sit|down|pee|poop)/)[1]; if (pose !== want) setPose(want); } else busy = performance.now() + 350; });   // 手を止めて少ししたら作り直す
   });
   const btns = (id, names, on, pick) => { const box = document.getElementById(id); names.forEach(nm => { const b = document.createElement('button'); b.textContent = nm; b.classList.toggle('on', nm === on); b.addEventListener('click', () => { box.querySelectorAll('button').forEach(c => c.classList.toggle('on', c === b)); pick(nm); }); box.appendChild(b); }); };
   btns('tView', Object.keys(VIEW), '横', nm => { const v = VIEW[nm]; orbit = { yaw: v[0], pitch: v[1], dist: v[2], h: v[3] }; });
-  btns('tPose', ['立つ', '歩く', 'おすわり', 'ふせ'], '立つ', nm => { pose = { 立つ: 'stand', 歩く: 'walk', おすわり: 'sit', ふせ: 'down' }[nm]; ts.x = home.x; ts.z = home.z; ts.yaw = 0; ts.speed = 0; build(); });
-  document.getElementById('tReset').addEventListener('click', () => { Object.assign(FORM, FORM_DEF); show(); out(); build(); });
+  const PN = { 立つ: 'stand', 歩く: 'walk', おすわり: 'sit', ふせ: 'down', おしっこ: 'pee', うんち: 'poop' };
+  const setPose = v => { pose = v; ts.x = home.x; ts.z = home.z; ts.yaw = 0; ts.speed = 0; build(); document.querySelectorAll('#tPose button').forEach(b => b.classList.toggle('on', PN[b.textContent] === v)); };   // 姿勢のつまみを触ったら、その姿勢に切り替える
+  btns('tPose', Object.keys(PN), '立つ', nm => setPose(PN[nm]));
+  document.getElementById('tReset').addEventListener('click', () => { Object.assign(FORM, FORM_DEF); Object.assign(POSEF, POSE_DEF); show(); out(); build(); });
   document.getElementById('tCopy').addEventListener('click', () => { const t = document.getElementById('tOut'); t.select(); navigator.clipboard?.writeText(t.value).catch(() => {}); try { document.execCommand('copy'); } catch (e) { /* 選んだ状態にはなる */ } document.getElementById('tCopy').textContent = 'コピーしました'; setTimeout(() => { document.getElementById('tCopy').textContent = '値をコピー'; }, 1500); });
   // 画面をなぞって回す・寄る
   const cv = renderer.domElement, ptr = new Map(); let pinch = 0;
