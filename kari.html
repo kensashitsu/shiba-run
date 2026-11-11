@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v189';
+const VERSION = 'v190';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1982,7 +1982,7 @@ const townCull = (x, z) => { for (const c of townChunks) { const dx = Math.max(0
 // 頂点の色は近い部品の色を混ぜ（毛色の境目がぼける）、動きは近い部品の親（骨）に重みを付けて従わせる。
 // split：別の皮にする骨（下あご。頭とつなげると口が開かない）
 const TUNE = /[?&]tune/.test(location.search);   // 調整ページ：柴の形をつまみで決める
-const TOON = TUNE || /[?&]toon/.test(location.search);   // アニメ調：段のある陰影・大きめの毛束・本物寄りの体つき（柴）
+const TOON = TUNE || /[?&]toon/.test(location.search) || (LITE && !/[?&]old/.test(location.search));   // 柴（仮）版はいつもアニメ調（?old で前の柴）   // アニメ調：段のある陰影・大きめの毛束・本物寄りの体つき（柴）
 const SMOOTH = TOON || /[?&]smooth/.test(location.search);
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 120, 120, 120, 255, 205, 205, 205, 255, 255, 255, 255, 255]), 4, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 // 柴の形のつまみ（?tune で動かす。倍率は 1＝v181 の部品の大きさ、ずらしは 0＝なし）
