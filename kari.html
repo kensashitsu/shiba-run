@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v193';
+const VERSION = 'v194';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1989,10 +1989,8 @@ const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 1
 const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
 const FORM = { ...FORM_DEF };
 // 柴の姿勢のつまみ（?tune で動かす。長さは m、角度は rad）
-const POSE_DEF = { sitY: -0.125, sitPitch: 0.72, sitNeck: -0.5, sitHead: 0, sitFront: 0.21, sitRear: -0.03, sitRearX: 0.1,
-  downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.42, downRear: -0.06, downRearX: 0.15,
-  peeUp: 0.62, peeOut: 0.14, peeBack: 0.04, peeRearRoll: 0.45, peeRoll: 0.1, peeY: -0.02, peeNeck: 0, peeHeadYaw: 0.3, peeTail: -0.25,
-  poopY: -0.13, poopPitch: 0.42, poopFlex: -0.4, poopNeck: -0.1, poopHead: 0, poopOut: 0.11, poopFwd: 0.12, poopFront: 0.04, poopTail: -0.6 };
+const POSE_OLD = { sitY: -0.125, sitPitch: 0.72, sitNeck: -0.5, sitHead: 0, sitFront: 0.21, sitRear: -0.03, sitRearX: 0.1, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.42, downRear: -0.06, downRearX: 0.15, peeUp: 0.62, peeOut: 0.14, peeBack: 0.04, peeRearRoll: 0.45, peeRoll: 0.1, peeY: -0.02, peeNeck: 0, peeHeadYaw: 0.3, peeTail: -0.25, poopY: -0.13, poopPitch: 0.42, poopFlex: -0.4, poopNeck: -0.1, poopHead: 0, poopOut: 0.11, poopFwd: 0.12, poopFront: 0.04, poopTail: -0.6 };   // ほかの犬種が使う元の姿勢
+const POSE_DEF = { sitY: -0.07, sitPitch: 0.54, sitNeck: -0.26, sitHead: -0.16, sitFront: 0.185, sitRear: -0.095, sitRearX: 0.115, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.425, downRear: -0.13, downRearX: 0.15, peeUp: 0.42, peeOut: 0.3, peeBack: 0.2, peeRearRoll: 0.55, peeRoll: 0.4, peeY: 0.005, peeNeck: 0.08, peeHeadYaw: 0.06, peeTail: -0.02, poopY: -0.035, poopPitch: 0.52, poopFlex: -0.5, poopNeck: -0.42, poopHead: -0.02, poopOut: 0.11, poopFwd: 0.12, poopFront: -0.005, poopTail: -0.6 };   // 2026-11-11 ユーザーが調整ページで決めた姿勢
 const POSEF = { ...POSE_DEF };
 try { const sv = JSON.parse(localStorage.getItem('shiba-pose') || '{}'); for (const k in POSE_DEF) if (typeof sv[k] === 'number' && isFinite(sv[k])) POSEF[k] = sv[k]; } catch (e) { /* 覚えていなければ元の姿勢 */ }
 try { const sv = JSON.parse(localStorage.getItem('shiba-form') || '{}'); for (const k in FORM_DEF) if (typeof sv[k] === 'number' && isFinite(sv[k])) FORM[k] = sv[k]; } catch (e) { /* 覚えていなければ元の形 */ }
@@ -2491,7 +2489,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       if (ph === 'sniff') { P.neck = 0.85; P.headPitch = 0.15 + sniffTwitch(t); P.headYaw = d.lookYaw; P.wag = 0.08; }
       if (ph === 'lift' || ph === 'pee' || ph === 'lower') {
         const w = ph === 'lift' ? smooth(0, PH_DUR.lift, k) : ph === 'lower' ? 1 - smooth(0, PH_DUR.lower, k) : 1;
-        const Z = F2 ? POSEF : POSE_DEF;
+        const Z = F2 ? POSEF : POSE_OLD;
         P.roll = s * Z.peeRoll * w; P.rearRoll = s * Z.peeRearRoll * w; P.y = Z.peeY * w; P.tailDown = Z.peeTail * w; P.headYaw = -s * Z.peeHeadYaw * w; P.neck += Z.peeNeck * w; P.eyes = 1 - 0.25 * w; P.wag = 0;
         P.legs[s > 0 ? 2 : 3] = V(s * (0.08 + Z.peeOut * w), Z.peeUp * w, -0.2 + Z.peeBack * w);       // 木の側の後脚を高く上げる（脚が垂直近くまで立つ）
         P.legs[s > 0 ? 3 : 2] = V(-s * (0.08 - 0.08 * w), 0, -0.17);                       // 反対の後脚は体の下へ寄せて支える
@@ -2506,7 +2504,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
         const w = ph === 'squat' ? smooth(0, PH_DUR.squat, k) : ph === 'rise' ? 1 - smooth(0, PH_DUR.rise, k) : 1;
         // 背中を丸めて腰を落とし、後脚を前へ寄せ、尾を上げる。力んでいる間は小刻みに震える
         // 相撲の四股のように：後脚を左右へ大きく開いて深く腰を落とし、上体を起こす
-        const Z = F2 ? POSEF : POSE_DEF;
+        const Z = F2 ? POSEF : POSE_OLD;
         P.y = Z.poopY * w + (ph === 'push' ? 0.003 * Math.sin(t * 45) : 0); P.pitch = Z.poopPitch * w; P.flex = Z.poopFlex * w;
         P.tailDown = Z.poopTail * w; P.earsBack = 0.3 * w; P.eyes = 1 - 0.35 * w; P.neck = Z.poopNeck * w; P.headPitch = Z.poopHead * w; P.wag = 0;
         P.legs[0] = V(0.075 + 0.01 * w, 0, 0.2 + Z.poopFront * w); P.legs[1] = V(-0.075 - 0.01 * w, 0, 0.2 + Z.poopFront * w);   // 前脚は突っ張る
