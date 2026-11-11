@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v180';
+const VERSION = 'v181';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2274,8 +2274,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const legs = [
     makeLeg(front, 0.07, -0.02, 0.2 * L, [0.13 * lg, 0.14 * lg, 0.06 * lg], -1, true),    // 0 左前
     makeLeg(front, -0.07, -0.02, 0.2 * L, [0.13 * lg, 0.14 * lg, 0.06 * lg], -1, true),   // 1 右前
-    makeLeg(rear, 0.075, -0.02, -0.2 * L, [0.13 * lg, 0.13 * lg, 0.085 * lg], 1, false),  // 2 左後
-    makeLeg(rear, -0.075, -0.02, -0.2 * L, [0.13 * lg, 0.13 * lg, 0.085 * lg], 1, false), // 3 右後
+    makeLeg(rear, 0.075, -0.02, -0.2 * L, [0.13 * lg, 0.13 * lg, (F2 ? 0.075 : 0.085) * lg], 1, false),  // 2 左後
+    makeLeg(rear, -0.075, -0.02, -0.2 * L, [0.13 * lg, 0.13 * lg, (F2 ? 0.075 : 0.085) * lg], 1, false), // 3 右後
   ];
   root.scale.setScalar(size);
   const NEUTRAL = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.2], [-0.08, -0.2]].map(([x, z]) => [x * size, z * size * L]);   // 立った時の足の位置（足元の中心から）
@@ -2956,7 +2956,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     const fwdX = Math.sin(st.yaw), fwdZ = Math.cos(st.yaw);
     const gRoot = H(st.x, st.z);
     const slope = Math.atan2(H(st.x + fwdX * 0.2, st.z + fwdZ * 0.2) - H(st.x - fwdX * 0.2, st.z - fwdZ * 0.2), 0.4);
-    body.position.set(0, STAND_Y + P.y * (F2 ? 1.12 : 1) + P.breath * 0.006 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22)), P.z);
+    S.tall = (S.tall || 0) + ((sp < 0.15 ? 1 : 0) - (S.tall || 0)) * Math.min(1, dt * 4);   // 止まっている時は脚を伸ばして立つ（歩く時は歩幅のぶん少し曲げる）
+    body.position.set(0, STAND_Y + (F2 ? 0.03 * S.tall * Math.max(0, 1 + P.y * 12) : 0) + P.y * (F2 ? 1.12 : 1) + P.breath * 0.006 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22)), P.z);
     body.rotation.set(-(P.pitch + slope * 0.85), 0, P.roll);
     front.rotation.set(-P.flex * 0.5, clamp(S.yawRate * 0.05, -0.2, 0.2), 0);
     rear.rotation.set(P.flex * 0.5, clamp(-S.yawRate * 0.05, -0.2, 0.2), P.rearRoll);
