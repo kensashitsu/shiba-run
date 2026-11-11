@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v196';
+const VERSION = 'v197';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3375,14 +3375,14 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
 
   const root = new THREE.Group();
   const pelvis = joint(root, 0, HIP_Y, 0);
-  blob(M.pants, 0.17, 0.13, 0.1, 0, 0.0, 0, pelvis);                          // 腰（ズボンの付け根をつなぐ）
+  blob(M.pants, 0.168, 0.12, 0.1, 0, 0.0, 0, pelvis);                         // 腰（ズボンの付け根をつなぐ）
   const torso = joint(pelvis, 0, 0.08, 0);
   // 上着：裾から肩までを一続きの回転体で作り、前後に薄くつぶす（玉を積むと浮き輪のような段ができる）
-  const coat = new THREE.Mesh(new THREE.LatheGeometry([[0.001, -0.04], [0.15, -0.04], [0.158, 0.0], [0.152, 0.06], [0.158, 0.2], [0.182, 0.33], [0.192, 0.41], [0.178, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.shirt);
+  const coat = new THREE.Mesh(new THREE.LatheGeometry([[0.001, -0.045], [0.172, -0.045], [0.176, -0.02], [0.166, 0.06], [0.158, 0.2], [0.182, 0.33], [0.192, 0.41], [0.178, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.shirt);
   coat.scale.z = 0.64; torso.add(coat);
   if (HN) {   // 上着：腰までかぶる裾（少し広がる）・裾の折り返し・立った襟
-    coat.geometry = new THREE.LatheGeometry([[0.001, -0.135], [0.166, -0.135], [0.176, -0.12], [0.172, -0.03], [0.158, 0.07], [0.158, 0.2], [0.178, 0.33], [0.186, 0.41], [0.172, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28);
-    const hem = new THREE.Mesh(new THREE.LatheGeometry([[0.168, -0.14], [0.181, -0.137], [0.182, -0.108], [0.172, -0.104]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.trim); hem.scale.z = 0.64; torso.add(hem);
+    coat.geometry = new THREE.LatheGeometry([[0.001, -0.085], [0.186, -0.085], [0.193, -0.07], [0.184, -0.005], [0.162, 0.09], [0.158, 0.2], [0.178, 0.33], [0.186, 0.41], [0.172, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28);
+    const hem = new THREE.Mesh(new THREE.LatheGeometry([[0.188, -0.09], [0.199, -0.087], [0.2, -0.06], [0.19, -0.056]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.trim); hem.scale.z = 0.64; torso.add(hem);
     const collar = new THREE.Mesh(new THREE.LatheGeometry([[0.05, 0.5], [0.086, 0.497], [0.094, 0.53], [0.08, 0.566], [0.064, 0.562], [0.07, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 20), M.trim); collar.scale.z = 0.86; collar.position.z = -0.006; torso.add(collar);
     if (bag) {   // 肩かけ鞄：左肩から右の腰へ斜めにかけた帯と、腰の横の鞄
       const strap = new THREE.Mesh(new THREE.TorusGeometry(1, 0.05, 6, 40), M.strap);
@@ -3451,8 +3451,8 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
     const kn = joint(hp, 0, -L.thigh, 0);
     const an = joint(kn, 0, -L.shin, 0);
     // ズボン：太ももは付け根が太く、ひざへ細り、ふくらはぎで少しふくらんで裾へ
-    skinTube([hp, kn, an], [L.thigh, L.shin], d => d < 0 ? 0.095 : d < L.thigh ? 0.095 - 0.03 * d / L.thigh + 0.006 * Math.sin(Math.PI * d / L.thigh)
-      : 0.064 - 0.014 * (d - L.thigh) / L.shin + 0.006 * Math.sin(Math.PI * Math.min(1, (d - L.thigh) / (L.shin * 0.8))), M.pants, 0.92, -0.12);   // 付け根は腰の中まで伸ばして段差を隠す
+    skinTube([hp, kn, an], [L.thigh, L.shin], d => d < 0 ? Math.max(0.03, 0.095 + d * 1.1) : d < L.thigh ? 0.095 - 0.03 * d / L.thigh + 0.006 * Math.sin(Math.PI * d / L.thigh)
+      : 0.064 - 0.014 * (d - L.thigh) / L.shin + 0.006 * Math.sin(Math.PI * Math.min(1, (d - L.thigh) / (L.shin * 0.8))), M.pants, 0.92, -0.06);   // 付け根は腰の中まで伸ばして段差を隠す
     if (HN && boots) {   // ブーツ：足首の上までの筒・丸いつま先・濃い色の底
       blob(M.boots, 0.05, 0.042, 0.124, 0, -0.032, 0.043, an);
       const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.051, 0.13, 14), M.boots); cuff.position.set(0, 0.04, 0); an.add(cuff);
