@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v194';
+const VERSION = 'v195';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3298,8 +3298,10 @@ const walker = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
 // 人：柴と同じく図形の組み合わせ。腰→胴→胸→首→頭、肩→上腕→ひじ→前腕→手、股→太もも→ひざ→すね→足首→靴。
 // 歩く・走るは脚の付け根とひざ、腕の付け根とひじの角度を1歩の周期で動かす。リードを持つ手は肩・ひじ・手の3点で犬の方へ伸ばす
 function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long = false }) {
-  const mat = (c, r = 0.85) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+  const H2 = TOON;   // アニメ調：段のある陰影・一続きの頭と髪・大きめの目
+  const mat = (c, r = 0.85) => H2 ? toonFill(new THREE.MeshToonMaterial({ color: new THREE.Color(c).offsetHSL(0, 0.03, 0.025), gradientMap: toonRamp })) : new THREE.MeshStandardMaterial({ color: c, roughness: r });
   const M = { shirt: mat(shirt), pants: mat(pants), hair: mat(hair, 0.7), skin: mat(skin, 0.75), shoes: mat(shoes, 0.6), dark: mat(0x1a1410, 0.4) };
+  if (H2) { M.face = mat(skin); M.locks = mat(hair); M.locks0 = mat(hair); M.sole = mat(0xece8de); M.white = new THREE.MeshBasicMaterial({ color: 0xffffff }); M.lip = mat(0xb5705a); }
   const SPH = new THREE.SphereGeometry(1, 18, 14);
   const blob = (m, sx, sy, sz, x, y, z, parent) => { const o = new THREE.Mesh(SPH, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); parent.add(o); return o; };
   // 付け根から下へ伸びる太さの変わる筒（関節のふくらみ付き）
@@ -3352,6 +3354,25 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
   seg(neck, 0.08, 0.05, 0.048, M.skin); neck.rotation.x = Math.PI;             // 首（上向きに伸ばす）
   const head = joint(chest, 0, 0.375, 0.005);
   head.scale.setScalar(1.22);                                                  // 頭は少し大きめ（デフォルメ）
+  if (H2) {   // 顔：丸い頭がいから小さなあごへすぼまる。髪：前髪の束・もみあげ・後ろ髪をひとかたまりに
+    blob(M.face, 0.088, 0.1, 0.095, 0, 0.01, 0, head);
+    blob(M.face, 0.068, 0.06, 0.064, 0, -0.05, 0.02, head);                    // ほお・あご
+    blob(M.face, 0.032, 0.026, 0.03, 0, -0.092, 0.04, head);                   // あご先
+    blob(M.face, 0.013, 0.025, 0.016, 0.087, -0.012, -0.004, head);            // 耳
+    blob(M.face, 0.013, 0.025, 0.016, -0.087, -0.012, -0.004, head);
+    blob(M.face, 0.008, 0.01, 0.011, 0, -0.03, 0.093, head);                   // 鼻（小さく）
+    blob(M.locks, 0.097, 0.086, 0.104, 0, 0.042, -0.012, head);                // 髪
+    blob(M.locks, 0.093, 0.085, 0.06, 0, 0.0, -0.058, head);                   // 後ろ髪
+    [[-0.064, 0.04, 0.066, 0.5], [-0.036, 0.047, 0.082, 0.25], [-0.004, 0.052, 0.088, -0.12], [0.03, 0.047, 0.084, -0.3], [0.06, 0.04, 0.07, -0.5]].forEach(([x, y, z, r]) => { const b = blob(M.locks, 0.021, 0.03, 0.014, x, y, z, head); b.rotation.set(0.25, x * 6, r); });   // 前髪の束
+    for (const sx of [1, -1]) { blob(M.locks, 0.012, 0.04, 0.026, 0.088 * sx, 0.005, 0.03, head); }   // もみあげ
+    if (long) { blob(M.locks, 0.096, 0.14, 0.05, 0, -0.08, -0.055, head); blob(M.locks, 0.028, 0.1, 0.04, 0.08, -0.06, -0.012, head); blob(M.locks, 0.028, 0.1, 0.04, -0.08, -0.06, -0.012, head); }
+    for (const sx of [1, -1]) {
+      const e = blob(M.dark, 0.0105, 0.0145, 0.005, 0.034 * sx, -0.008, 0.0885, head); e.rotation.y = 0.36 * sx;   // 目（縦に大きく）
+      blob(M.white, 0.0034, 0.004, 0.003, 0.034 * sx + 0.003, -0.002, 0.0925, head).rotation.y = 0.36 * sx;        // 目の光
+      const br = blob(M.locks0, 0.016, 0.003, 0.004, 0.035 * sx, 0.017, 0.09, head); br.rotation.set(0, 0.36 * sx, -0.1 * sx);   // 眉
+    }
+    blob(M.lip, 0.011, 0.0028, 0.004, 0, -0.064, 0.082, head);                 // 口
+  } else {
   blob(M.skin, 0.085, 0.108, 0.098, 0, 0, 0, head);                            // 頭
   blob(M.skin, 0.06, 0.05, 0.05, 0, -0.06, 0.03, head);                        // あご
   blob(M.hair, 0.092, 0.08, 0.1, 0, 0.04, -0.012, head);                       // 髪
@@ -3364,6 +3385,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
   blob(M.dark, 0.011, 0.007, 0.006, -0.032, 0.012, 0.09, head);
   blob(M.hair, 0.022, 0.005, 0.006, 0.032, 0.03, 0.092, head);                 // 眉
   blob(M.hair, 0.022, 0.005, 0.006, -0.032, 0.03, 0.092, head);
+  }
   // 腕（0=左 1=右。人は +z を向いているので +x が左）
   const arms = [1, -1].map(s => {
     const sh = joint(chest, 0.19 * s, 0.16, 0);
@@ -3387,10 +3409,11 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
     skinTube([hp, kn, an], [L.thigh, L.shin], d => d < 0 ? 0.095 : d < L.thigh ? 0.095 - 0.03 * d / L.thigh + 0.006 * Math.sin(Math.PI * d / L.thigh)
       : 0.064 - 0.014 * (d - L.thigh) / L.shin + 0.006 * Math.sin(Math.PI * Math.min(1, (d - L.thigh) / (L.shin * 0.8))), M.pants, 0.92, -0.12);   // 付け根は腰の中まで伸ばして段差を隠す
     blob(M.shoes, 0.05, 0.04, 0.125, 0, -0.035, 0.045, an);                    // 靴
-    blob(M.shoes, 0.052, 0.012, 0.13, 0, -0.068, 0.045, an);                   // 靴底
+    blob(H2 ? M.sole : M.shoes, 0.052, 0.012, 0.13, 0, -0.068, 0.045, an);                   // 靴底
     return { hp, kn, an, s, f: { plant: new THREE.Vector3(), foot: new THREE.Vector3(), from: new THREE.Vector3(), swing: false, s: 0, init: false, pitch: 0 } };
   });
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  if (H2) { smoothSkin(root, [M.face], { vox: 0.006, k: 0.007, toon: true }); smoothSkin(root, [M.locks], { vox: 0.006, k: 0.005, toon: true }); }   // 顔と髪をそれぞれ一枚の面に（境目はくっきり残す）
   root.updateMatrixWorld(true);
   for (const [mesh, bones] of tubes) mesh.bind(new THREE.Skeleton(bones));   // 休んだ姿勢で皮を骨に結びつける
   arms.forEach(A => { A.sh.rotation.z = 0.08 * A.s; });
@@ -3553,7 +3576,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   }
   // 犬を連れていない人：道を行き来するだけ（柴は気にしない）
   const PEDS = [
-    makeHuman({ shirt: 0x9a3b3b, pants: 0x30343c, hair: 0x2a1f1a }), makeHuman({ shirt: 0xd8c27a, pants: 0x3e4a5c, hair: 0x5a4030, long: true }),
+    makeHuman({ shirt: 0x9a3b3b, pants: 0x30343c, hair: 0x2a1f1a }), makeHuman({ shirt: 0xd9a938, pants: 0x3e4a5c, hair: 0x5a4030, long: true }),
     makeHuman({ shirt: 0x5b6d7a, pants: 0x262628, hair: 0x9a9a9a }), makeHuman({ shirt: 0x7a5a8a, pants: 0x44403a, hair: 0x1a1410, long: true }),
   ].map((man, k) => { scene.add(man.object); return { man, ped: true, persona: ['approach', 'yield', 'turner', 'avoid'][k], pace: [1.25, 1.1, 0.85, 1.2][k], route: null, rs: 0, rdir: 1, x: 0, z: 0, yaw: 0, speed: 0 }; });
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
