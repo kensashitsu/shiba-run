@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v185';
+const VERSION = 'v186';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2088,7 +2088,7 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
   geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
   geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
-  geo.setIndex(idx);
+  geo.setIndex(idx); geo.userData.n0 = n0;   // n0：皮の点の数（その後ろは毛のふさ）
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 1.6); geo.boundingBox = new THREE.Box3(new THREE.Vector3(-1.6, -1, -1.6), new THREE.Vector3(1.6, 2.2, 1.6));
   for (const o of src) o.parent.remove(o);
   const mat = toon ? toonFill(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp })) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: rough });
@@ -2190,8 +2190,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       if (!F2) { blob(iris, 0.74, 0.74, 0.8, 0, 0, 0.27, e); blob(mats.black, 0.5, 0.5, 0.5, 0, 0, 0.6, e); } blob(glint, 0.13, 0.13, 0.08, 0.26, 0.3, 0.95, e); });
     collar = new THREE.Group(); collar.position.set(0, 0.035, 0.03); collar.rotation.x = -0.8; neck.add(collar);
     if (F2) { collar.position.set(0, 0.05, 0.012); collar.rotation.x = -0.5; collar.scale.setScalar(1.12); }
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.009, 8, 28), new THREE.MeshStandardMaterial({ color: collarCol, roughness: 0.55 })); band.scale.set(1, 1.12, 1.5); collar.add(band);
-    const tagM = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 12), new THREE.MeshStandardMaterial({ color: 0xd8b24a, roughness: 0.3, metalness: 0.8 })); tagM.position.set(0, -0.128, 0.014); tagM.rotation.x = Math.PI / 2; collar.add(tagM);
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.009, 8, 28), new THREE.MeshStandardMaterial({ color: collarCol, roughness: 0.55 })); band.scale.set(1, 1.12, 1.5); collar.add(band); collar.userData.band = band;
+    const tagM = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 12), new THREE.MeshStandardMaterial({ color: 0xd8b24a, roughness: 0.3, metalness: 0.8 })); tagM.position.set(0, -0.128, 0.014); tagM.rotation.x = Math.PI / 2; collar.add(tagM); collar.userData.tag = tagM;
   }
   if (F2) for (const sx of [1, -1]) furOf(blob(mats.cream, 0.015, 0.009, 0.01, (0.04 + FORM.eyeSpread) * sx, 0.046 + FORM.eyeUp, 0.098, head), 0).userData.sdf = { k: 0.5 };   // 目の上の白（麻呂眉）
   else if (shibaFace) {
@@ -2292,6 +2292,17 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const NEUTRAL = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.2], [-0.08, -0.2]].map(([x, z]) => [x * size * bw, z * size * L]);   // 立った時の足の位置（足元の中心から）
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn, mats.tan, mats.pale], { kc: F2 ? 0.011 : 0.005, split: [jaw], rough: gloss ? 0.6 : 0.85, shade: TOON ? 0.1 : 0.14, fur: (F2 ? 0.012 : 0.016) * coat, toon: TOON, furDens: TOON ? 0.3 : 0.5, furW: TOON ? 0.5 : 0.28 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() });
+    if (F2 && collar) {   // 首輪は首の皮に沿わせる（首の太さや毛を変えても浮かない・埋もれない）：輪の面の近くにある皮の点を、向きごとに拾う
+      collar.scale.setScalar(1); root.updateMatrixWorld(true);
+      const M = collar.matrixWorld.clone().invert().multiply(root.matrixWorld), ps = sk.geometry.attributes.position, v = new THREE.Vector3(), NB = 28, R = new Array(NB).fill(0);
+      for (let i = 0; i < sk.geometry.userData.n0; i++) { v.fromBufferAttribute(ps, i).applyMatrix4(M); const r = Math.hypot(v.x, v.y); if (Math.abs(v.z) > 0.012 || r > 0.17) continue; const k = Math.floor((Math.atan2(v.y, v.x) / (Math.PI * 2) + 1) % 1 * NB) % NB; if (r > R[k]) R[k] = r; }
+      const med = R.filter(r => r > 0).sort((a, b) => a - b); const mid = med.length ? med[med.length >> 1] : 0.1;
+      for (let k = 0; k < NB; k++) R[k] = Math.min(R[k] || mid, mid * 1.35);   // 点の無い向きは真ん中の値、胸や頬にかかった所は広げすぎない
+      const Rs = R.map((r, k) => (R[(k + NB - 1) % NB] + 2 * r + R[(k + 1) % NB]) / 4 + 0.004);
+      const band = collar.userData.band, tagM = collar.userData.tag, cv = new THREE.CatmullRomCurve3(Rs.map((r, k) => { const a = (k + 0.5) / NB * Math.PI * 2; return new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0); }), true);
+      band.geometry.dispose(); band.geometry = new THREE.TubeGeometry(cv, 56, 0.008, 6, true); band.scale.set(1, 1, 1.5);
+      const kb = Math.floor(0.75 * NB); tagM.position.set(0, -Rs[kb] - 0.016, 0.01);
+    }
     if (F2) {   // 目は皮の表面に合わせて置く（頭の形を変えても埋もれたり飛び出したりしない）
       sk.skeleton.update(); const rc = new THREE.Raycaster(), o = new THREE.Vector3(), d = new THREE.Vector3();
       eyes.forEach(e => { o.set(e.position.x, e.position.y, 0.4); head.localToWorld(o); d.set(0, 0, -1).transformDirection(head.matrixWorld); rc.set(o, d); const h = rc.intersectObject(sk, false)[0]; if (h) e.position.z = head.worldToLocal(h.point).z - 0.006 * FORM.eyeSize; });
