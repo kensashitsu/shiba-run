@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v174';
+const VERSION = 'v175';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -256,7 +256,7 @@ if (LITE) TOWNS.home.file = 'assets/town-kari.json';   // 北迫新町のまわ�
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
 // 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
 const PAGE = /[?&]walk/.test(location.search) ? 'walk' : /[?&]town/.test(location.search) ? 'town' : 'meadow', MODE_BTN = { walk: 'tWalk', town: 'tTownRun', meadow: 'tMeadow' };
-const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
+const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', /[?&]smooth/.test(location.search) ? 'smooth' : '', 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
 const early = { on: !/[?&]test/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
 if (early.on) {
   const main = document.getElementById(MODE_BTN[PAGE]);
@@ -1976,6 +1976,100 @@ if (TOWN) {
 if (TOWN) { townTiles.max = 160; while (townTiles.size > townTiles.max) townTiles.delete(townTiles.keys().next().value); }
 const townCull = (x, z) => { for (const c of townChunks) { const dx = Math.max(0, Math.abs(c.x - x) - c.h), dz = Math.max(0, Math.abs(c.z - z) - c.h), vis = dx * dx + dz * dz < 158 * 158; if (c.o.visible !== vis) c.o.visible = vis; } };   // 区画のいちばん近い所が霧（150m）の向こうなら描かない
 
+// ---------- なめらかな体（?smooth で試す） ----------
+// 球や筒を並べて作った体（毛の部品）を、つなぎ目の無い1枚の皮にまとめる。骨組み（Group の親子）と動かし方はそのまま使う。
+// 部品ごとの「表面までの距離」をなめらかに足し合わせた場（k が大きいほど丸くつながる）から面を起こし、
+// 頂点の色は近い部品の色を混ぜ（毛色の境目がぼける）、動きは近い部品の親（骨）に重みを付けて従わせる。
+// split：別の皮にする骨（下あご。頭とつなげると口が開かない）
+const SMOOTH = /[?&]smooth/.test(location.search);
+function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.005, split = [], rough = 0.85, shade = 0 } = {}) {
+  root.updateMatrixWorld(true);
+  const rootInv = root.matrixWorld.clone().invert(), prims = [], bones = [];
+  const src = []; root.traverse(o => { if (o.isMesh && furMats.includes(o.material)) src.push(o); });
+  for (const o of src) {
+    const M = rootInv.clone().multiply(o.matrixWorld), inv = M.clone().invert().elements, g = o.geometry, ud = o.userData.sdf;
+    let type, bb, a = 0, b = 0, c = 0, d = 0;
+    if (ud && ud.type === 'arc') { type = 2; a = ud.R; b = ud.r; c = ud.arc; d = ud.tip ?? 1; bb = [-a - b, a + b, -a - b, a + b, -b, b]; }
+    else if (g.type === 'SphereGeometry') { type = 0; bb = [-1, 1, -1, 1, -1, 1]; }
+    else {   // 筒・円すい：y 軸に沿った、両端が丸い先細りの棒
+      g.computeBoundingBox(); const y0 = g.boundingBox.min.y, y1 = g.boundingBox.max.y, p = g.parameters;
+      type = 1; a = y0; b = y1 - y0; c = p.radiusBottom ?? p.radius; d = Math.max(p.radiusTop ?? 0, ud?.tip ?? 0.004);
+      if (ud?.r) c = ud.r;
+      const r = Math.max(c, d); bb = [-r, r, y0 - c, y1 + d, -r, r];
+    }
+    const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], v = new THREE.Vector3();
+    for (let i = 0; i < 8; i++) { v.set(bb[i & 1], bb[2 + (i >> 1 & 1)], bb[4 + (i >> 2 & 1)]).applyMatrix4(M); v.toArray().forEach((x, j) => { lo[j] = Math.min(lo[j], x); hi[j] = Math.max(hi[j], x); }); }
+    let bone = bones.indexOf(o.parent); if (bone < 0) bone = bones.push(o.parent) - 1;
+    const sc = o.scale, col = o.material.color;
+    prims.push({ type, inv, sx: sc.x, sy: sc.y, sz: sc.z, ms: Math.min(sc.x, sc.y, sc.z), a, b, c, d, lo, hi, bone, grp: split.indexOf(o.parent) + 1, r: col.r, g: col.g, bl: col.b, kk: ud?.k ?? 1 });
+  }
+  const dist = (P, x, y, z) => {
+    const e = P.inv, qx = e[0] * x + e[4] * y + e[8] * z + e[12], qy = e[1] * x + e[5] * y + e[9] * z + e[13], qz = e[2] * x + e[6] * y + e[10] * z + e[14];
+    if (P.type === 0) { const k0 = Math.hypot(qx, qy, qz), k1 = Math.hypot(qx / P.sx, qy / P.sy, qz / P.sz); return k1 < 1e-6 ? -P.ms : k0 * (k0 - 1) / k1; }
+    if (P.type === 1) {
+      const h = P.b, r1 = P.c, r2 = P.d, q0 = Math.hypot(qx, qz), q1 = qy - P.a, bb = (r1 - r2) / h, aa = Math.sqrt(Math.max(0, 1 - bb * bb)), kk = -bb * q0 + aa * q1;
+      return (kk < 0 ? Math.hypot(q0, q1) - r1 : kk > aa * h ? Math.hypot(q0, q1 - h) - r2 : q0 * aa + q1 * bb - r1) * P.ms;
+    }
+    let an = Math.atan2(qy, qx); if (an < 0) an += Math.PI * 2;   // 巻き尾：輪の一部（先へ向かって少し細く）
+    if (an > P.c) an = an - P.c < Math.PI * 2 - an ? P.c : 0;
+    const r = P.b * (1 - (1 - P.d) * (an / P.c) ** 2);
+    return Math.hypot(qx - P.a * Math.cos(an), qy - P.a * Math.sin(an), qz) - r;
+  };
+  const pos = [], colr = [], si = [], sw = [], idx = [];
+  const ngrp = split.length + 1, acc = new Float32Array(bones.length);
+  for (let G = 0; G < ngrp; G++) {
+    const ps = prims.filter(p => p.grp === G); if (!ps.length) continue;
+    const mg = k * 5 + vox * 2, o = [0, 1, 2].map(j => Math.min(...ps.map(p => p.lo[j])) - mg), n = [0, 1, 2].map(j => Math.ceil((Math.max(...ps.map(p => p.hi[j])) + mg - o[j]) / vox) + 1);
+    const [nx, ny, nz] = n, S = new Float32Array(nx * ny * nz);
+    for (const P of ps) {
+      const kp = k * P.kk, i0 = [0, 1, 2].map(j => Math.max(0, Math.floor((P.lo[j] - mg - o[j]) / vox))), i1 = [0, 1, 2].map(j => Math.min(n[j] - 1, Math.ceil((P.hi[j] + mg - o[j]) / vox)));
+      for (let kz = i0[2]; kz <= i1[2]; kz++) for (let jy = i0[1]; jy <= i1[1]; jy++) for (let ix = i0[0], q = (kz * ny + jy) * nx + ix; ix <= i1[0]; ix++, q++) {
+        const dd = dist(P, o[0] + ix * vox, o[1] + jy * vox, o[2] + kz * vox); if (dd < kp * 6) S[q] += Math.exp(-dd / kp);
+      }
+    }
+    for (let q = 0; q < S.length; q++) S[q] = -Math.log(Math.max(S[q], 1e-7));   // 負＝中
+    // 面を起こす（サーフェスネット：面をまたぐ升目に1点ずつ置き、となりの升目とつなぐ）
+    const vid = new Int32Array(nx * ny * nz).fill(-1), base = pos.length / 3, cz = nx * ny, f = new Float32Array(8);
+    for (let kz = 0; kz < nz - 1; kz++) for (let jy = 0; jy < ny - 1; jy++) for (let ix = 0; ix < nx - 1; ix++) {
+      const q = kz * cz + jy * nx + ix; let m = 0;
+      for (let c8 = 0; c8 < 8; c8++) { f[c8] = S[q + (c8 & 1) + (c8 >> 1 & 1) * nx + (c8 >> 2) * cz]; if (f[c8] < 0) m |= 1 << c8; }
+      if (m === 0 || m === 255) continue;
+      let px = 0, py = 0, pz = 0, cnt = 0;
+      for (let c8 = 0; c8 < 8; c8++) for (let ax = 1; ax < 8; ax <<= 1) { const c2 = c8 | ax; if (c2 === c8 || (f[c8] < 0) === (f[c2] < 0)) continue; const u = f[c8] / (f[c8] - f[c2]); px += (c8 & 1) + (ax === 1 ? u : 0); py += (c8 >> 1 & 1) + (ax === 2 ? u : 0); pz += (c8 >> 2) + (ax === 4 ? u : 0); cnt++; }
+      vid[q] = pos.length / 3 - base; pos.push(o[0] + (ix + px / cnt) * vox, o[1] + (jy + py / cnt) * vox, o[2] + (kz + pz / cnt) * vox);
+    }
+    const quad = (a, b, c, d, flip) => { a += base; b += base; c += base; d += base; if (!flip) idx.push(a, c, b, a, d, c); else idx.push(a, b, c, a, c, d); };
+    for (let kz = 1; kz < nz - 1; kz++) for (let jy = 1; jy < ny - 1; jy++) for (let ix = 1; ix < nx - 1; ix++) {
+      const q = kz * cz + jy * nx + ix, in0 = S[q] < 0;
+      if (in0 !== S[q + 1] < 0) quad(vid[q - nx - cz], vid[q - cz], vid[q], vid[q - nx], in0);
+      if (in0 !== S[q + nx] < 0) quad(vid[q - 1 - cz], vid[q - 1], vid[q], vid[q - cz], in0);
+      if (in0 !== S[q + cz] < 0) quad(vid[q - 1 - nx], vid[q - nx], vid[q], vid[q - 1], in0);
+    }
+    // 色と骨の重み
+    const dl = new Float32Array(ps.length);
+    for (let vi = base; vi < pos.length / 3; vi++) {
+      const x = pos[vi * 3], y = pos[vi * 3 + 1], z = pos[vi * 3 + 2]; let dm = 1e9;
+      ps.forEach((P, i) => { dl[i] = dist(P, x, y, z); if (dl[i] < dm) dm = dl[i]; });
+      let r = 0, g = 0, b = 0, ws = 0; acc.fill(0);
+      ps.forEach((P, i) => { const e = dl[i] - dm; if (e > kw * 8) return; const wc = Math.exp(-e / kc); r += P.r * wc; g += P.g * wc; b += P.bl * wc; ws += wc; acc[P.bone] += Math.exp(-e / kw); });
+      colr.push(r / ws, g / ws, b / ws);
+      const top = [...acc.keys()].filter(i => acc[i] > 0).sort((p, q2) => acc[q2] - acc[p]).slice(0, 4), tot = top.reduce((s, i) => s + acc[i], 0);
+      for (let j = 0; j < 4; j++) { si.push(top[j] ?? 0); sw.push(top[j] !== undefined ? acc[top[j]] / tot : 0); }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  if (shade) { const nm = geo.attributes.normal, cl = geo.attributes.color; for (let i = 0; i < nm.count; i++) { const f = 1 - shade * Math.max(0, nm.getY(i)) ** 1.5 + shade * 0.5 * Math.max(0, -nm.getY(i)); cl.setXYZ(i, cl.getX(i) * f, cl.getY(i) * f, cl.getZ(i) * f); } }   // 背は少し濃く、下側は少し明るく
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 1.6); geo.boundingBox = new THREE.Box3(new THREE.Vector3(-1.6, -1, -1.6), new THREE.Vector3(1.6, 2.2, 1.6));
+  for (const o of src) o.parent.remove(o);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: rough });
+  const mesh = new THREE.SkinnedMesh(geo, mat); mesh.castShadow = mesh.receiveShadow = true;
+  root.add(mesh); root.updateMatrixWorld(true); mesh.bind(new THREE.Skeleton(bones));
+  return mesh;
+}
+
 // ---------- 柴犬（骨組み・歩き方・姿勢・仕草） ----------
 // 骨組み：胴は後ろ半身と前半身（背骨をしならせる）。脚は3節（前脚＝上腕・前腕・中手、後脚＝太もも・すね・中足）。
 // 足先の位置を先に決め、関節の角度を逆算する（IK）。歩く時、着地中の足は地面に固定し、浮いている足だけ次の着地点へ運ぶ。
@@ -2050,6 +2144,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       outer.position.y = 0.05; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
       const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mats.earIn);
       inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4; inner.scale.z = 0.4;
+      if (SMOOTH) { outer.scale.z = 0.36; outer.userData.sdf = { r: 0.04, tip: 0.006, k: 0.6 }; inner.scale.z = 0.3; inner.position.set(0, 0.03, 0.011); inner.userData.sdf = { r: 0.02, tip: 0.003, k: 0.6 }; }   // 薄く、先をとがらせる。内側の毛は前の面だけ
       ear.add(outer, inner);
     }
     head.add(ear); ear.userData.s = s; return ear;
@@ -2060,9 +2155,9 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   if (tailType === 'curl') {
     const tailCurl = new THREE.Group(); tailCurl.position.set(0, 0.06, 0.07); tailCurl.rotation.y = Math.PI / 2; tail.add(tailCurl);
     const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.042, 10, 26, 4.7), mats.red);
-    tailRing.rotation.z = -0.35; tailCurl.add(tailRing);
+    tailRing.rotation.z = -0.35; tailCurl.add(tailRing); tailRing.userData.sdf = { type: 'arc', R: 0.085, r: 0.042, arc: 4.7 };
     const tailIn = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.026, 8, 22, 4.2), mats.cream);
-    tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn);
+    tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn); tailIn.userData.sdf = { type: 'arc', R: 0.068, r: 0.026, arc: 4.2 };
   } else {   // 後ろへ垂れる尻尾：otter＝根元が太く先細り（ラブラドール）／plume＝ふさふさで先が少し上を向き、先が白い（ボーダーコリー）
     tail.position.set(0, 0.06, -0.27 * L);
     const n = tailType === 'plume' ? 7 : 6;
@@ -2103,6 +2198,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   root.scale.setScalar(size);
   const NEUTRAL = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.2], [-0.08, -0.2]].map(([x, z]) => [x * size, z * size * L]);   // 立った時の足の位置（足元の中心から）
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn], { split: [jaw], rough: gloss ? 0.6 : 0.85, shade: 0.14 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() }); }
 
   const FOOT_UP = 0.022;   // 足先の厚み（地面から足首の付け根まで）
   const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
