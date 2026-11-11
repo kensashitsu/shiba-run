@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v197';
+const VERSION = 'v198';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -262,7 +262,7 @@ if (LITE) TOWNS.home.file = 'assets/town-kari.json';   // 北迫新町のまわ�
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
 // 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
 const PAGE = /[?&]walk/.test(location.search) ? 'walk' : /[?&]town/.test(location.search) ? 'town' : 'meadow', MODE_BTN = { walk: 'tWalk', town: 'tTownRun', meadow: 'tMeadow' };
-const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', /[?&]toon/.test(location.search) ? 'toon' : /[?&]smooth/.test(location.search) ? 'smooth' : '', 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
+const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', /[?&]toon/.test(location.search) ? 'toon' : /[?&]smooth/.test(location.search) ? 'smooth' : '', (location.search.match(/[?&](look=[0-9])/) || [])[1], (location.search.match(/[?&](hum=1)/) || [])[1], 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
 const early = { on: !/[?&](test|tune)/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
 if (early.on) {
   const main = document.getElementById(MODE_BTN[PAGE]);
