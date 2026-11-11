@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v184';
+const VERSION = 'v185';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1986,7 +1986,7 @@ const TOON = TUNE || /[?&]toon/.test(location.search);   // アニメ調：段�
 const SMOOTH = TOON || /[?&]smooth/.test(location.search);
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 120, 120, 120, 255, 205, 205, 205, 255, 255, 255, 255, 255]), 4, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 // 柴の形のつまみ（?tune で動かす。1＝今の形の倍率、0＝ずらしなし）
-const FORM_DEF = { legLen: 1, legThick: 1, paw: 1, bodyLen: 1, bodyThick: 1, chest: 1, tuck: 0, neckThick: 1, headSize: 1, headUp: 0, headFwd: 0, cheek: 1, muzzleLen: 1, muzzleThick: 1, earSize: 1, earSpread: 0, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1 };
+const FORM_DEF = { legLen: 1, legThick: 1, paw: 1, bodyLen: 1, bodyThick: 1, chest: 1, tuck: 0, neckThick: 1, headSize: 1, headUp: 0, headFwd: 0, cheek: 1, muzzleLen: 1, muzzleThick: 1, faceW: 1, stop: 1, bridge: 0, jawLen: 1, jawThick: 1, jawUp: 0, jowl: 1, earSize: 1, earSpread: 0, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1 };
 const FORM = { ...FORM_DEF };
 try { const sv = JSON.parse(localStorage.getItem('shiba-form') || '{}'); for (const k in FORM_DEF) if (typeof sv[k] === 'number' && isFinite(sv[k])) FORM[k] = sv[k]; } catch (e) { /* 覚えていなければ元の形 */ }
 const toonFill = (m, k = 0.42) => { m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * ' + k.toFixed(2) + ';'); }; return m; };   // 段の陰影は空の明かり（環境光）を受けないので、地の色を少し足して陰を黒くしない
@@ -2154,17 +2154,19 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   if (F2) { const nt = FORM.neckThick; furOf(blob(mats.red, 0.128 * nt, 0.14, 0.128 * nt, 0, 0.028, -0.005, neck), 0.014); furOf(blob(mats.cream, 0.1 * nt, 0.12, 0.085 * nt, 0, -0.015, 0.064 * nt, neck), 0.012); }   // 毛の厚い太い首と、のどの白
   else furOf(blob(mats.red, 0.1, 0.12, 0.12, 0, 0.03, 0.02, neck), 0.026);
   const head = new THREE.Group(); head.position.set(0, 0.11, 0.09); neck.add(head);
+  const fw = F2 ? FORM.faceW : 1;   // 顔の幅
   let snout = head;   // マズル（長さと太さを変えられるよう、柴は別の入れ物にする）
   if (F2) { head.position.set(0, 0.11 + FORM.headUp, 0.09 + FORM.headFwd); head.scale.setScalar(FORM.headSize); snout = new THREE.Group(); snout.position.set(0, -0.012, 0.05); snout.scale.set(FORM.muzzleThick, FORM.muzzleThick, FORM.muzzleLen); head.add(snout); }
   if (F2) {   // 丸く幅広い頭・平たい額・短く白いマズルに赤い鼻すじ・大きく白い頬
     const kk = (m, k) => { m.userData.sdf = { k }; return m; };   // 形をくっきり残す（なじませすぎない）
-    furOf(blob(mats.red, 0.12, 0.1, 0.108, 0, 0.008, -0.008, head), 0.008);
-    furOf(blob(mats.red, 0.097, 0.042, 0.048, 0, 0.04, 0.058, head), 0);             // 額
-    furOf(blob(mats.red, 0.055, 0.05, 0.048, 0.082, 0.0, 0.012, head), 0.012);       // 顔の横（赤毛）
-    furOf(blob(mats.red, 0.055, 0.05, 0.048, -0.082, 0.0, 0.012, head), 0.012);
-    for (const sx of [1, -1]) { const ck = FORM.cheek; furOf(blob(mats.cream, 0.062 * ck, 0.05 * ck, 0.054 * ck, 0.064 * (0.6 + 0.4 * ck) * sx, -0.046, 0.036, head), 0.011); }  // 白い頬
+    const sp = FORM.stop;
+    furOf(blob(mats.red, 0.12 * fw, 0.1, 0.108, 0, 0.008, -0.008, head), 0.008);
+    furOf(blob(mats.red, 0.097 * fw, 0.042 * (0.55 + 0.45 * sp), 0.048, 0, 0.04 - 0.012 * (1 - sp), 0.058 - 0.022 * (1 - sp), head), 0);             // 額
+    furOf(blob(mats.red, 0.055, 0.05, 0.048, 0.082 * fw, 0.0, 0.012, head), 0.012);       // 顔の横（赤毛）
+    furOf(blob(mats.red, 0.055, 0.05, 0.048, -0.082 * fw, 0.0, 0.012, head), 0.012);
+    for (const sx of [1, -1]) { const ck = FORM.cheek; furOf(blob(mats.cream, 0.062 * ck, 0.05 * ck, 0.054 * ck, 0.064 * (0.6 + 0.4 * ck) * fw * sx, -0.046, 0.036, head), 0.011); }  // 白い頬
     kk(furOf(blob(mats.cream, 0.044, 0.03, 0.062, 0, -0.006, 0.062, snout), 0), 0.55);    // マズル
-    kk(furOf(blob(mats.red, 0.03, 0.02, 0.06, 0, 0.02, 0.05, snout), 0), 0.55);      // 鼻すじ
+    kk(furOf(blob(mats.red, 0.03, 0.02, 0.06, 0, 0.02 + FORM.bridge, 0.05, snout), 0), 0.55);      // 鼻すじ
   } else {
   furOf(blob(mats.red, 0.13, 0.12, 0.13, 0, 0, 0, head), 0.01);
   furOf(blob(mats.red, 0.062, 0.05, 0.09 * mz, 0, -0.018, 0.11 * mz, head), 0);   // 鼻すじ（mz：鼻の長さ）
@@ -2197,7 +2199,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     furOf(blob(mats.cream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head), 0);
   }
   const jaw = new THREE.Group(); jaw.position.set(0, -0.055, 0.04); head.add(jaw);
-  if (F2) { jaw.scale.z = FORM.muzzleLen; furOf(blob(mats.cream, 0.036 * FORM.muzzleThick, 0.016, 0.058, 0, 0.005, 0.068, jaw), 0).userData.sdf = { k: 0.55 }; furOf(blob(mats.cream, 0.076, 0.042, 0.058, 0, -0.018, -0.012, jaw), 0.012); }
+  if (F2) { jaw.scale.z = FORM.muzzleLen; const jl = FORM.jawLen, jo = FORM.jowl; furOf(blob(mats.cream, 0.036 * FORM.muzzleThick, 0.016 * FORM.jawThick, 0.058 * jl, 0, 0.005 + FORM.jawUp - 0.016 * (FORM.jawThick - 1), 0.068 - 0.058 * (1 - jl), jaw), 0).userData.sdf = { k: 0.55 }; furOf(blob(mats.cream, 0.076 * jo * fw, 0.042 * jo, 0.058 * jo, 0, -0.018 + 0.03 * (1 - jo), -0.012, jaw), 0.012); }
   else {
   furOf(blob(mats.cream, 0.054, 0.026, 0.08 * mz, 0, -0.01, 0.07 * mz, jaw), 0);   // 下あご
   blob(mats.cream, 0.082, 0.045, 0.07, 0, -0.025, -0.015, jaw);     // あご下
@@ -5252,6 +5254,7 @@ if (TUNE) {
   const SL = [   // [見出し] か [名前, キー, 最小, 最大, 刻み]
     ['体'], ['脚の長さ', 'legLen', 0.75, 1.3, 0.01], ['脚の太さ', 'legThick', 0.5, 1.3, 0.01], ['足先の大きさ', 'paw', 0.5, 1.3, 0.01], ['胴の長さ', 'bodyLen', 0.8, 1.2, 0.01], ['胴の太さ', 'bodyThick', 0.7, 1.2, 0.01], ['胸の深さ', 'chest', 0.6, 1.4, 0.01], ['腹の巻き上がり', 'tuck', 0, 1, 0.02], ['首の太さ', 'neckThick', 0.6, 1.2, 0.01],
     ['頭'], ['頭の大きさ', 'headSize', 0.8, 1.35, 0.01], ['頭の高さ', 'headUp', -0.04, 0.07, 0.002], ['頭の前後', 'headFwd', -0.05, 0.05, 0.002], ['頬の張り', 'cheek', 0.5, 1.4, 0.01], ['マズルの長さ', 'muzzleLen', 0.6, 1.5, 0.01], ['マズルの太さ', 'muzzleThick', 0.7, 1.4, 0.01],
+    ['顔'], ['顔の幅', 'faceW', 0.7, 1.2, 0.01], ['額の段差', 'stop', 0, 1.6, 0.02], ['鼻すじの高さ', 'bridge', -0.012, 0.02, 0.001], ['下あごの長さ', 'jawLen', 0.5, 1.2, 0.01], ['下あごの厚み', 'jawThick', 0.5, 1.5, 0.01], ['下あごの高さ', 'jawUp', -0.012, 0.012, 0.001], ['あご下のふくらみ', 'jowl', 0.4, 1.3, 0.01],
     ['耳と目'], ['耳の大きさ', 'earSize', 0.6, 1.5, 0.01], ['耳の間隔', 'earSpread', -0.025, 0.025, 0.001], ['目の大きさ', 'eyeSize', 0.5, 1.8, 0.01], ['目の間隔', 'eyeSpread', -0.02, 0.02, 0.001], ['目の高さ', 'eyeUp', -0.02, 0.02, 0.001],
     ['尾と毛'], ['尾の大きさ', 'tailSize', 0.6, 1.5, 0.01], ['尾の高さ', 'tailUp', -0.04, 0.06, 0.002], ['毛の長さ', 'fur', 0, 2.5, 0.05],
   ];
