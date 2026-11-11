@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v177';
+const VERSION = 'v178';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2063,7 +2063,7 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
   let geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
   const nrm = Array.from(geo.attributes.normal.array), n0 = pos.length / 3; geo.dispose();
-  if (toon) for (let i = 0; i < n0 * 3; i += 3) { const l = 0.3 * colr[i] + 0.59 * colr[i + 1] + 0.11 * colr[i + 2]; for (let j = 0; j < 3; j++) colr[i + j] += (l - colr[i + j]) * 0.2; }   // 段の陰影は色が濃く出るので、少しあせさせる
+  if (toon) for (let i = 0; i < n0 * 3; i += 3) { const l = 0.3 * colr[i] + 0.59 * colr[i + 1] + 0.11 * colr[i + 2]; for (let j = 0; j < 3; j++) colr[i + j] += (l - colr[i + j]) * 0.06; }   // 段の陰影は色が濃く出るので、少しあせさせる
   if (shade) for (let i = 0; i < n0; i++) { const ny = nrm[i * 3 + 1], f = 1 - shade * Math.max(0, ny) ** 1.5 + shade * 0.5 * Math.max(0, -ny); colr[i * 3] *= f; colr[i * 3 + 1] *= f; colr[i * 3 + 2] *= f; }   // 背は少し濃く、下側は少し明るく
   // 毛のふさ：皮の点から、毛の流れ（後ろ・下）へ寝かせた細い三角を生やす。輪郭がギザギザして毛並みに見える。動きは根元の点と同じ
   if (fur || furL.some(v => v > 0)) {
@@ -2099,7 +2099,7 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
 // 毛色を変えれば別の犬も作れる（散歩で出会う犬など）
 const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1, ears: earType = 'prick', tail: tailType = 'curl', muzzle: mz = 1, gloss = false, blaze = false, ruff = false, long: L = 1, leg: lg = 1, shibaFace = true, collar: collarCol = 0xa32a20 } = {}) => {
   const F2 = TOON && shibaFace;   // 本物寄りの体つき（脚を長く・胴を短く浅く・頭を小さく）
-  if (F2) { L *= 0.95; lg *= 1.08; }
+  if (F2) { L *= 0.95; lg *= 1.3; if (red === 0xc4692e) { red = 0xcd8a4c; cream = 0xf7eddc; earIn = 0xd8ae96; } }   // 写真の柴：脚が長く胴は浅い。毛は明るい赤茶
   const coat = (gloss ? 0.35 : 1);   // つやのある短毛は毛のふさを短く
   const mats = {
     red: new THREE.MeshStandardMaterial({ color: red, roughness: gloss ? 0.6 : 0.85 }),
@@ -2110,6 +2110,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     pink: new THREE.MeshStandardMaterial({ color: 0xd9707a, roughness: 0.45 }),
     mouth: new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7 }),
   };
+  mats.tan = new THREE.MeshStandardMaterial({ color: new THREE.Color(red).lerp(new THREE.Color(cream), 0.22), roughness: 0.9 });
+  mats.pale = new THREE.MeshStandardMaterial({ color: new THREE.Color(red).lerp(new THREE.Color(cream), 0.72), roughness: 0.9 });   // 脚の下のほうの、白へ抜けていく毛
   const fur = ['red', 'cream', 'earRed', 'earIn'].map(k => ({ m: mats[k], base: mats[k].color.clone() }));
   const SPH = new THREE.SphereGeometry(1, 18, 14);
   const blob = (mat, sx, sy, sz, x, y, z, parent) => {
@@ -2125,12 +2127,14 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const rear = new THREE.Group(), front = new THREE.Group();
   root.add(body); body.add(rear, front);
   if (F2) {
-    blob(mats.red, 0.12, 0.12, 0.17 * L, 0, 0.01, -0.13 * L, rear);          // 腰
-    blob(mats.cream, 0.09, 0.07, 0.14 * L, 0, -0.05, -0.11 * L, rear);      // 巻き上がった腹
-    blob(mats.red, 0.13, 0.135, 0.185 * L, 0, 0.0, 0.09 * L, front);           // あばら
-    blob(mats.red, 0.07, 0.05, 0.1 * L, 0, 0.1, 0.13 * L, front);              // き甲（肩の盛り上がり）
-    blob(mats.cream, 0.096, 0.1, 0.13 * L, 0, -0.068, 0.12 * L, front);        // 深い胸の底
-    furOf(blob(mats.cream, 0.092, 0.115, 0.085, 0, -0.03, 0.245 * L, front), 0.03);   // 前胸
+    furOf(blob(mats.red, 0.103, 0.104, 0.17 * L, 0, 0.015, -0.13 * L, rear), 0.008);        // 腰
+    furOf(blob(mats.red, 0.085, 0.085, 0.19 * L, 0, 0.03, -0.02 * L, rear), 0.008);        // 背すじ
+    furOf(blob(mats.red, 0.098, 0.1, 0.09 * L, 0, 0.0, -0.235 * L, rear), 0.014);       // 尻
+    furOf(blob(mats.cream, 0.076, 0.066, 0.14 * L, 0, -0.04, -0.09 * L, rear), 0.01);    // 巻き上がった腹
+    furOf(blob(mats.red, 0.113, 0.115, 0.18 * L, 0, 0.005, 0.09 * L, front), 0.008);    // あばら
+    furOf(blob(mats.red, 0.065, 0.045, 0.09 * L, 0, 0.09, 0.13 * L, front), 0.01);      // き甲
+    furOf(blob(mats.cream, 0.084, 0.085, 0.12 * L, 0, -0.07, 0.13 * L, front), 0.01);   // 深い胸の底
+    furOf(blob(mats.cream, 0.086, 0.105, 0.075, 0, -0.02, 0.24 * L, front), 0.016);     // 前胸
   } else {
   blob(mats.red, 0.145, 0.145, 0.19 * L, 0, 0, -0.11 * L, rear);
   blob(mats.cream, 0.122, 0.105, 0.16 * L, 0, -0.05, -0.1 * L, rear);       // 腹（裏白）
@@ -2141,16 +2145,19 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
 
   // ----- 首と頭 -----
   const neck = new THREE.Group(); neck.position.set(0, 0.06, 0.24 * L); front.add(neck);
-  if (F2) { furOf(blob(mats.red, 0.098, 0.125, 0.11, 0, 0.035, 0.01, neck), 0.026); furOf(blob(mats.cream, 0.066, 0.1, 0.06, 0, -0.005, 0.07, neck), 0.03); }   // 太い首と、のどの白
+  if (F2) { furOf(blob(mats.red, 0.104, 0.13, 0.112, 0, 0.03, 0.0, neck), 0.02); furOf(blob(mats.cream, 0.076, 0.1, 0.07, 0, -0.01, 0.066, neck), 0.018); }   // 毛の厚い太い首と、のどの白
   else furOf(blob(mats.red, 0.1, 0.12, 0.12, 0, 0.03, 0.02, neck), 0.026);
   const head = new THREE.Group(); head.position.set(0, 0.11, 0.09); neck.add(head);
-  if (F2) {   // くさび形の頭：小さめの頭がい・額の段・短いマズル・張った頬
-    furOf(blob(mats.red, 0.118, 0.105, 0.115, 0, 0.003, 0, head), 0.008);
-    furOf(blob(mats.red, 0.085, 0.045, 0.055, 0, 0.035, 0.066, head), 0);        // 額
-    furOf(blob(mats.red, 0.05, 0.037, 0.06, 0, -0.012, 0.12, head), 0);        // 鼻すじ
-    furOf(blob(mats.cream, 0.055, 0.032, 0.06, 0, -0.037, 0.117, head), 0);      // 上くちびる
-    furOf(blob(mats.cream, 0.066, 0.058, 0.06, 0.064, -0.043, 0.048, head), 0.026);   // 頬
-    furOf(blob(mats.cream, 0.066, 0.058, 0.06, -0.064, -0.043, 0.048, head), 0.026);
+  if (F2) {   // 幅のある頭がい・平たい額・前へ突き出た白いマズルに赤い鼻すじ・張った頬
+    const kk = (m, k) => { m.userData.sdf = { k }; return m; };   // 形をくっきり残す（なじませすぎない）
+    furOf(blob(mats.red, 0.104, 0.09, 0.1, 0, 0.008, -0.008, head), 0.006);
+    furOf(blob(mats.red, 0.088, 0.04, 0.045, 0, 0.04, 0.06, head), 0);             // 額
+    furOf(blob(mats.tan, 0.05, 0.046, 0.05, 0.062, -0.03, 0.03, head), 0.012);       // 頬（外側は赤毛寄り）
+    furOf(blob(mats.tan, 0.05, 0.046, 0.05, -0.062, -0.03, 0.03, head), 0.012);
+    furOf(blob(mats.cream, 0.04, 0.034, 0.04, 0.04, -0.042, 0.052, head), 0.01);     // 頬の白
+    furOf(blob(mats.cream, 0.04, 0.034, 0.04, -0.04, -0.042, 0.052, head), 0.01);
+    kk(furOf(blob(mats.cream, 0.04, 0.027, 0.072, 0, -0.017, 0.122, head), 0), 0.55);   // マズル
+    kk(furOf(blob(mats.red, 0.024, 0.018, 0.062, 0, 0.004, 0.112, head), 0), 0.55);         // 鼻すじ
   } else {
   furOf(blob(mats.red, 0.13, 0.12, 0.13, 0, 0, 0, head), 0.01);
   furOf(blob(mats.red, 0.062, 0.05, 0.09 * mz, 0, -0.018, 0.11 * mz, head), 0);   // 鼻すじ（mz：鼻の長さ）
@@ -2160,27 +2167,30 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     furOf(blob(mats.cream, 0.062, 0.058, 0.06, 0.062, -0.045, 0.06, head), 0.03);  // 頬
     furOf(blob(mats.cream, 0.062, 0.058, 0.06, -0.062, -0.045, 0.06, head), 0.03);
   }
+  if (F2) blob(mats.mouth, 0.03, 0.01, 0.058, 0, -0.037, 0.112, head); else
   blob(mats.mouth, 0.045, 0.022, 0.07 * mz, 0, -0.058, 0.1 * mz, head);   // 口の中（開くと見える）
-  blob(mats.black, 0.024, 0.02, 0.02, 0, F2 ? -0.008 : -0.012, (F2 ? 0.186 : 0.197) * mz, head);   // 鼻
+  if (F2) blob(mats.black, 0.017, 0.013, 0.012, 0, -0.01, 0.19, head); else
+  blob(mats.black, 0.024, 0.02, 0.02, 0, -0.012, 0.197 * mz, head);   // 鼻
   if (blaze) { blob(mats.cream, 0.022, 0.012, 0.11 * mz, 0, 0.008, 0.1 * mz, head); blob(mats.cream, 0.02, 0.05, 0.02, 0, 0.06, 0.105, head); }   // 顔の白い筋
   const eyes = [1, -1].map(s => blob(mats.black, 0.017, 0.019, 0.012, 0.052 * s, 0.028, 0.111, head));
   let collar = null;
   if (SMOOTH) {   // 目：黒いふちの中に茶色の虹彩・瞳・光の点。首輪：首の付け根に赤い輪と金の札
     const iris = new THREE.MeshStandardMaterial({ color: 0x4a2912, roughness: 0.2 }), glint = new THREE.MeshBasicMaterial({ color: 0xffffff });
     eyes.forEach((e, i) => { const s = i ? -1 : 1; e.position.set(0.054 * s, 0.03, 0.116); e.scale.set(0.019, 0.02, 0.013); e.rotation.y = 0.35 * s;
-      if (F2) { e.position.set(0.051 * s, 0.027, 0.108); e.scale.set(0.022, 0.024, 0.012); e.rotation.y = 0.4 * s; }
-      blob(iris, 0.74, 0.74, 0.8, 0, 0, 0.27, e); blob(mats.black, 0.5, 0.5, 0.5, 0, 0, 0.6, e); blob(glint, 0.13, 0.13, 0.08, 0.26, 0.3, 0.95, e); });
+      if (F2) { e.position.set(0.043 * s, 0.02, 0.089); e.scale.set(0.0165, 0.012, 0.009); e.rotation.set(0, 0.5 * s, 0.34 * s); e.userData.sy = 0.012; }
+      if (!F2) { blob(iris, 0.74, 0.74, 0.8, 0, 0, 0.27, e); blob(mats.black, 0.5, 0.5, 0.5, 0, 0, 0.6, e); } blob(glint, 0.13, 0.13, 0.08, 0.26, 0.3, 0.95, e); });
     collar = new THREE.Group(); collar.position.set(0, 0.035, 0.03); collar.rotation.x = -0.8; neck.add(collar);
+    if (F2) { collar.position.set(0, 0.05, 0.03); collar.rotation.x = -0.7; collar.scale.setScalar(0.96); }
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.009, 8, 28), new THREE.MeshStandardMaterial({ color: collarCol, roughness: 0.55 })); band.scale.set(1, 1.12, 1.5); collar.add(band);
     const tagM = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 12), new THREE.MeshStandardMaterial({ color: 0xd8b24a, roughness: 0.3, metalness: 0.8 })); tagM.position.set(0, -0.128, 0.014); tagM.rotation.x = Math.PI / 2; collar.add(tagM);
   }
-  if (F2) { furOf(blob(mats.cream, 0.016, 0.01, 0.01, 0.04, 0.066, 0.1, head), 0); furOf(blob(mats.cream, 0.016, 0.01, 0.01, -0.04, 0.066, 0.1, head), 0); }   // 麻呂眉
+  if (F2) { /* 麻呂眉はごく薄いので作らない */ }
   else if (shibaFace) {
     furOf(blob(mats.cream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head), 0);   // 麻呂眉
     furOf(blob(mats.cream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head), 0);
   }
   const jaw = new THREE.Group(); jaw.position.set(0, -0.055, 0.04); head.add(jaw);
-  if (F2) { furOf(blob(mats.cream, 0.048, 0.024, 0.066, 0, -0.008, 0.066, jaw), 0); blob(mats.cream, 0.078, 0.043, 0.066, 0, -0.023, -0.015, jaw); }
+  if (F2) { furOf(blob(mats.cream, 0.033, 0.016, 0.066, 0, 0.008, 0.076, jaw), 0).userData.sdf = { k: 0.55 }; furOf(blob(mats.cream, 0.062, 0.036, 0.055, 0, -0.016, -0.012, jaw), 0.008); }
   else {
   furOf(blob(mats.cream, 0.054, 0.026, 0.08 * mz, 0, -0.01, 0.07 * mz, jaw), 0);   // 下あご
   blob(mats.cream, 0.082, 0.045, 0.07, 0, -0.025, -0.015, jaw);     // あご下
@@ -2189,6 +2199,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const ears = [1, -1].map(s => {
     const ear = new THREE.Group();
     ear.position.set(0.062 * s, 0.085, -0.015);
+    if (F2) ear.position.set(0.066 * s, 0.064, -0.012);
     ear.rotation.set(0.12, 0, -0.28 * s);
     if (earType === 'drop') {   // 垂れ耳：頭の横に平たい耳がぶら下がる
       ear.position.set(0.112 * s, 0.045, -0.02);
@@ -2203,7 +2214,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       outer.position.y = 0.05; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
       const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mats.earIn);
       inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4; inner.scale.z = 0.4;
-      if (SMOOTH) { outer.scale.z = 0.36; outer.userData.sdf = { r: 0.04, tip: 0.006, k: 0.6 }; inner.scale.z = 0.3; inner.position.set(0, 0.03, 0.011); inner.userData.sdf = { r: 0.02, tip: 0.003, k: 0.6 }; outer.userData.fl = 0; inner.userData.fl = 0.012; }   // 薄く、先をとがらせる。内側の毛は前の面だけ
+      if (SMOOTH) { outer.scale.z = 0.36; outer.userData.sdf = { r: 0.04, tip: 0.006, k: 0.6 }; inner.scale.z = 0.3; inner.position.set(0, 0.03, 0.011); inner.userData.sdf = { r: 0.02, tip: 0.003, k: 0.6 }; outer.userData.fl = 0; inner.userData.fl = 0.012; }
+      if (F2) { outer.scale.set(1.3, 0.7, 0.34); outer.position.y = 0.036; outer.userData.sdf = { r: 0.042, tip: 0.013, k: 0.6 }; inner.scale.set(1.3, 0.7, 0.26); inner.position.set(0, 0.024, 0.011); inner.userData.sdf = { r: 0.024, tip: 0.006, k: 0.6 }; inner.userData.fl = 0.006; }   // 薄く、先をとがらせる。内側の毛は前の面だけ
       ear.add(outer, inner);
     }
     head.add(ear); ear.userData.s = s; return ear;
@@ -2213,10 +2225,12 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const tail = new THREE.Group(); tail.position.set(0, 0.1, -0.25 * L); rear.add(tail);
   if (tailType === 'curl') {
     const tailCurl = new THREE.Group(); tailCurl.position.set(0, 0.06, 0.07); tailCurl.rotation.y = Math.PI / 2; tail.add(tailCurl);
-    const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.042, 10, 26, 4.7), mats.red);
-    tailRing.rotation.z = -0.35; tailCurl.add(tailRing); tailRing.userData.sdf = { type: 'arc', R: 0.085, r: 0.042, arc: 4.7 }; furOf(tailRing, 0.034, 1.3);
-    const tailIn = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.026, 8, 22, 4.2), mats.cream);
-    tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn); tailIn.userData.sdf = { type: 'arc', R: 0.068, r: 0.026, arc: 4.2 }; furOf(tailIn, 0.034, 1.3);
+    if (F2) tailCurl.position.set(0, 0.04, 0.05);
+    const TR = F2 ? [0.058, 0.04, 0.046, 0.026] : [0.085, 0.042, 0.068, 0.026];
+    const tailRing = new THREE.Mesh(new THREE.TorusGeometry(TR[0], TR[1], 10, 26, 4.7), F2 ? mats.pale : mats.red);
+    tailRing.rotation.z = -0.35; tailCurl.add(tailRing); tailRing.userData.sdf = { type: 'arc', R: TR[0], r: TR[1], arc: 4.7, tip: 0.8 }; furOf(tailRing, F2 ? 0.016 : 0.034, 1.3);
+    const tailIn = new THREE.Mesh(new THREE.TorusGeometry(TR[2], TR[3], 8, 22, 4.2), F2 ? mats.red : mats.cream);
+    tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn); tailIn.userData.sdf = { type: 'arc', R: TR[2], r: TR[3], arc: 4.2 }; furOf(tailIn, F2 ? 0.012 : 0.034, 1.3);
   } else {   // 後ろへ垂れる尻尾：otter＝根元が太く先細り（ラブラドール）／plume＝ふさふさで先が少し上を向き、先が白い（ボーダーコリー）
     tail.position.set(0, 0.06, -0.27 * L);
     const n = tailType === 'plume' ? 7 : 6;
@@ -2233,21 +2247,22 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const seg = (parent, len, r0, r1, mat, fl = 0) => {
     const g = new THREE.CylinderGeometry(r1, r0, len, 8); g.translate(0, -len / 2, 0);
     parent.add(furOf(new THREE.Mesh(g, mat), fl));
-    const rj = F2 ? r0 * 1.04 : r1 * 1.02; furOf(blob(mat, rj, rj, rj, 0, -len, 0, parent), fl);   // 関節のふくらみ
+    const rj = F2 ? r0 * 0.9 : r1 * 1.02; furOf(blob(mat, rj, rj, rj, 0, -len, 0, parent), fl);   // 関節のふくらみ
   };
   // side: +1=左(+x) / -1=右。bend: +1=膝が前（後脚）/ -1=肘が後ろ（前脚）
   const makeLeg = (parent, x, y, z, lens, bend, isFront) => {
     const hip = new THREE.Group(); hip.position.set(x, y, z); parent.add(hip);
     const b1 = new THREE.Group(), b2 = new THREE.Group(), b3 = new THREE.Group();
     hip.add(b1); b2.position.y = -lens[0]; b1.add(b2); b3.position.y = -lens[1]; b2.add(b3);
-    if (isFront) blob(mats.red, 0.05, 0.075, 0.06, 0, -0.04, 0, b1);           // 肩
+    if (isFront) blob(mats.red, F2 ? 0.042 : 0.05, 0.075, F2 ? 0.052 : 0.06, 0, -0.04, 0, b1);           // 肩
+    else if (F2) furOf(blob(mats.red, 0.05, 0.095, 0.075, 0, -0.045, 0.005, b1), 0.016);
     else furOf(blob(mats.red, 0.062, 0.085, 0.078, 0, -0.045, 0.012, b1), 0.026);           // 太もも
-    if (F2) {   // 上は太く下は細い脚、指のある足先
-      seg(b1, lens[0], isFront ? 0.034 : 0.035, isFront ? 0.042 : 0.05, mats.red, 0.012);
-      seg(b2, lens[1], 0.026, isFront ? 0.033 : 0.034, mats.red, 0.006);
-      seg(b3, lens[2], 0.025, 0.025, mats.cream);
-      furOf(blob(mats.cream, 0.034, 0.022, 0.04, 0, -lens[2], 0.014, b3), 0);
-      for (const tx of [-0.017, 0, 0.017]) furOf(blob(mats.cream, 0.012, 0.014, 0.016, tx, -lens[2] - 0.002, 0.046 - Math.abs(tx) * 0.4, b3), 0);   // 指
+    if (F2) {   // 長くまっすぐな脚：上は赤毛で太く、下は白へ抜けて細い。指のある足先
+      seg(b1, lens[0], isFront ? 0.025 : 0.026, isFront ? 0.034 : 0.04, mats.red, isFront ? 0.005 : 0.014);
+      seg(b2, lens[1], 0.019, isFront ? 0.024 : 0.025, mats.tan, 0.003);
+      seg(b3, lens[2], 0.017, 0.018, mats.pale);
+      furOf(blob(mats.cream, 0.021, 0.013, 0.028, 0, -lens[2] + 0.002, 0.01, b3), 0);
+      for (const tx of [-0.012, 0, 0.012]) furOf(blob(mats.cream, 0.008, 0.01, 0.012, tx, -lens[2] - 0.001, 0.03 - Math.abs(tx) * 0.4, b3), 0);   // 指
     } else {
     seg(b1, lens[0], 0.04, 0.032, mats.red, 0.012);
     seg(b2, lens[1], 0.031, 0.026, isFront ? mats.red : mats.red, 0.007);
@@ -2265,7 +2280,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   root.scale.setScalar(size);
   const NEUTRAL = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.2], [-0.08, -0.2]].map(([x, z]) => [x * size, z * size * L]);   // 立った時の足の位置（足元の中心から）
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn], { split: [jaw], rough: gloss ? 0.6 : 0.85, shade: TOON ? 0.1 : 0.14, fur: 0.016 * coat, toon: TOON, furDens: TOON ? 0.3 : 0.5, furW: TOON ? 0.5 : 0.28 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() }); }
+  if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn, mats.tan, mats.pale], { kc: F2 ? 0.011 : 0.005, split: [jaw], rough: gloss ? 0.6 : 0.85, shade: TOON ? 0.1 : 0.14, fur: (F2 ? 0.008 : 0.016) * coat, toon: TOON, furDens: TOON ? 0.3 : 0.5, furW: TOON ? 0.5 : 0.28 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() }); }
 
   const FOOT_UP = 0.022;   // 足先の厚み（地面から足首の付け根まで）
   const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
@@ -2335,12 +2350,12 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const POSTURES = {
     sit: (P, t) => {
-      Object.assign(P, { y: -0.1, pitch: 0.62, neck: -0.42, wag: 0.16, wagHz: 7 });
+      Object.assign(P, { y: F2 ? -0.125 : -0.1, pitch: F2 ? 0.72 : 0.62, neck: F2 ? -0.5 : -0.42, wag: 0.16, wagHz: 7 });
       P.legs = [V(0.072, 0, 0.21), V(-0.072, 0, 0.21), V(0.1, 0, -0.03), V(-0.1, 0, -0.03)];
     },
     down: (P, t) => {
       Object.assign(P, { y: -0.195, pitch: 0.06, neck: -0.25, wag: 0.08, wagHz: 5 });
-      P.legs = [V(0.075, 0, 0.42), V(-0.075, 0, 0.42), V(0.15, 0, -0.06), V(-0.15, 0, -0.06)];
+      P.legs = [V(0.075, 0, F2 ? 0.5 : 0.42), V(-0.075, 0, F2 ? 0.5 : 0.42), V(0.15, 0, -0.06), V(-0.15, 0, -0.06)];
     },
     sleep: (P, t) => {
       Object.assign(P, { y: -0.21, pitch: 0.02, roll: 0.22, neck: 0.35, headYaw: 1.05, headPitch: 0.25, headRoll: 0.3,
@@ -2941,7 +2956,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     const fwdX = Math.sin(st.yaw), fwdZ = Math.cos(st.yaw);
     const gRoot = H(st.x, st.z);
     const slope = Math.atan2(H(st.x + fwdX * 0.2, st.z + fwdZ * 0.2) - H(st.x - fwdX * 0.2, st.z - fwdZ * 0.2), 0.4);
-    body.position.set(0, STAND_Y + P.y + P.breath * 0.006 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22)), P.z);
+    body.position.set(0, STAND_Y + P.y * (F2 ? 1.4 : 1) + P.breath * 0.006 * Math.sin(t * (P.eyes < 0.5 ? 2 : 22)), P.z);
     body.rotation.set(-(P.pitch + slope * 0.85), 0, P.roll);
     front.rotation.set(-P.flex * 0.5, clamp(S.yawRate * 0.05, -0.2, 0.2), 0);
     rear.rotation.set(P.flex * 0.5, clamp(-S.yawRate * 0.05, -0.2, 0.2), P.rearRoll);
@@ -2955,9 +2970,9 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     neck.rotation.set(P.neck + (P.pitch + slope * 0.85) * 0.75 + P.flex * 0.3, S.headYaw * 0.55, 0);
     head.rotation.set(P.headPitch, S.headYaw * 0.45, P.headRoll);
     jaw.rotation.x = P.jaw * 0.55;
-    tongue.position.set(0, 0.004 - P.tongue * 0.012, 0.07 + P.tongue * 0.03);
-    tongue.scale.set(0.033, 0.01, 0.055 + P.tongue * 0.03);
-    eyes.forEach(e => { e.scale.y = 0.019 * Math.max(0.08, P.eyes); });
+    tongue.position.set(0, 0.004 - P.tongue * 0.012, (F2 ? 0.06 : 0.07) + P.tongue * 0.03);
+    tongue.scale.set(F2 ? 0.026 : 0.033, 0.01, (F2 ? 0.04 : 0.055) + P.tongue * 0.03);
+    eyes.forEach(e => { e.scale.y = (e.userData.sy ?? 0.019) * Math.max(0.08, P.eyes); });
     ears.forEach(e => { e.rotation.x = 0.12 - P.earsBack * (0.6 + 0.5 * dash) + Math.sin(t * 43 + e.userData.s) * 0.05 * dash   // 速いほど深く倒れ、風で震える
       + (S.act === 'shake' ? Math.sin(t * 2 * Math.PI * 6.2 * 2 + e.userData.s) * 0.7 * S.actW : 0); });   // 身震い：耳がばたばたする
     if (earType === 'drop') ears.forEach(e => { e.rotation.x = 0.1 - 0.3 * P.earsBack; e.rotation.z = (0.1 + 0.25 * P.earsSide) * e.userData.s; });   // 垂れ耳は少し揺れるだけ
