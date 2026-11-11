@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v198';
+const VERSION = 'v199';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3326,9 +3326,9 @@ let LEASH = LEASH_FULL;
 const walker = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
 // 人：柴と同じく図形の組み合わせ。腰→胴→胸→首→頭、肩→上腕→ひじ→前腕→手、股→太もも→ひざ→すね→足首→靴。
 // 歩く・走るは脚の付け根とひざ、腕の付け根とひじの角度を1歩の周期で動かす。リードを持つ手は肩・ひじ・手の3点で犬の方へ伸ばす
-const HUM = /[?&]hum=1/.test(location.search);   // 人の作り込みの案（比べる用）：裾と襟のある上着・肩かけ鞄・ブーツ・くせ毛・頭を小さく脚を長く
+const HUM = !/[?&]hum=0/.test(location.search);   // 人の作り込み（既定。?hum=0 で前の人）：裾と襟のある上着・肩かけ鞄・ブーツ・くせ毛・頭を小さく脚を長く
 function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long = false, bag = 0, boots = 0 }) {
-  const H2 = TOON || HUM, HN = HUM;   // アニメ調：段のある陰影・一続きの頭と髪・大きめの目
+  const H2 = TOON, HN = HUM;   // アニメ調：段のある陰影・一続きの頭と髪・大きめの目
   const mat = (c, r = 0.85) => H2 ? toonFill(new THREE.MeshToonMaterial({ color: new THREE.Color(c).offsetHSL(0, 0.03, 0.025), gradientMap: toonRamp })) : new THREE.MeshStandardMaterial({ color: c, roughness: r });
   const M = { shirt: mat(shirt), pants: mat(pants), hair: mat(hair, 0.7), skin: mat(skin, 0.75), shoes: mat(shoes, 0.6), dark: mat(0x1a1410, 0.4) };
   if (H2) { M.face = mat(skin); M.locks = mat(hair); M.locks0 = mat(hair); M.sole = mat(0xece8de); M.white = new THREE.MeshBasicMaterial({ color: 0xffffff }); M.lip = mat(0xb5705a); }
