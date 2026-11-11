@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v187';
+const VERSION = 'v188';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2293,11 +2293,12 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn, mats.tan, mats.pale], { kc: F2 ? 0.011 : 0.005, split: [jaw], rough: gloss ? 0.6 : 0.85, shade: TOON ? 0.1 : 0.14, fur: (F2 ? 0.012 : 0.016) * coat, toon: TOON, furDens: TOON ? 0.3 : 0.5, furW: TOON ? 0.5 : 0.28 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() });
     if (F2 && collar) {   // 首輪は首の皮に沿わせる（首の太さや毛を変えても浮かない・埋もれない）：輪の面の近くにある皮の点を、向きごとに拾う
-      collar.scale.setScalar(1); root.updateMatrixWorld(true);
+      collar.scale.setScalar(1); collar.position.copy(head.position).multiplyScalar(0.5); collar.rotation.x = -Math.atan2(head.position.y, head.position.z);   // 首の付け根と頭の真ん中に、首の向きと直角に巻く（斜めにすると胸まで垂れる）
+      root.updateMatrixWorld(true);
       const M = collar.matrixWorld.clone().invert().multiply(root.matrixWorld), ps = sk.geometry.attributes.position, v = new THREE.Vector3(), NB = 28, R = new Array(NB).fill(0);
-      for (let i = 0; i < sk.geometry.userData.n0; i++) { v.fromBufferAttribute(ps, i).applyMatrix4(M); const r = Math.hypot(v.x, v.y); if (Math.abs(v.z) > 0.012 || r > 0.17) continue; const k = Math.floor((Math.atan2(v.y, v.x) / (Math.PI * 2) + 1) % 1 * NB) % NB; if (r > R[k]) R[k] = r; }
+      for (let i = 0; i < sk.geometry.userData.n0; i++) { v.fromBufferAttribute(ps, i).applyMatrix4(M); const r = Math.hypot(v.x, v.y); if (Math.abs(v.z) > 0.012 || r > 0.15) continue; const k = Math.floor((Math.atan2(v.y, v.x) / (Math.PI * 2) + 1) % 1 * NB) % NB; if (r > R[k]) R[k] = r; }
       const med = R.filter(r => r > 0).sort((a, b) => a - b); const mid = med.length ? med[med.length >> 1] : 0.1;
-      for (let k = 0; k < NB; k++) R[k] = Math.min(R[k] || mid, mid * 1.35);   // 点の無い向きは真ん中の値、胸や頬にかかった所は広げすぎない
+      for (let k = 0; k < NB; k++) R[k] = Math.min(R[k] || mid, mid * 1.2);   // 点の無い向きは真ん中の値、胸や頬にかかった所は広げすぎない
       const Rs = R.map((r, k) => (R[(k + NB - 1) % NB] + 2 * r + R[(k + 1) % NB]) / 4 + 0.004);
       const band = collar.userData.band, tagM = collar.userData.tag, cv = new THREE.CatmullRomCurve3(Rs.map((r, k) => { const a = (k + 0.5) / NB * Math.PI * 2; return new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0); }), true);
       band.geometry.dispose(); band.geometry = new THREE.TubeGeometry(cv, 56, 0.008, 6, true); band.scale.set(1, 1, 1.5);
