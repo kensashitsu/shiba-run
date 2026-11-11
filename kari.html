@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v175';
+const VERSION = 'v176';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1982,7 +1982,7 @@ const townCull = (x, z) => { for (const c of townChunks) { const dx = Math.max(0
 // 頂点の色は近い部品の色を混ぜ（毛色の境目がぼける）、動きは近い部品の親（骨）に重みを付けて従わせる。
 // split：別の皮にする骨（下あご。頭とつなげると口が開かない）
 const SMOOTH = /[?&]smooth/.test(location.search);
-function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.005, split = [], rough = 0.85, shade = 0 } = {}) {
+function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.005, split = [], rough = 0.85, shade = 0, fur = 0, furDens = 0.5 } = {}) {
   root.updateMatrixWorld(true);
   const rootInv = root.matrixWorld.clone().invert(), prims = [], bones = [];
   const src = []; root.traverse(o => { if (o.isMesh && furMats.includes(o.material)) src.push(o); });
@@ -2001,7 +2001,7 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
     for (let i = 0; i < 8; i++) { v.set(bb[i & 1], bb[2 + (i >> 1 & 1)], bb[4 + (i >> 2 & 1)]).applyMatrix4(M); v.toArray().forEach((x, j) => { lo[j] = Math.min(lo[j], x); hi[j] = Math.max(hi[j], x); }); }
     let bone = bones.indexOf(o.parent); if (bone < 0) bone = bones.push(o.parent) - 1;
     const sc = o.scale, col = o.material.color;
-    prims.push({ type, inv, sx: sc.x, sy: sc.y, sz: sc.z, ms: Math.min(sc.x, sc.y, sc.z), a, b, c, d, lo, hi, bone, grp: split.indexOf(o.parent) + 1, r: col.r, g: col.g, bl: col.b, kk: ud?.k ?? 1 });
+    prims.push({ type, inv, sx: sc.x, sy: sc.y, sz: sc.z, ms: Math.min(sc.x, sc.y, sc.z), a, b, c, d, lo, hi, bone, grp: split.indexOf(o.parent) + 1, r: col.r, g: col.g, bl: col.b, kk: ud?.k ?? 1, fl: o.userData.fl ?? fur, fn: o.userData.fn ?? 0.45 });
   }
   const dist = (P, x, y, z) => {
     const e = P.inv, qx = e[0] * x + e[4] * y + e[8] * z + e[12], qy = e[1] * x + e[5] * y + e[9] * z + e[13], qz = e[2] * x + e[6] * y + e[10] * z + e[14];
@@ -2015,7 +2015,7 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
     const r = P.b * (1 - (1 - P.d) * (an / P.c) ** 2);
     return Math.hypot(qx - P.a * Math.cos(an), qy - P.a * Math.sin(an), qz) - r;
   };
-  const pos = [], colr = [], si = [], sw = [], idx = [];
+  const pos = [], colr = [], si = [], sw = [], idx = [], furL = [], furN = [];
   const ngrp = split.length + 1, acc = new Float32Array(bones.length);
   for (let G = 0; G < ngrp; G++) {
     const ps = prims.filter(p => p.grp === G); if (!ps.length) continue;
@@ -2050,18 +2050,36 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
     for (let vi = base; vi < pos.length / 3; vi++) {
       const x = pos[vi * 3], y = pos[vi * 3 + 1], z = pos[vi * 3 + 2]; let dm = 1e9;
       ps.forEach((P, i) => { dl[i] = dist(P, x, y, z); if (dl[i] < dm) dm = dl[i]; });
-      let r = 0, g = 0, b = 0, ws = 0; acc.fill(0);
-      ps.forEach((P, i) => { const e = dl[i] - dm; if (e > kw * 8) return; const wc = Math.exp(-e / kc); r += P.r * wc; g += P.g * wc; b += P.bl * wc; ws += wc; acc[P.bone] += Math.exp(-e / kw); });
-      colr.push(r / ws, g / ws, b / ws);
+      let r = 0, g = 0, b = 0, ws = 0, fl = 0, fn = 0; acc.fill(0);
+      ps.forEach((P, i) => { const e = dl[i] - dm; if (e > kw * 8) return; const wc = Math.exp(-e / kc); r += P.r * wc; g += P.g * wc; b += P.bl * wc; fl += P.fl * wc; fn += P.fn * wc; ws += wc; acc[P.bone] += Math.exp(-e / kw); });
+      colr.push(r / ws, g / ws, b / ws); furL.push(fl / ws); furN.push(fn / ws);
       const top = [...acc.keys()].filter(i => acc[i] > 0).sort((p, q2) => acc[q2] - acc[p]).slice(0, 4), tot = top.reduce((s, i) => s + acc[i], 0);
       for (let j = 0; j < 4; j++) { si.push(top[j] ?? 0); sw.push(top[j] !== undefined ? acc[top[j]] / tot : 0); }
     }
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+  let geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+  const nrm = Array.from(geo.attributes.normal.array), n0 = pos.length / 3; geo.dispose();
+  if (shade) for (let i = 0; i < n0; i++) { const ny = nrm[i * 3 + 1], f = 1 - shade * Math.max(0, ny) ** 1.5 + shade * 0.5 * Math.max(0, -ny); colr[i * 3] *= f; colr[i * 3 + 1] *= f; colr[i * 3 + 2] *= f; }   // 背は少し濃く、下側は少し明るく
+  // 毛のふさ：皮の点から、毛の流れ（後ろ・下）へ寝かせた細い三角を生やす。輪郭がギザギザして毛並みに見える。動きは根元の点と同じ
+  if (fur || furL.some(v => v > 0)) {
+    let seed = 12345; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+    for (let i = 0; i < n0; i++) {
+      const Lf = furL[i]; if (Lf < 0.004 || rnd() > furDens * Math.min(1, Lf / 0.02)) continue;
+      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2], dn = -0.45 * ny - nz;
+      const fx = -nx * dn + (rnd() - 0.5) * 0.5, fy = -0.45 - ny * dn + (rnd() - 0.5) * 0.3, fz = -1 - nz * dn, fm = Math.hypot(fx, fy, fz) || 1, an = furN[i];
+      let dx = nx * an + fx / fm, dy = ny * an + fy / fm, dz = nz * an + fz / fm; const dm = Math.hypot(dx, dy, dz) || 1; dx /= dm; dy /= dm; dz /= dm;
+      let sx = dy * nz - dz * ny, sy = dz * nx - dx * nz, sz = dx * ny - dy * nx; const sm = Math.hypot(sx, sy, sz) || 1, len = Lf * (0.6 + 0.8 * rnd()), w = len * 0.28 + 0.003; sx *= w / sm; sy *= w / sm; sz *= w / sm;
+      const px = pos[i * 3] - nx * 0.004, py = pos[i * 3 + 1] - ny * 0.004, pz = pos[i * 3 + 2] - nz * 0.004, v = pos.length / 3, sh = 0.9 + 0.12 * rnd();
+      pos.push(px + sx, py + sy, pz + sz, px - sx, py - sy, pz - sz, px + dx * len, py + dy * len, pz + dz * len);
+      for (let j = 0; j < 3; j++) { nrm.push(nx, ny, nz); const c = j === 2 ? sh * 1.1 : sh; colr.push(colr[i * 3] * c, colr[i * 3 + 1] * c, colr[i * 3 + 2] * c); for (let q = 0; q < 4; q++) { si.push(si[i * 4 + q]); sw.push(sw[i * 4 + q]); } }
+      idx.push(v, v + 1, v + 2, v, v + 2, v + 1);   // 裏からも同じ明るさで見えるよう、両面を張る
+    }
+  }
+  geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
   geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
-  geo.setIndex(idx); geo.computeVertexNormals();
-  if (shade) { const nm = geo.attributes.normal, cl = geo.attributes.color; for (let i = 0; i < nm.count; i++) { const f = 1 - shade * Math.max(0, nm.getY(i)) ** 1.5 + shade * 0.5 * Math.max(0, -nm.getY(i)); cl.setXYZ(i, cl.getX(i) * f, cl.getY(i) * f, cl.getZ(i) * f); } }   // 背は少し濃く、下側は少し明るく
+  geo.setIndex(idx);
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 1.6); geo.boundingBox = new THREE.Box3(new THREE.Vector3(-1.6, -1, -1.6), new THREE.Vector3(1.6, 2.2, 1.6));
   for (const o of src) o.parent.remove(o);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: rough });
@@ -2075,7 +2093,8 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
 // 足先の位置を先に決め、関節の角度を逆算する（IK）。歩く時、着地中の足は地面に固定し、浮いている足だけ次の着地点へ運ぶ。
 // 何をするか（姿勢・仕草）は dog.think、形と動きは dog.update が受け持つ。
 // 毛色を変えれば別の犬も作れる（散歩で出会う犬など）
-const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1, ears: earType = 'prick', tail: tailType = 'curl', muzzle: mz = 1, gloss = false, blaze = false, ruff = false, long: L = 1, leg: lg = 1, shibaFace = true } = {}) => {
+const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1, ears: earType = 'prick', tail: tailType = 'curl', muzzle: mz = 1, gloss = false, blaze = false, ruff = false, long: L = 1, leg: lg = 1, shibaFace = true, collar: collarCol = 0xa32a20 } = {}) => {
+  const coat = gloss ? 0.35 : 1;   // つやのある短毛は毛のふさを短く
   const mats = {
     red: new THREE.MeshStandardMaterial({ color: red, roughness: gloss ? 0.6 : 0.85 }),
     cream: new THREE.MeshStandardMaterial({ color: cream, roughness: 0.9 }),
@@ -2091,6 +2110,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     const m = new THREE.Mesh(SPH, mat);
     m.scale.set(sx, sy, sz); m.position.set(x, y, z); parent.add(m); return m;
   };
+  const furOf = (m, fl, fn) => { m.userData.fl = fl * coat; if (fn) m.userData.fn = fn; return m; };   // 毛の長さ（なめらかな体の時だけ使う）
 
   // ----- 胴 -----
   const STAND_Y = 0.335 * lg;   // 脚がわずかに曲がって立つ高さ
@@ -2102,29 +2122,38 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   blob(mats.cream, 0.122, 0.105, 0.16 * L, 0, -0.05, -0.1 * L, rear);       // 腹（裏白）
   blob(mats.red, 0.15, 0.15, 0.19 * L, 0, 0.005, 0.1 * L, front);
   blob(mats.cream, 0.122, 0.105, 0.15 * L, 0, -0.052, 0.1 * L, front);
-  blob(mats.cream, 0.112, 0.13, 0.1, 0, -0.02, 0.235 * L, front);       // 胸
+  furOf(blob(mats.cream, 0.112, 0.13, 0.1, 0, -0.02, 0.235 * L, front), 0.03);       // 胸
 
   // ----- 首と頭 -----
   const neck = new THREE.Group(); neck.position.set(0, 0.06, 0.24 * L); front.add(neck);
-  blob(mats.red, 0.1, 0.12, 0.12, 0, 0.03, 0.02, neck);
+  furOf(blob(mats.red, 0.1, 0.12, 0.12, 0, 0.03, 0.02, neck), 0.026);
   const head = new THREE.Group(); head.position.set(0, 0.11, 0.09); neck.add(head);
-  blob(mats.red, 0.13, 0.12, 0.13, 0, 0, 0, head);
-  blob(mats.red, 0.062, 0.05, 0.09 * mz, 0, -0.018, 0.11 * mz, head);   // 鼻すじ（mz：鼻の長さ）
-  blob(mats.cream, 0.056, 0.03, 0.085 * mz, 0, -0.042, 0.112 * mz, head);   // 上くちびる
+  furOf(blob(mats.red, 0.13, 0.12, 0.13, 0, 0, 0, head), 0.01);
+  furOf(blob(mats.red, 0.062, 0.05, 0.09 * mz, 0, -0.018, 0.11 * mz, head), 0);   // 鼻すじ（mz：鼻の長さ）
+  furOf(blob(mats.cream, 0.056, 0.03, 0.085 * mz, 0, -0.042, 0.112 * mz, head), 0);   // 上くちびる
   if (shibaFace) {   // 柴らしいふくらんだ白い頬
-    blob(mats.cream, 0.062, 0.058, 0.06, 0.062, -0.045, 0.06, head);  // 頬
-    blob(mats.cream, 0.062, 0.058, 0.06, -0.062, -0.045, 0.06, head);
+    furOf(blob(mats.cream, 0.062, 0.058, 0.06, 0.062, -0.045, 0.06, head), 0.03);  // 頬
+    furOf(blob(mats.cream, 0.062, 0.058, 0.06, -0.062, -0.045, 0.06, head), 0.03);
   }
   blob(mats.mouth, 0.045, 0.022, 0.07 * mz, 0, -0.058, 0.1 * mz, head);   // 口の中（開くと見える）
   blob(mats.black, 0.024, 0.02, 0.02, 0, -0.012, 0.197 * mz, head);   // 鼻
   if (blaze) { blob(mats.cream, 0.022, 0.012, 0.11 * mz, 0, 0.008, 0.1 * mz, head); blob(mats.cream, 0.02, 0.05, 0.02, 0, 0.06, 0.105, head); }   // 顔の白い筋
   const eyes = [1, -1].map(s => blob(mats.black, 0.017, 0.019, 0.012, 0.052 * s, 0.028, 0.111, head));
+  let collar = null;
+  if (SMOOTH) {   // 目：黒いふちの中に茶色の虹彩・瞳・光の点。首輪：首の付け根に赤い輪と金の札
+    const iris = new THREE.MeshStandardMaterial({ color: 0x4a2912, roughness: 0.2 }), glint = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    eyes.forEach((e, i) => { const s = i ? -1 : 1; e.position.set(0.054 * s, 0.03, 0.116); e.scale.set(0.019, 0.02, 0.013); e.rotation.y = 0.35 * s;
+      blob(iris, 0.74, 0.74, 0.8, 0, 0, 0.27, e); blob(mats.black, 0.5, 0.5, 0.5, 0, 0, 0.6, e); blob(glint, 0.13, 0.13, 0.08, 0.26, 0.3, 0.95, e); });
+    collar = new THREE.Group(); collar.position.set(0, 0.035, 0.03); collar.rotation.x = -0.8; neck.add(collar);
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.009, 8, 28), new THREE.MeshStandardMaterial({ color: collarCol, roughness: 0.55 })); band.scale.set(1, 1.12, 1.5); collar.add(band);
+    const tagM = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 12), new THREE.MeshStandardMaterial({ color: 0xd8b24a, roughness: 0.3, metalness: 0.8 })); tagM.position.set(0, -0.128, 0.014); tagM.rotation.x = Math.PI / 2; collar.add(tagM);
+  }
   if (shibaFace) {
-    blob(mats.cream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head);   // 麻呂眉
-    blob(mats.cream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head);
+    furOf(blob(mats.cream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head), 0);   // 麻呂眉
+    furOf(blob(mats.cream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head), 0);
   }
   const jaw = new THREE.Group(); jaw.position.set(0, -0.055, 0.04); head.add(jaw);
-  blob(mats.cream, 0.054, 0.026, 0.08 * mz, 0, -0.01, 0.07 * mz, jaw);   // 下あご
+  furOf(blob(mats.cream, 0.054, 0.026, 0.08 * mz, 0, -0.01, 0.07 * mz, jaw), 0);   // 下あご
   blob(mats.cream, 0.082, 0.045, 0.07, 0, -0.025, -0.015, jaw);     // あご下
   const tongue = blob(mats.pink, 0.033, 0.01, 0.055, 0, 0.004, 0.07, jaw);
   const ears = [1, -1].map(s => {
@@ -2144,7 +2173,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       outer.position.y = 0.05; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
       const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mats.earIn);
       inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4; inner.scale.z = 0.4;
-      if (SMOOTH) { outer.scale.z = 0.36; outer.userData.sdf = { r: 0.04, tip: 0.006, k: 0.6 }; inner.scale.z = 0.3; inner.position.set(0, 0.03, 0.011); inner.userData.sdf = { r: 0.02, tip: 0.003, k: 0.6 }; }   // 薄く、先をとがらせる。内側の毛は前の面だけ
+      if (SMOOTH) { outer.scale.z = 0.36; outer.userData.sdf = { r: 0.04, tip: 0.006, k: 0.6 }; inner.scale.z = 0.3; inner.position.set(0, 0.03, 0.011); inner.userData.sdf = { r: 0.02, tip: 0.003, k: 0.6 }; outer.userData.fl = 0; inner.userData.fl = 0.012; }   // 薄く、先をとがらせる。内側の毛は前の面だけ
       ear.add(outer, inner);
     }
     head.add(ear); ear.userData.s = s; return ear;
@@ -2155,9 +2184,9 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   if (tailType === 'curl') {
     const tailCurl = new THREE.Group(); tailCurl.position.set(0, 0.06, 0.07); tailCurl.rotation.y = Math.PI / 2; tail.add(tailCurl);
     const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.042, 10, 26, 4.7), mats.red);
-    tailRing.rotation.z = -0.35; tailCurl.add(tailRing); tailRing.userData.sdf = { type: 'arc', R: 0.085, r: 0.042, arc: 4.7 };
+    tailRing.rotation.z = -0.35; tailCurl.add(tailRing); tailRing.userData.sdf = { type: 'arc', R: 0.085, r: 0.042, arc: 4.7 }; furOf(tailRing, 0.034, 1.3);
     const tailIn = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.026, 8, 22, 4.2), mats.cream);
-    tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn); tailIn.userData.sdf = { type: 'arc', R: 0.068, r: 0.026, arc: 4.2 };
+    tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn); tailIn.userData.sdf = { type: 'arc', R: 0.068, r: 0.026, arc: 4.2 }; furOf(tailIn, 0.034, 1.3);
   } else {   // 後ろへ垂れる尻尾：otter＝根元が太く先細り（ラブラドール）／plume＝ふさふさで先が少し上を向き、先が白い（ボーダーコリー）
     tail.position.set(0, 0.06, -0.27 * L);
     const n = tailType === 'plume' ? 7 : 6;
@@ -2171,10 +2200,10 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   if (ruff) { blob(mats.cream, 0.12, 0.12, 0.09, 0, 0.0, 0.25 * L, front); blob(mats.cream, 0.105, 0.09, 0.1, 0, 0.1, 0.0, neck); }   // 首まわりの白いふさふさ
 
   // ----- 脚（3節） -----
-  const seg = (parent, len, r0, r1, mat) => {
+  const seg = (parent, len, r0, r1, mat, fl = 0) => {
     const g = new THREE.CylinderGeometry(r1, r0, len, 8); g.translate(0, -len / 2, 0);
-    parent.add(new THREE.Mesh(g, mat));
-    blob(mat, r1 * 1.02, r1 * 1.02, r1 * 1.02, 0, -len, 0, parent);   // 関節のふくらみ
+    parent.add(furOf(new THREE.Mesh(g, mat), fl));
+    furOf(blob(mat, r1 * 1.02, r1 * 1.02, r1 * 1.02, 0, -len, 0, parent), fl);   // 関節のふくらみ
   };
   // side: +1=左(+x) / -1=右。bend: +1=膝が前（後脚）/ -1=肘が後ろ（前脚）
   const makeLeg = (parent, x, y, z, lens, bend, isFront) => {
@@ -2182,11 +2211,11 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     const b1 = new THREE.Group(), b2 = new THREE.Group(), b3 = new THREE.Group();
     hip.add(b1); b2.position.y = -lens[0]; b1.add(b2); b3.position.y = -lens[1]; b2.add(b3);
     if (isFront) blob(mats.red, 0.05, 0.075, 0.06, 0, -0.04, 0, b1);           // 肩
-    else blob(mats.red, 0.062, 0.085, 0.078, 0, -0.045, 0.012, b1);           // 太もも
-    seg(b1, lens[0], 0.04, 0.032, mats.red);
-    seg(b2, lens[1], 0.031, 0.026, isFront ? mats.red : mats.red);
+    else furOf(blob(mats.red, 0.062, 0.085, 0.078, 0, -0.045, 0.012, b1), 0.026);           // 太もも
+    seg(b1, lens[0], 0.04, 0.032, mats.red, 0.012);
+    seg(b2, lens[1], 0.031, 0.026, isFront ? mats.red : mats.red, 0.007);
     seg(b3, lens[2], 0.026, 0.026, mats.cream);
-    blob(mats.cream, 0.034, 0.022, 0.045, 0, -lens[2], 0.016, b3);           // 足先
+    furOf(blob(mats.cream, 0.034, 0.022, 0.045, 0, -lens[2], 0.016, b3), 0);           // 足先
     return { hip, b1, b2, b3, lens, bend, isFront };
   };
   const legs = [
@@ -2198,7 +2227,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   root.scale.setScalar(size);
   const NEUTRAL = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.2], [-0.08, -0.2]].map(([x, z]) => [x * size, z * size * L]);   // 立った時の足の位置（足元の中心から）
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn], { split: [jaw], rough: gloss ? 0.6 : 0.85, shade: 0.14 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() }); }
+  if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn], { split: [jaw], rough: gloss ? 0.6 : 0.85, shade: 0.14, fur: 0.016 * coat }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() }); }
 
   const FOOT_UP = 0.022;   // 足先の厚み（地面から足首の付け根まで）
   const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
@@ -2999,7 +3028,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   }
 
   const takePoop = g => { const k = poops.indexOf(g); if (k >= 0) { poops.splice(k, 1); extras.remove(g); } };
-  return { object: root, points, extras, radius: 0.5, think, command, update, state: S, __start: start, __startSeq: startSeq, __feet: feet, __legs: legs, __head: head, poops, takePoop };
+  return { object: root, points, extras, radius: 0.5, think, command, update, state: S, __start: start, __startSeq: startSeq, __feet: feet, __legs: legs, __head: head, __collar: collar, poops, takePoop };
 };
 const dog = makeDog();
 scene.add(dog.object, dog.points, dog.extras);
@@ -4559,6 +4588,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- 人とリードの形
       if (W.ev === 'loose') { collar.set(walker.x + Math.sin(walker.yaw + 0.5) * 0.45, H(walker.x, walker.z) + 0.25, walker.z + Math.cos(walker.yaw + 0.5) * 0.45); emptyCollar.visible = true; emptyCollar.position.copy(collar); }
       else emptyCollar.visible = false;
+      if (dog.__collar) dog.__collar.visible = W.ev !== 'loose';   // 抜けた首輪は柴の首から消える
       if (W.ev === 'loose') { /* 上で */ }
       else { collar.set(st.x + Math.sin(st.yaw) * 0.25, H(st.x, st.z) + 0.43, st.z + Math.cos(st.yaw) * 0.25); if (S.rage > 0.01) collar.lerp(dog.__head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(-Math.sin(st.yaw) * 0.08, -0.1, -Math.cos(st.yaw) * 0.08)), S.rage); }   // 立ち上がると首輪も高く
       // 足の運びは実際に動いた速さで（柴に引き寄せられた分も歩く）。操作していない時に引かれたら、その向きへ向き直って歩く
