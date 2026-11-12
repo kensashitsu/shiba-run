@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v216';
+const VERSION = 'v217';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5209,9 +5209,11 @@ function stepInner(dt, t) {
       // 歩いている間は、柴が真後ろ寄り（110度より後ろ）なら追わない：前へ倒したまま振り向くと、進む向きも回ってぐるぐる回るため。その時は縁の矢印で知らせる
       const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.3 - eye.y, d = angDiff(camYaw, Math.atan2(tx, tz));
       const hh = Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect) * 0.7, vh = camera.fov * Math.PI / 360 * 0.7, vb = camera.fov * Math.PI / 360 * 0.9;   // vb：下側は縁ぎりぎり（背中と頭が下の縁に見えていればよい。目を落としすぎない）
-      if (Math.abs(d) > hh && (mag < 0.1 || Math.abs(d) < 1.9)) camYaw += (d - Math.sign(d) * hh) * Math.min(1, dt * 3);
+      // 柴が飼い主の体のすぐそば（においを嗅いでまわりを回る・足元にいる）なら追わない：近いと少し動くだけで向きが大きく変わり、ぐるぐる回るため
+      const close = W.smell || Math.hypot(tx, tz) < 0.8 && Math.abs(d) > 1.0;   // 足元の前寄り（60度以内）なら追う
+      if (!close && Math.abs(d) > hh && (mag < 0.1 || Math.abs(d) < 1.9)) camYaw += (d - Math.sign(d) * hh) * Math.min(1, dt * 3);
       // 上下：ふだんの目線（少し下向き）を基本に、足元へ来たら柴が枠に入るまで目を落とす
-      const pd = Math.atan2(ty + 0.12, Math.hypot(tx, tz)), goal = Math.max(-1.3, Math.min(0.5, Math.max(pd - vh, Math.min(pd + vb, gyro ? camPitch : FP_REST))));   // ジャイロ中は、スマホで決めた目線のまま（柴が枠から出た時だけ動かす）
+      const pd = Math.atan2(ty + 0.12, Math.hypot(tx, tz)), goal = Math.max(-1.3, Math.min(0.5, W.smell ? (gyro ? camPitch : FP_REST) : Math.max(pd - vh, Math.min(pd + vb, gyro ? camPitch : FP_REST))));   // ジャイロ中は、スマホで決めた目線のまま（柴が枠から出た時だけ動かす）
       camPitch += (goal - camPitch) * Math.min(1, dt * 2.5);
     } else if (!gyro && t - camDragT > 2.5) camPitch += (FP_REST - camPitch) * Math.min(1, dt * 1.5);
     camera.lookAt(eye.x + Math.sin(camYaw) * Math.cos(camPitch), eye.y + Math.sin(camPitch), eye.z + Math.cos(camYaw) * Math.cos(camPitch));
