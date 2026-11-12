@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v213';
+const VERSION = 'v214';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -237,13 +237,7 @@ const PATCH = 28;              // 草を生やす範囲（犬の少し前を中�
 const PATCH_AHEAD = 5.5;       // 範囲の中心を視線の先へずらす量（後ろの草は見えないので前へ回す）
 // 遠景の草：まばらで幅広の葉を、手前の草が尽きるあたりから先へ広く生やす（草の切れ目を遠くの霞へ追いやる）
 const FAR_BLADES = low ? 0 : 30000, FAR_PATCH = 84, FAR_AHEAD = 26;
-// 草原の空気感の案（?look=1〜。比べて選ぶ用）：霞・空・山並み・遠くの丘・草の密度と色
-const LOOK = /[?&](town|walk)/.test(location.search) ? 0 : +((location.search.match(/[?&]look=(\d)/) || [])[1] || 0);
-const LK = [null,
-  { exp: 0.85, fog: 0xb4bfbf, fogNear: 25, fogFar: 400, top: 0x4c6788, sun: 2.4, sunCol: 0xffe2bd, env: 0.8, ridge: 0x27333d, haze: 0.62, amp: 1.5, hill: 15, gh: 0.8, gw: 1.2, spread: 0.5, farGrass: 0x7d9a3c, soil: '0.075, 0.14, 0.03', heath: '0.13, 0.035, 0.16', dirt: '0.2, 0.12, 0.065' },
-  { exp: 0.95, fog: 0xc3ccc6, fogNear: 30, fogFar: 430, top: 0x5f8fc9, sun: 3.0, sunCol: 0xffe0b0, env: 0.9, ridge: 0x2f4650, haze: 0.7, amp: 1.4, hill: 15, gh: 0.8, gw: 1.2, spread: 0.5, farGrass: 0x8fae40, soil: '0.085, 0.16, 0.03', heath: '0.16, 0.045, 0.19', dirt: '0.22, 0.14, 0.075' },
-][LOOK] || null;
-const FOG_NEAR = LK ? LK.fogNear : 16, FOG_FAR = LK ? LK.fogFar : 150;
+const FOG_NEAR = 16, FOG_FAR = 150;
 const FOG_COLOR = new THREE.Color(0xcdd0bc);
 const SUN_DIR = new THREE.Vector3(-0.55, 0.4, -0.72).normalize();   // 太陽の方向（低め＝影が長い）
 const SHADOW_BOX = 9;
@@ -265,7 +259,7 @@ if (LITE) TOWNS.home.file = 'assets/town-kari.json';   // 北迫新町のまわ�
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
 // 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
 const PAGE = /[?&]walk/.test(location.search) ? 'walk' : /[?&]town/.test(location.search) ? 'town' : 'meadow', MODE_BTN = { walk: 'tWalk', town: 'tTownRun', meadow: 'tMeadow' };
-const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', (location.search.match(/[?&](look=[0-9])/) || [])[1], (location.search.match(/[?&](hum=[0-9])/) || [])[1], 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
+const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', (location.search.match(/[?&](hum=[0-9])/) || [])[1], 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
 const early = { on: !/[?&](test|tune)/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
 if (early.on) {
   const main = document.getElementById(MODE_BTN[PAGE]);
@@ -357,7 +351,7 @@ function H(x, z) {   // 小川の近くは谷底の高さにならし、川筋�
   if (TOWN) return townHeight(x, z);
   const sx = streamX(z), ds = Math.abs(x - sx);
   const w = 1 - smooth(2, 5, ds);
-  return Hb(x, z) * (1 - w) + Hb(sx, z) * w - 0.75 * (1 - smooth(0.9, 2.8, ds)) + (LK ? LK.hill * smooth(12, 140, ds) * (0.65 + 0.35 * Math.sin(x * 0.013 + 1) * Math.cos(z * 0.011)) : 0);   // 案：川から離れるほど丘が高くなる（川は広い谷の底）
+  return Hb(x, z) * (1 - w) + Hb(sx, z) * w - 0.75 * (1 - smooth(0.9, 2.8, ds));
 }
 const waterY = z => Hb(streamX(z), z) - 0.37;
 const FIELD_GLSL = TOWN ? `
@@ -378,7 +372,7 @@ float pathX(float z){ return sin(z*0.03)*6.0 + sin(z*0.071+0.5)*2.5; }
 float H(vec2 p){
   float sx = streamX(p.y); float ds = abs(p.x - sx);
   float w = 1.0 - smoothstep(2.0, 5.0, ds);
-  return mix(Hb(p), Hb(vec2(sx, p.y)), w) - 0.75*(1.0 - smoothstep(0.9, 2.8, ds))${LK ? ' + ' + LK.hill.toFixed(1) + '*smoothstep(12.0, 140.0, ds)*(0.65 + 0.35*sin(p.x*0.013 + 1.0)*cos(p.y*0.011))' : ''};
+  return mix(Hb(p), Hb(vec2(sx, p.y)), w) - 0.75*(1.0 - smoothstep(0.9, 2.8, ds));
 }
 float heather(vec2 p){
   return smoothstep(0.25, 0.6, sin(p.x*0.071 + sin(p.y*0.05)*2.0) * cos(p.y*0.063 + sin(p.x*0.043)*1.5));
@@ -620,7 +614,7 @@ const eco = true;   // いつも省電力（描く回数を30回/秒までに間
 let pixelRatio = eco ? PR_ECO : PR_FULL;
 renderer.setPixelRatio(pixelRatio);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = LK ? LK.exp : 1.0;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = !AB.includes('c');
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -663,13 +657,13 @@ const skyDome = sky;   // 空の写真を読む所では sky が別の変数の�
 
 // 遠くの山並み：稜線を何層も重ね、遠い層ほど淡く、裾は霞に溶かす（カメラに追従）
 const mountains = new THREE.Group();
-const RIDGE_BODY = new THREE.Color(LK ? LK.ridge : 0x3f5a52);   // 霞がかかる前の山肌（暗い青緑）
+const RIDGE_BODY = new THREE.Color(0x3f5a52);   // 霞がかかる前の山肌（暗い青緑）
 [ // 半径, 霞の濃さ(1=空と同じ), 高さ, 位相
   [340, 0.78, 46, 1.0],
   [270, 0.64, 32, 2.7],
   [210, 0.5, 20, 4.1],
   [170, 0.36, 11, 5.9],
-].map(l => LK ? [l[0] * 1.9, l[1] * LK.haze, l[2] * 1.9 * LK.amp, l[3]] : l).forEach(([R, haze, amp, seed]) => {   // 案：遠くの丘まで地面が続くので、山並みはその奥へ
+].forEach(([R, haze, amp, seed]) => {
   const N = 180, pos = [], idx = [];
   for (let i = 0; i <= N; i++) {
     const a = (i / N) * Math.PI * 2;
@@ -721,7 +715,7 @@ const groundTexU = {
   tMeadow: { value: groundTex('meadow') }, tFar: { value: groundTex('meadow_far') },
   tPath: { value: groundTex('path') }, tBed: { value: groundTex('riverbed') },
   uBlend: { value: AB.includes('b') ? 0 : 1 },
-  uFarGrass: { value: new THREE.Color(LK ? LK.farGrass : 0xa6b83a).convertSRGBToLinear() }
+  uFarGrass: { value: new THREE.Color(0xa6b83a).convertSRGBToLinear() }
 };
 const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
 const groundCompile = patch => sh => {   // patch：手で決めた場所の細かい地面（高さは形のまま、掘った所でも消さない、斜面は草）
@@ -740,16 +734,14 @@ const groundCompile = patch => sh => {   // patch：手で決めた場所の細�
       float dist = length(p - cameraPosition.xz);
       vec3 near = mix(texture2D(tMeadow, p*0.33).rgb, texture2D(tMeadow, p*0.083 + 0.37).rgb, 0.4);
       near = mix(near, dot(near, vec3(0.3, 0.59, 0.11)) * vec3(0.8, 1.35, 0.45), 0.6);  // 枯れ色寄りの写真を緑へ寄せる
-${LK ? '      near = mix(near, vec3(' + LK.soil + ') * (0.55 + 3.0*dot(near, vec3(0.333))), 0.82);   // 案：草の下の地面も草の色に（すき間から土の色がのぞかない）' : ''}
       vec3 far = mix(texture2D(tFar, p*0.025).rgb, texture2D(tFar, p*0.0061 + 0.5).rgb, 0.5) * vec3(0.8, 0.95, 0.7);
       vec3 g = mix(near, far, smoothstep(10.0, 45.0, dist) * uBlend);
       // 草の尽きる先は草むらの色に寄せる（遠景の草の縁が線にならないように）
       g = mix(g, uFarGrass * (0.7 + 0.6*smoothstep(0.03, 0.2, dot(far, vec3(0.333)))), smoothstep(12.0, 30.0, dist) * uBlend);
-` + (TOWN ? '' : (LK ? `      g = mix(g, vec3(${LK.heath}) * (0.6 + 2.5*dot(g, vec3(0.333))), heather(p) * 0.9); // 案：ヒースの畑は遠くからも紫に見える
-` : `      g = mix(g, g*vec3(1.05, 0.72, 1.1) + vec3(0.012, 0.0, 0.016), heather(p) * 0.85); // ヒースの株元
-`) + `${LK ? '      { float n1 = sin(p.x*0.037 + sin(p.y*0.021)*2.3) * cos(p.y*0.031 + sin(p.x*0.027)*1.7); g *= 0.86 + 0.24*n1; g = mix(g, g*vec3(1.55, 1.2, 0.55), smoothstep(0.25, 0.8, -n1) * 0.45 * (1.0 - heather(p))); }   // 案：広い範囲の濃淡と、枯れ色がかった所' : ''}
+` + (TOWN ? '' : (`      g = mix(g, g*vec3(1.05, 0.72, 1.1) + vec3(0.012, 0.0, 0.016), heather(p) * 0.85); // ヒースの株元
+`) + `
       float dp = abs(p.x - pathX(p.y)) + sin(p.y*1.7 + p.x)*0.07;
-      g = mix(g, ${LK ? 'mix(texture2D(tPath, p*0.5).rgb * vec3(1.35, 1.25, 1.1), vec3(' + LK.dirt + '), 0.62)' : 'texture2D(tPath, p*0.5).rgb * vec3(1.35, 1.25, 1.1)'}, 1.0 - smoothstep(0.55, 1.05, dp)); // 土の小道
+      g = mix(g, texture2D(tPath, p*0.5).rgb * vec3(1.35, 1.25, 1.1), 1.0 - smoothstep(0.55, 1.05, dp)); // 土の小道
       float ds = abs(p.x - streamX(p.y));
       g = mix(g, texture2D(tBed, p*0.45).rgb * 0.7, 1.0 - smoothstep(1.4, 2.3, ds));   // 川床の濡れた石
 `) + `   // 町には小道・川・ヒースがないので、その分のテクスチャを読まない
@@ -771,18 +763,8 @@ const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.receiveShadow = true;
 ground.frustumCulled = false;
 scene.add(ground);
-// 案：遠くの丘。粗い網目（12m）の地面を、細かい地面の外側へ 600m 先まで続ける（真ん中は細かい地面があるので抜く）
-let groundFar = null;
-if (LK) {
-  const FS = 12, FN = 100, g = new THREE.PlaneGeometry(FS * FN, FS * FN, FN, FN); g.rotateX(-Math.PI / 2);
-  const P = g.attributes.position, ix = g.index.array, keep = [], inR = GROUND / 2 - FS;
-  for (let i = 0; i < ix.length; i += 3) { let inside = true; for (let k = 0; k < 3; k++) { const v = ix[i + k]; if (Math.abs(P.getX(v)) > inR || Math.abs(P.getZ(v)) > inR) inside = false; } if (!inside) keep.push(ix[i], ix[i + 1], ix[i + 2]); }
-  g.setIndex(keep);
-  groundFar = new THREE.Mesh(g, groundMat); groundFar.frustumCulled = false; scene.add(groundFar);
-}
 function updateGround(px, pz) {
   ground.position.set(Math.round(px / GSNAP) * GSNAP, 0, Math.round(pz / GSNAP) * GSNAP);
-  if (groundFar) groundFar.position.set(Math.round(px / 12) * 12, -0.25, Math.round(pz / 12) * 12);   // 少し下げて、細かい地面との重なりを下に隠す
 }
 
 // ---------- 小川の水面（川筋に沿った帯。犬の前後だけ作り直す） ----------
@@ -888,7 +870,7 @@ const grassU = {
   uShadowMap: { value: null }, uShadowMatrix: { value: sun.shadow.matrix },
   uShadowTexel: { value: new THREE.Vector2(1 / sun.shadow.mapSize.x, 1 / sun.shadow.mapSize.y) }
 };
-const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, LK ? LK.spread : 0.24), new THREE.ShaderMaterial({
+const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, 0.24), new THREE.ShaderMaterial({
   uniforms: grassU, side: THREE.DoubleSide,
   vertexShader: `
     uniform float uTime, uSize, uFogNear, uFogFar, uDogR, uInner, uWide, uLod; uniform vec2 uCenter; uniform vec3 uDog;
@@ -923,9 +905,9 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, LK ? LK.spread : 0.24), new
       float h = (0.1 + 0.34*pow(fract(r*7.13), 1.6)) * edge
               * smoothstep(0.45, 1.2, dp) * smoothstep(1.7, 2.5, ds)   // 小道と川には生やさない
               * tmk
-              * (1.0 - 0.25*he)${LK ? ' * ' + LK.gh.toFixed(2) : ''};
+              * (1.0 - 0.25*he);
       vHe = he;
-      float w = (0.016 + 0.016*fract(r*3.71)) * uWide * widen${LK ? ' * ' + LK.gw.toFixed(2) : ''};
+      float w = (0.016 + 0.016*fract(r*3.71)) * uWide * widen;
       float ang = r * 6.2831;
       vec2 face = vec2(cos(ang), sin(ang));
       vec2 side = vec2(-face.y, face.x);
@@ -970,19 +952,17 @@ const grass = new THREE.Mesh(bladeSet(BLADES, PATCH, LK ? LK.spread : 0.24), new
     void main(){
       vec3 root = mix(vec3(0.13,0.21,0.06), vec3(0.21,0.3,0.08), fract(vR*5.3));
       vec3 tip = mix(vec3(0.36,0.48,0.15), vec3(0.52,0.56,0.22), fract(vR*9.7));
-      ${LK ? 'root = mix(vec3(0.15,0.24,0.07), vec3(0.2,0.3,0.09), fract(vR*5.3)); tip = mix(vec3(0.27,0.4,0.12), vec3(0.4,0.5,0.17), fract(vR*9.7));' : ''}
-      float dry = step(fract(vR*41.3), ${LK ? '0.05' : '0.16'});                              // 枯れ草を混ぜる
+      float dry = step(fract(vR*41.3), 0.16);                              // 枯れ草を混ぜる
       root = mix(root, vec3(0.33,0.3,0.17), dry);
       tip = mix(tip, vec3(0.66,0.58,0.36), dry);
       float tone = 0.78 + 0.44*fract(vR*61.7);                             // 一本ずつ明るさをばらす
       vec3 col = mix(root, tip, smoothstep(0.0, 1.0, vT));
       float top = smoothstep(0.25, 0.9, vT);
       float hp = vHe * step(0.2, fract(vR*17.3));                          // ヒースの紫の穂
-      col = mix(col, ${LK ? 'mix(vec3(0.46,0.17,0.5), vec3(0.62,0.27,0.64), fract(vR*23.1))' : 'mix(vec3(0.52,0.28,0.56), vec3(0.70,0.40,0.70), fract(vR*23.1))'}, hp * top);
-      float fl = step(fract(vR*31.7), ${LK ? '0.07' : '0.035'}) * (1.0 - vHe);                 // 草むらの小さな花
+      col = mix(col, mix(vec3(0.52,0.28,0.56), vec3(0.70,0.40,0.70), fract(vR*23.1)), hp * top);
+      float fl = step(fract(vR*31.7), 0.035) * (1.0 - vHe);                 // 草むらの小さな花
       col = mix(col, fract(vR*53.0) < 0.5 ? vec3(0.95,0.82,0.3) : vec3(0.95,0.93,0.86), fl * smoothstep(0.8, 0.95, vT));
       vec3 albedo = toLin(col);
-      ${LK ? '{ float n1 = sin(vWorld.xz.x*0.037 + sin(vWorld.xz.y*0.021)*2.3) * cos(vWorld.xz.y*0.031 + sin(vWorld.xz.x*0.027)*1.7); albedo *= 0.86 + 0.24*n1; albedo = mix(albedo, albedo*vec3(1.55, 1.2, 0.55), smoothstep(0.25, 0.8, -n1) * 0.45 * (1.0 - vHe)); }' : ''}
       float sh = lit(vShadow);
       float wrap = 0.22 + 0.3*vT;                                   // 地面と同じくらいの日の当たり方。根元ほど陰る
       vec3 V = normalize(vWorld - cameraPosition);
@@ -3320,13 +3300,6 @@ new RGBELoader().load('assets/sky.hdr', tex => {
   grassU.uSkyCol.value.copy(skyC).multiplyScalar(0.85);
   waterU.uSkyCol.value.copy(skyC);
   FOG_COLOR.setRGB(hor[0] / nHor * bgScale, hor[1] / nHor * bgScale, hor[2] / nHor * bgScale);   // 霞＝背景に映る地平線の色
-  if (LK) {   // 案：空は写真でなく、霞の色から空の色へのなだらかな移り変わりにする（光は写真のまま、強さだけ変える）
-    scene.background = null; skyDome.material.uniforms.top.value.set(LK.top); skyDome.material.uniforms.sunCol.value.set(LK.sunCol).multiplyScalar(0.25);
-    FOG_COLOR.set(LK.fog); scene.environmentIntensity = LK.env;
-    sun.color.set(LK.sunCol); sun.intensity = LK.sun;
-    grassU.uSunCol.value.copy(sun.color).multiplyScalar(sun.intensity); waterU.uSunCol.value.copy(grassU.uSunCol.value);
-    grassU.uSkyCol.value.multiplyScalar(LK.env); waterU.uSkyCol.value.multiplyScalar(LK.env);
-  }
   scene.fog.color.copy(FOG_COLOR);
   colorRidges();
   hintEl.textContent = WALK ? WALK_HINT : hintText;
