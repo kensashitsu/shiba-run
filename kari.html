@@ -2328,10 +2328,11 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     }
     return { hip, b1, b2, b3, lens, bend, isFront };
   };
+  const FY = 0.004;   // 柴と同じ作りの前脚の付け根：-0.02 だと立った時に前脚が長すぎて、ひじが60度ほど曲がった（付け根は肩のふくらみの中）
   const bw = F2 ? FORM.bodyThick : 1;   // 胴の太さに合わせて、脚の付け根と足の置き場も左右へ動かす
   const legs = [
-    makeLeg(front, 0.07 * bw, -0.02, 0.2 * L, [0.13 * lg, 0.14 * lg, 0.06 * lg], -1, true),    // 0 左前
-    makeLeg(front, -0.07 * bw, -0.02, 0.2 * L, [0.13 * lg, 0.14 * lg, 0.06 * lg], -1, true),   // 1 右前
+    makeLeg(front, 0.07 * bw, F2 ? FY : -0.02, 0.2 * L, [0.13 * lg, 0.14 * lg, 0.06 * lg], -1, true),    // 0 左前
+    makeLeg(front, -0.07 * bw, F2 ? FY : -0.02, 0.2 * L, [0.13 * lg, 0.14 * lg, 0.06 * lg], -1, true),   // 1 右前
     makeLeg(rear, 0.075 * bw, -0.02, -0.2 * L, [0.13 * lg, 0.13 * lg, (F2 ? 0.075 : 0.085) * lg], 1, false),  // 2 左後
     makeLeg(rear, -0.075 * bw, -0.02, -0.2 * L, [0.13 * lg, 0.13 * lg, (F2 ? 0.075 : 0.085) * lg], 1, false), // 3 右後
   ];
