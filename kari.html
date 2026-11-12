@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v212';
+const VERSION = 'v213';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -265,7 +265,7 @@ if (LITE) TOWNS.home.file = 'assets/town-kari.json';   // 北迫新町のまわ�
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
 // 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
 const PAGE = /[?&]walk/.test(location.search) ? 'walk' : /[?&]town/.test(location.search) ? 'town' : 'meadow', MODE_BTN = { walk: 'tWalk', town: 'tTownRun', meadow: 'tMeadow' };
-const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', /[?&]toon/.test(location.search) ? 'toon' : /[?&]smooth/.test(location.search) ? 'smooth' : '', (location.search.match(/[?&](look=[0-9])/) || [])[1], (location.search.match(/[?&](hum=[0-9])/) || [])[1], /[?&]keep=0/.test(location.search) ? 'keep=0' : '', 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
+const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', (location.search.match(/[?&](look=[0-9])/) || [])[1], (location.search.match(/[?&](hum=[0-9])/) || [])[1], 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
 const early = { on: !/[?&](test|tune)/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
 if (early.on) {
   const main = document.getElementById(MODE_BTN[PAGE]);
@@ -2007,8 +2007,8 @@ const townCull = (x, z) => { for (const c of townChunks) { const dx = Math.max(0
 // 頂点の色は近い部品の色を混ぜ（毛色の境目がぼける）、動きは近い部品の親（骨）に重みを付けて従わせる。
 // split：別の皮にする骨（下あご。頭とつなげると口が開かない）
 const TUNE = /[?&]tune/.test(location.search);   // 調整ページ：柴の形をつまみで決める
-const TOON = TUNE || /[?&]toon/.test(location.search) || (LITE && !/[?&]old/.test(location.search));   // 柴（仮）版はいつもアニメ調（?old で前の柴）   // アニメ調：段のある陰影・大きめの毛束・本物寄りの体つき（柴）
-const SMOOTH = TOON || /[?&]smooth/.test(location.search);
+const TOON = TUNE || LITE;   // 柴（仮）版はいつもアニメ調   // アニメ調：段のある陰影・大きめの毛束・本物寄りの体つき（柴）
+const SMOOTH = TOON;
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 120, 120, 120, 255, 205, 205, 205, 255, 255, 255, 255, 255]), 4, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 // 柴の形のつまみ（?tune で動かす。倍率は 1＝v181 の部品の大きさ、ずらしは 0＝なし）
 const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
@@ -3243,7 +3243,7 @@ let fpsN = 0, fpsT = 0, hinted = false, slowN = 0;
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const fpvV = new THREE.Vector3(), camGoal = new THREE.Vector3();
 const FP_REST = -0.12;   // 一人称のふだんの目線（ほぼ水平でわずかに下。前の -0.38 は足元ばかり見えて前が確かめにくかった）
-const KEEP = !/[?&]keep=0/.test(location.search);   // 一人称で柴を画面に入れ続ける（既定で有効・?keep=0 で切る）：柴が画面の内側の枠から出た分だけ、首を回して枠の中へ戻す
+const KEEP = true;   // 一人称で柴を画面に入れ続ける：柴が画面の内側の枠から出た分だけ、首を回して枠の中へ戻す
 const shTmpX = new THREE.Vector3(), shTmpY = new THREE.Vector3(), shTmpP = new THREE.Vector3();
 
 function resize() {
@@ -3349,7 +3349,7 @@ let LEASH = LEASH_FULL;
 const walker = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
 // 人：柴と同じく図形の組み合わせ。腰→胴→胸→首→頭、肩→上腕→ひじ→前腕→手、股→太もも→ひざ→すね→足首→靴。
 // 歩く・走るは脚の付け根とひざ、腕の付け根とひじの角度を1歩の周期で動かす。リードを持つ手は肩・ひじ・手の3点で犬の方へ伸ばす
-const HUM = !/[?&]hum=0/.test(location.search);   // 人の作り込み（既定。?hum=0 で前の人）：裾と襟のある上着・肩かけ鞄・ブーツ・くせ毛・頭を小さく脚を長く
+const HUM = true;   // 人の作り込み：裾と襟のある上着・肩かけ鞄・ブーツ・くせ毛・頭を小さく脚を長く
 function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long = false, bag = 0, boots = 0 }) {
   const fpvHide = [];   // 一人称で隠す部品（目のすぐ下に来る襟）
   const H2 = TOON, HN = HUM, H3 = HUM && /[?&]hum=2/.test(location.search);   // H3：作り込みの次の案（上着の前合わせ・ポケット・太めの袖・指のある手）   // アニメ調：段のある陰影・一続きの頭と髪・大きめの目
