@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v203';
+const VERSION = 'v204';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5194,7 +5194,7 @@ function stepInner(dt, t) {
     const W = WALK.W, eye = WALK.me.__head.localToWorld(fpvV.set(0, 0.035, 0)); eye.x += Math.sin(camYaw) * 0.12; eye.z += Math.cos(camYaw) * 0.12;
     camera.position.copy(eye);
     // 歩いている間は、目を体の向きにつける（手前や横に倒すと体ごと振り向いて、その向きを見て歩く。目だけ前に残ると、自分の上着の襟の中をのぞき込んでしまう）
-    if (mag > 0.08 && !(gyro && gyroQ) && t - camDragT > 0.25) camYaw += angDiff(camYaw, walker.yaw) * Math.min(1, dt * 8);
+    if (mag > 0.08 && t - camDragT > 0.25) camYaw += angDiff(camYaw, walker.yaw) * Math.min(1, dt * 8);
     const busy = W.grab && W.grab.ph !== 'let' || W.pick || W.feed || W.crouch && dog.state.lick || W.loose && W.loose.catching;
     if (busy && t - camDragT > 1.5) {
       const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.35 - eye.y;
@@ -5376,7 +5376,7 @@ gyroBtn.addEventListener('click', async e => {
 function gyroStep() {   // 前のコマからの向きの変化を足す（なぞった分や、自動で柴へ目を落とす分とけんかしない）
   if (!(fpv && gyro && gyroQ)) { gyroPrev = null; return; }
   if (gyroPrev) {
-    if (Math.abs(gyroQ.pitch) < 1.35) camYaw += angDiff(gyroPrev.yaw, gyroQ.yaw);   // 真上・真下付近は左右がふらつくので使わない
+    if (Math.abs(gyroQ.pitch) < 1.35) { const d = angDiff(gyroPrev.yaw, gyroQ.yaw); camYaw += d; if (moveRef !== null) moveRef += d; }   // スマホを回した分は、歩く向きの基準も一緒に回す（見ている方へ歩く。目が体について回っても、けんかしない）   // 真上・真下付近は左右がふらつくので使わない
     camPitch = Math.max(-1.35, Math.min(0.5, camPitch + gyroQ.pitch - gyroPrev.pitch));
   }
   gyroPrev = gyroQ;
@@ -5492,7 +5492,7 @@ function frame(ts) {
 requestAnimationFrame(frame);
 window.__step = d => { simT += d; step(d, simT); };
 window.__V = THREE.Vector3; window.__isGrass = (x, z) => isGrass(x, z); window.__gy = (x, z) => H(x, z);
-window.__shiba = { makeHuman, townChunks, townTiles, get lowGridN() { return lowGrid ? lowGrid.size : 0; }, lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => { if (TOWN) { townWin(camera.position.x, camera.position.z); townCull(camera.position.x, camera.position.z); } renderer.render(scene, camera); }, snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; moveRef = null; }, setFpv: v => setFpv(v), lookIn: () => lookIn, setGyro: (on, q) => { gyro = on; if (q) gyroQ = q; }, getFpv: () => ({ fpv, camPitch }) };
+window.__shiba = { setGyroTest: v => { gyro = v; }, setGyroQ: q => { gyroQ = q; }, makeHuman, townChunks, townTiles, get lowGridN() { return lowGrid ? lowGrid.size : 0; }, lowCross, privateLand, isGrass, townRoad, scene, renderer, sun, TOWN, WALK, walker, townBlocked, trees, camera, grass, grassFar, groundTexU, farU, grassU, renderOnce: () => { if (TOWN) { townWin(camera.position.x, camera.position.z); townCull(camera.position.x, camera.position.z); } renderer.render(scene, camera); }, snapCam: () => { camSnap = true; step(1e-4, simT); }, st, input, keys, dog, streamX, pathX, SUN_DIR, setCamYaw: v => { camYaw = v; moveRef = null; }, setFpv: v => setFpv(v), lookIn: () => lookIn, setGyro: (on, q) => { gyro = on; if (q) gyroQ = q; }, getFpv: () => ({ fpv, camPitch }) };
 </script>
 </body>
 </html>
