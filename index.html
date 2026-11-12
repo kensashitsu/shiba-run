@@ -2280,12 +2280,16 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     tailRing.rotation.z = -0.35; tailCurl.add(tailRing); tailRing.userData.sdf = { type: 'arc', R: TR[0], r: TR[1], arc: 4.7, tip: 0.8 }; furOf(tailRing, F2 ? 0.018 : 0.034, 1.3);
     const tailIn = new THREE.Mesh(new THREE.TorusGeometry(TR[2], TR[3], 8, 22, 4.2), F2 ? mats.pale : mats.cream);
     tailIn.rotation.z = -0.15; tailIn.position.z = 0.012; tailCurl.add(tailIn); tailIn.userData.sdf = { type: 'arc', R: TR[2], r: TR[3], arc: 4.2 }; furOf(tailIn, F2 ? 0.016 : 0.034, 1.3);
+  } else if (tailType === 'pom') {   // プードル：短く上へ立った尾の先に、丸い毛のかたまり
+    tail.position.set(0, 0.08, -0.25 * L);
+    for (let i = 0; i < 6; i++) { const u = i / 5; blob(mats.red, 0.022, 0.022, 0.022, 0, 0.012 + u * 0.09, -0.02 * u, tail); }
+    furOf(blob(mats.red, 0.05, 0.055, 0.05, 0, 0.11, -0.025, tail), 0.02);
   } else {   // 後ろへ垂れる尻尾：otter＝根元が太く先細り（ラブラドール）／plume＝ふさふさで先が少し上を向き、先が白い（ボーダーコリー）
     tail.position.set(0, 0.06, -0.27 * L);
-    const n = tailType === 'plume' ? 7 : 6;
+    const n = F2 ? 18 : tailType === 'plume' ? 7 : 6;   // 柴と同じ作りの時は玉を細かく重ねて、一続きの尾にする（粗いと数珠つなぎに見える）
     for (let i = 0; i < n; i++) {
       const u = i / (n - 1), a = tailType === 'plume' ? -1.05 - 0.55 * u + 0.75 * u * u : -0.6 - 0.7 * u, d = (tailType === 'plume' ? 0.4 : 0.3) * u;
-      const r = tailType === 'plume' ? 0.035 + 0.022 * Math.sin(Math.PI * Math.min(1, u * 1.2)) : 0.05 * (1 - 0.6 * u);
+      const r = tailType === 'plume' ? 0.035 + 0.022 * Math.sin(Math.PI * Math.min(1, u * 1.2)) : F2 ? 0.034 * (1 - 0.72 * u) + 0.004 : 0.05 * (1 - 0.6 * u);   // ラブラドール：根元は太く、先へ細る（太すぎると棍棒に見える）
       blob(tailType === 'plume' && u > 0.8 ? mats.cream : mats.red, r, r, tailType === 'plume' ? r * 1.6 : r * 1.3, 0, Math.sin(a) * d * 0.9, -Math.cos(a) * d * 0.55 - d * 0.45, tail);
     }
   }
@@ -3657,7 +3661,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
     { name: '黒柴', kind: 'shiba', react: 5, pace: 1.05, persona: 'yield', dog: makeDog({ red: 0x2a2421, cream: 0xd9b48a, earIn: 0xc9a27a }), man: makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b }) },
     { name: 'ボーダーコリー', kind: 'collie', react: 3, pace: 1.2, persona: 'turner', dog: makeDog({ red: 0x4a2a1c, cream: 0xf2efe8, earIn: 0x7a5040, size: 1.15, long: 1.2, leg: 1.15, ears: 'semi', tail: 'plume', muzzle: 1.3, blaze: true, ruff: true, shibaFace: false, breed: 'collie' }), man: makeHuman({ shirt: 0x4f6b4a, pants: 0x34363d, hair: 0x2a2420 }) },
     { name: 'ラブラドール', kind: 'lab', react: 4, pace: 0.95, persona: 'avoid', dog: makeDog({ red: 0x302a27, cream: 0x302a27, earIn: 0x3a3230, size: 1.25, long: 1.15, leg: 1.2, ears: 'drop', tail: 'otter', muzzle: 1.35, gloss: true, shibaFace: false, breed: 'lab' }), man: makeHuman({ shirt: 0xd9b3a3, pants: 0x2e3542, hair: 0x3a2618, long: true }) },
-    { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, persona: 'turner', flexi: true, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'plume', muzzle: 0.95, shibaFace: false, breed: 'poodle' }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
+    { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, persona: 'turner', flexi: true, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'pom', muzzle: 0.95, shibaFace: false, breed: 'poodle' }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
     { name: 'コーギー', kind: 'corgi', react: 4, pace: 1.0, persona: 'approach', dog: makeDog({ red: 0xc0722c, cream: 0xf3ece0, earIn: 0xd9a27a, size: 1.05, long: 1.3, leg: 0.6, muzzle: 1.1, blaze: true, tail: 'plume' }), man: makeHuman({ shirt: 0x2f3a4f, pants: 0x6b6050, hair: 0x1c1814 }) },
   ];
   for (const o of OTHERS) {
