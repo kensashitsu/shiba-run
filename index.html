@@ -2013,6 +2013,13 @@ const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 1
 // 柴の形のつまみ（?tune で動かす。倍率は 1＝v181 の部品の大きさ、ずらしは 0＝なし）
 const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
 const FORM = { ...FORM_DEF };
+const FORM_G = FORM;   // 柴の形（makeDog の中では犬種ごとの形で FORM を置き換えるので、外の名前で持っておく）
+// 柴以外の犬種も、柴と同じ作り（本物寄りの体つき・段のある塗り・同じ目）で作る。柴の形からの違いだけを書く
+const BREED_FORM = {
+  collie: { legLen: 0.92, bodyLen: 1.0, chest: 0.85, tuck: 0.5, neckThick: 0.85, headSize: 0.9, muzzleLen: 1.5, muzzleThick: 0.78, faceW: 0.82, cheek: 0.55, stop: 0.5, brow: 0.1, jawLen: 1.0, jowl: 0.7, earSize: 0.9, fur: 1.7 },
+  lab: { legLen: 0.86, legThick: 0.78, paw: 0.78, bodyLen: 0.98, bodyThick: 1.05, chest: 0.95, tuck: 0.3, neckThick: 1.0, headSize: 0.98, muzzleLen: 1.42, muzzleThick: 1.05, faceW: 0.92, cheek: 0.75, stop: 0.95, jawLen: 1.0, jowl: 0.85, fur: 0.4 },
+  poodle: { legLen: 0.95, legThick: 0.75, paw: 0.7, bodyLen: 1.0, chest: 0.8, tuck: 0.45, headSize: 1.05, muzzleLen: 1.2, muzzleThick: 0.72, faceW: 0.85, cheek: 0.85, stop: 0.8, fur: 1.5 },
+};
 // 柴の姿勢のつまみ（?tune で動かす。長さは m、角度は rad）
 const POSE_OLD = { sitY: -0.125, sitPitch: 0.72, sitNeck: -0.5, sitHead: 0, sitFront: 0.21, sitRear: -0.03, sitRearX: 0.1, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.42, downRear: -0.06, downRearX: 0.15, peeUp: 0.62, peeOut: 0.14, peeBack: 0.04, peeRearRoll: 0.45, peeRoll: 0.1, peeY: -0.02, peeNeck: 0, peeHeadYaw: 0.3, peeTail: -0.25, poopY: -0.13, poopPitch: 0.42, poopFlex: -0.4, poopNeck: -0.1, poopHead: 0, poopOut: 0.11, poopFwd: 0.12, poopFront: 0.04, poopTail: -0.6 };   // ほかの犬種が使う元の姿勢
 const POSE_DEF = { sitY: -0.07, sitPitch: 0.54, sitNeck: -0.26, sitHead: -0.16, sitFront: 0.185, sitRear: -0.095, sitRearX: 0.115, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.425, downRear: -0.13, downRearX: 0.15, peeUp: 0.42, peeOut: 0.3, peeBack: 0.2, peeRearRoll: 0.55, peeRoll: 0.4, peeY: 0.005, peeNeck: 0.08, peeHeadYaw: 0.06, peeTail: -0.02, poopY: -0.035, poopPitch: 0.52, poopFlex: -0.5, poopNeck: -0.42, poopHead: -0.02, poopOut: 0.11, poopFwd: 0.12, poopFront: -0.005, poopTail: -0.6 };   // 2026-11-11 ユーザーが調整ページで決めた姿勢
@@ -2132,8 +2139,9 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
 // 足先の位置を先に決め、関節の角度を逆算する（IK）。歩く時、着地中の足は地面に固定し、浮いている足だけ次の着地点へ運ぶ。
 // 何をするか（姿勢・仕草）は dog.think、形と動きは dog.update が受け持つ。
 // 毛色を変えれば別の犬も作れる（散歩で出会う犬など）
-const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1, ears: earType = 'prick', tail: tailType = 'curl', muzzle: mz = 1, gloss = false, blaze = false, ruff = false, long: L = 1, leg: lg = 1, shibaFace = true, collar: collarCol = 0xa32a20 } = {}) => {
-  const F2 = TOON && shibaFace;   // 本物寄りの体つき（脚を長く・胴を短く浅く・頭を小さく）
+const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1, ears: earType = 'prick', tail: tailType = 'curl', muzzle: mz = 1, gloss = false, blaze = false, ruff = false, long: L = 1, leg: lg = 1, shibaFace = true, collar: collarCol = 0xa32a20, breed = null } = {}) => {
+  const FORM = breed ? { ...FORM_DEF, ...BREED_FORM[breed] } : FORM_G;   // 犬種の形
+  const F2 = TOON && (shibaFace || !!breed);   // 本物寄りの体つき（脚を長く・胴を短く浅く・頭を小さく）
   if (F2) { L *= 0.93 * FORM.bodyLen; lg *= 1.1 * FORM.legLen; if (red === 0xc4692e) { red = 0xd08340; cream = 0xf7eddc; earIn = 0xd8ae96; } }   // 写真の柴：脚が長く胴は浅い。毛は明るい赤茶
   const coat = (gloss ? 0.35 : 1) * (F2 ? FORM.fur : 1);   // つやのある短毛は毛のふさを短く
   const mats = {
@@ -2194,7 +2202,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     furOf(blob(mats.red, 0.097 * fw, 0.042 * (0.55 + 0.45 * sp), 0.048, 0, 0.04 - 0.012 * (1 - sp), 0.058 - 0.022 * (1 - sp) - 0.014 * (1 - FORM.brow), head), 0);             // 額
     furOf(blob(mats.red, 0.055, 0.05, 0.048, 0.082 * fw, 0.0, 0.012, head), 0.012);       // 顔の横（赤毛）
     furOf(blob(mats.red, 0.055, 0.05, 0.048, -0.082 * fw, 0.0, 0.012, head), 0.012);
-    for (const sx of [1, -1]) { const ck = FORM.cheek; furOf(blob(mats.cream, 0.062 * ck, 0.05 * ck, 0.054 * ck, 0.064 * (0.6 + 0.4 * ck) * fw * sx, -0.046, 0.036, head), 0.011); }  // 白い頬
+    for (const sx of [1, -1]) { const ck = FORM.cheek; furOf(blob(shibaFace ? mats.cream : mats.red, 0.062 * ck, 0.05 * ck, 0.054 * ck, 0.064 * (0.6 + 0.4 * ck) * fw * sx, -0.046, 0.036, head), 0.011); }  // 白い頬
     kk(furOf(blob(mats.cream, 0.044, 0.03, 0.062, 0, -0.006, 0.062, snout), 0), 0.55);    // マズル
     kk(furOf(blob(mats.red, 0.03, 0.02, 0.06, 0, 0.02 + FORM.bridge, 0.05, snout), 0), 0.55);      // 鼻すじ
   } else {
@@ -2210,7 +2218,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   blob(mats.mouth, 0.045, 0.022, 0.07 * mz, 0, -0.058, 0.1 * mz, head);   // 口の中（開くと見える）
   if (F2) blob(mats.black, 0.018 / FORM.muzzleThick, 0.014 / FORM.muzzleThick, 0.012 / FORM.muzzleLen, 0, 0.002, 0.122, snout); else
   blob(mats.black, 0.024, 0.02, 0.02, 0, -0.012, 0.197 * mz, head);   // 鼻
-  if (blaze) { blob(mats.cream, 0.022, 0.012, 0.11 * mz, 0, 0.008, 0.1 * mz, head); blob(mats.cream, 0.02, 0.05, 0.02, 0, 0.06, 0.105, head); }   // 顔の白い筋
+  if (blaze && F2) { furOf(blob(mats.cream, 0.022, 0.016, 0.06, 0, 0.022, 0.05, snout), 0).userData.sdf = { k: 0.55 }; furOf(blob(mats.cream, 0.018, 0.05, 0.02, 0, 0.05, 0.075, head), 0).userData.sdf = { k: 0.55 }; }   // 顔の白い筋（鼻すじから額へ）
+  else if (blaze) { blob(mats.cream, 0.022, 0.012, 0.11 * mz, 0, 0.008, 0.1 * mz, head); blob(mats.cream, 0.02, 0.05, 0.02, 0, 0.06, 0.105, head); }   // 顔の白い筋
   const eyes = [1, -1].map(s => blob(mats.black, 0.017, 0.019, 0.012, 0.052 * s, 0.028, 0.111, head));
   let collar = null;
   if (SMOOTH) {   // 目：黒いふちの中に茶色の虹彩・瞳・光の点。首輪：首の付け根に赤い輪と金の札
@@ -2223,7 +2232,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.009, 8, 28), new THREE.MeshStandardMaterial({ color: collarCol, roughness: 0.55 })); band.scale.set(1, 1.12, 1.5); collar.add(band); collar.userData.band = band;
     const tagM = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 12), new THREE.MeshStandardMaterial({ color: 0xd8b24a, roughness: 0.3, metalness: 0.8 })); tagM.position.set(0, -0.128, 0.014); tagM.rotation.x = Math.PI / 2; collar.add(tagM); collar.userData.tag = tagM;
   }
-  if (F2) for (const sx of [1, -1]) furOf(blob(mats.cream, 0.015, 0.009, 0.01, (0.04 + FORM.eyeSpread) * sx, 0.046 + FORM.eyeUp, 0.098 - 0.03 * (1 - FORM.brow), head), 0).userData.sdf = { k: 0.5 };   // 目の上の白（麻呂眉）
+  if (F2 && shibaFace) for (const sx of [1, -1]) furOf(blob(mats.cream, 0.015, 0.009, 0.01, (0.04 + FORM.eyeSpread) * sx, 0.046 + FORM.eyeUp, 0.098 - 0.03 * (1 - FORM.brow), head), 0).userData.sdf = { k: 0.5 };   // 目の上の白（麻呂眉）
   else if (shibaFace) {
     furOf(blob(mats.cream, 0.016, 0.01, 0.01, 0.042, 0.062, 0.108, head), 0);   // 麻呂眉
     furOf(blob(mats.cream, 0.016, 0.01, 0.01, -0.042, 0.062, 0.108, head), 0);
@@ -2242,7 +2251,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     ear.rotation.set(0.12, 0, -0.28 * s);
     if (earType === 'drop') {   // 垂れ耳：頭の横に平たい耳がぶら下がる
       ear.position.set(0.112 * s, 0.045, -0.02);
-      blob(mats.red, 0.018, 0.08, 0.05, 0.01 * s, -0.065, 0.012, ear);
+      if (F2) { ear.position.set(0.1 * s, 0.05, -0.01); ear.rotation.set(0.1, 0, 0.12 * s); const pd = breed === 'poodle'; furOf(blob(mats.red, pd ? 0.03 : 0.02, pd ? 0.085 : 0.075, pd ? 0.055 : 0.05, 0.008 * s, -0.06, 0.01, ear), pd ? 0.03 : 0.004); }   // 平たく垂れた耳（プードルは毛の房）
+      else blob(mats.red, 0.018, 0.08, 0.05, 0.01 * s, -0.065, 0.012, ear);
     } else if (earType === 'semi') {   // 半立ち耳：根元は立ち、先が前へ折れる
       const outer = new THREE.Mesh(new THREE.ConeGeometry(0.046, 0.08, 4), mats.earRed);
       outer.position.y = 0.035; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.5; ear.add(outer);
@@ -2280,6 +2290,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     }
   }
   blob(mats.red, 0.04, 0.045, 0.04, 0, 0, 0, tail);
+  if (breed === 'poodle' && F2) { furOf(blob(mats.red, 0.1, 0.075, 0.095, 0, 0.075, -0.012, head), 0.03); }   // プードルの頭の上のふくらみ
   if (ruff) { blob(mats.cream, 0.12, 0.12, 0.09, 0, 0.0, 0.25 * L, front); blob(mats.cream, 0.105, 0.09, 0.1, 0, 0.1, 0.0, neck); }   // 首まわりの白いふさふさ
 
   // ----- 脚（3節） -----
@@ -2328,7 +2339,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       const M = collar.matrixWorld.clone().invert().multiply(root.matrixWorld), ps = sk.geometry.attributes.position, v = new THREE.Vector3(), NB = 28, R = new Array(NB).fill(0);
       for (let i = 0; i < sk.geometry.userData.n0; i++) { v.fromBufferAttribute(ps, i).applyMatrix4(M); const r = Math.hypot(v.x, v.y); if (Math.abs(v.z) > 0.012 || r > 0.15) continue; const k = Math.floor((Math.atan2(v.y, v.x) / (Math.PI * 2) + 1) % 1 * NB) % NB; if (r > R[k]) R[k] = r; }
       const med = R.filter(r => r > 0).sort((a, b) => a - b); const mid = med.length ? med[med.length >> 1] : 0.1;
-      for (let k = 0; k < NB; k++) R[k] = Math.min(R[k] || mid, mid * 1.2);   // 点の無い向きは真ん中の値、胸や頬にかかった所は広げすぎない
+      for (let k = 0; k < NB; k++) R[k] = Math.min(R[k] || mid, mid * (breed ? 1.0 : 1.2));   // 柴以外はあごの下の毛やたるみを拾って輪が垂れやすいので、広げない   // 点の無い向きは真ん中の値、胸や頬にかかった所は広げすぎない
       const Rs = R.map((r, k) => (R[(k + NB - 1) % NB] + 2 * r + R[(k + 1) % NB]) / 4 + 0.004);
       const band = collar.userData.band, tagM = collar.userData.tag, cv = new THREE.CatmullRomCurve3(Rs.map((r, k) => { const a = (k + 0.5) / NB * Math.PI * 2; return new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0); }), true);
       band.geometry.dispose(); band.geometry = new THREE.TubeGeometry(cv, 56, 0.008, 6, true); band.scale.set(1, 1, 1.5);
@@ -3644,9 +3655,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   // 出会う相手：犬を連れた人が5組、それぞれ別の道を行き来する
   const OTHERS = [
     { name: '黒柴', kind: 'shiba', react: 5, pace: 1.05, persona: 'yield', dog: makeDog({ red: 0x2a2421, cream: 0xd9b48a, earIn: 0xc9a27a }), man: makeHuman({ shirt: 0x8a5a44, pants: 0x4a4e57, hair: 0x6b6b6b }) },
-    { name: 'ボーダーコリー', kind: 'collie', react: 3, pace: 1.2, persona: 'turner', dog: makeDog({ red: 0x4a2a1c, cream: 0xf2efe8, earIn: 0x7a5040, size: 1.15, long: 1.2, leg: 1.15, ears: 'semi', tail: 'plume', muzzle: 1.3, blaze: true, ruff: true, shibaFace: false }), man: makeHuman({ shirt: 0x4f6b4a, pants: 0x34363d, hair: 0x2a2420 }) },
-    { name: 'ラブラドール', kind: 'lab', react: 4, pace: 0.95, persona: 'avoid', dog: makeDog({ red: 0x1e1c1c, cream: 0x1e1c1c, earIn: 0x2a2525, size: 1.25, long: 1.15, leg: 1.2, ears: 'drop', tail: 'otter', muzzle: 1.35, gloss: true, shibaFace: false }), man: makeHuman({ shirt: 0xd9b3a3, pants: 0x2e3542, hair: 0x3a2618, long: true }) },
-    { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, persona: 'turner', flexi: true, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'plume', muzzle: 0.95, shibaFace: false }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
+    { name: 'ボーダーコリー', kind: 'collie', react: 3, pace: 1.2, persona: 'turner', dog: makeDog({ red: 0x4a2a1c, cream: 0xf2efe8, earIn: 0x7a5040, size: 1.15, long: 1.2, leg: 1.15, ears: 'semi', tail: 'plume', muzzle: 1.3, blaze: true, ruff: true, shibaFace: false, breed: 'collie' }), man: makeHuman({ shirt: 0x4f6b4a, pants: 0x34363d, hair: 0x2a2420 }) },
+    { name: 'ラブラドール', kind: 'lab', react: 4, pace: 0.95, persona: 'avoid', dog: makeDog({ red: 0x302a27, cream: 0x302a27, earIn: 0x3a3230, size: 1.25, long: 1.15, leg: 1.2, ears: 'drop', tail: 'otter', muzzle: 1.35, gloss: true, shibaFace: false, breed: 'lab' }), man: makeHuman({ shirt: 0xd9b3a3, pants: 0x2e3542, hair: 0x3a2618, long: true }) },
+    { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, persona: 'turner', flexi: true, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'plume', muzzle: 0.95, shibaFace: false, breed: 'poodle' }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
     { name: 'コーギー', kind: 'corgi', react: 4, pace: 1.0, persona: 'approach', dog: makeDog({ red: 0xc0722c, cream: 0xf3ece0, earIn: 0xd9a27a, size: 1.05, long: 1.3, leg: 0.6, muzzle: 1.1, blaze: true, tail: 'plume' }), man: makeHuman({ shirt: 0x2f3a4f, pants: 0x6b6050, hair: 0x1c1814 }) },
   ];
   for (const o of OTHERS) {
