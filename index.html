@@ -143,10 +143,13 @@
   #acts #jump { width: 76px; height: 76px; font-size: 15px; margin-top: 4px; }
   #acts button:active { background: rgba(240,180,106,.45); }
   #acts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  #stick { width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  #stick { width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%;
     border: 2px solid var(--glass-edge); background: rgba(30,28,22,.25); pointer-events: none; }
   #knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
     border-radius: 50%; background: rgba(255,250,240,.75); }
+  #runRing { position: absolute; left: 50%; top: 50%; width: 196px; height: 196px; margin: -98px 0 0 -98px; border-radius: 50%; border: 2px dashed rgba(255,250,240,.28); pointer-events: none; transition: border-color .15s; }   /* 外の点線の輪：内側の輪を越えて押し出すと走る */
+  #stick.run #runRing { border: 2px solid rgba(240,180,106,.8); }
+  #stick.run #knob { background: rgba(240,180,106,.85); }
   #lookPad { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); width: 124px; height: 124px; border-radius: 50%;
     border: 2px solid var(--glass-edge); background: rgba(30,28,22,.28); touch-action: none; }
   #lookPad[hidden] { display: none; }
@@ -208,7 +211,7 @@
   <button type="button" data-cmd="poop">うんち</button>
   <button id="jump" type="button">ジャンプ</button>
 </div>
-<div id="stick" class="ui" hidden><div id="knob"></div></div>
+<div id="stick" class="ui" hidden><div id="runRing"></div><div id="knob"></div></div>
 <div id="lookPad" class="ui" hidden><span>見回す<br>タップで背後へ</span><div id="lookKnob"></div></div>
 <div id="err" class="ui" hidden></div>
 
@@ -3168,7 +3171,7 @@ let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY
 const stickEl = document.getElementById('stick'), knobEl = document.getElementById('knob');
 const hintEl = document.getElementById('hint');
 let jumpReq = false;
-const STICK_R = 50;
+const STICK_R = 70, STICK_RUN = 1.4;   // 内側の輪（半径70px）の中は歩き。散歩では、輪の外（1.4倍まで）へ押し出すと走る
 const clock = new THREE.Clock();
 
 canvas.addEventListener('pointerdown', e => {
@@ -3185,8 +3188,8 @@ canvas.addEventListener('pointermove', e => {
   if (e.pointerId === stickId) {
     let dx = e.clientX - stickX, dy = e.clientY - stickY;
     const d = Math.hypot(dx, dy);
-    if (d > STICK_R) { dx *= STICK_R / d; dy *= STICK_R / d; }
-    knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
+    const RM = STICK_R * (WALK ? STICK_RUN : 1); if (d > RM) { dx *= RM / d; dy *= RM / d; }
+    knobEl.style.transform = `translate(${dx}px, ${dy}px)`; stickEl.classList.toggle('run', !!WALK && d > STICK_R * 1.05);
     input.x = dx / STICK_R; input.y = -dy / STICK_R;
   } else if (e.pointerId === camId) {
     camYaw -= (e.clientX - camLastX) * 0.006; camLastX = e.clientX; camDragT = clock.elapsedTime; if (Math.hypot(e.clientX - camTapX, e.clientY - camTapY) > 10) camBack = false;
@@ -3196,7 +3199,7 @@ canvas.addEventListener('pointermove', e => {
   }
 });
 const endPointer = e => {
-  if (e.pointerId === stickId) { stickId = null; input.x = input.y = 0; stickEl.hidden = true; }
+  if (e.pointerId === stickId) { stickId = null; input.x = input.y = 0; stickEl.hidden = true; stickEl.classList.remove('run'); }
   if (e.pointerId === camId) { camId = null; if (performance.now() - camTapT < 300 && Math.hypot(e.clientX - camTapX, e.clientY - camTapY) < 10) camBack = true; }   // 動かさずに軽くタップ：背後へ
 };
 canvas.addEventListener('pointerup', endPointer);
@@ -3984,7 +3987,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       rst = W.tgt.rst; rdst = W.tgt.rdst;
 
       // --- 飼い主（自分）
-      const CURVE = [[0, 0], [0.3, 0.5], [0.6, 1.2], [0.85, 1.8], [0.95, 3.0], [1, 6.5]];   // スティックの倒し具合 → 速さ(m/s)。半分くらいまではゆっくり、ふつうの歩きは6割、全力は端いっぱいだけ
+      const CURVE = [[0, 0], [0.3, 0.45], [0.65, 1.2], [1, 1.8], [1.12, 2.8], [1.4, 6.5]];   // 倒し具合 → 速さ(m/s)。内側の輪の中は歩きだけ（端で早歩き 1.8）。走るのは輪の外へ押し出した時だけ   // スティックの倒し具合 → 速さ(m/s)。半分くらいまではゆっくり、ふつうの歩きは6割、全力は端いっぱいだけ
       let want = 0; for (let i = 1; i < CURVE.length; i++) if (mag <= CURVE[i][0]) { const [a0, v0] = CURVE[i - 1], [a1, v1] = CURVE[i]; want = v0 + (v1 - v0) * (mag - a0) / (a1 - a0); break; }
       if (W.ev === 'bite') want = 0;
       if (W.ev === 'bite') mag = 0;   // 咬まれた直後は手を引っ込めて動けない
@@ -4009,7 +4012,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           else if (P.ph === 'up') { W.pickPose = { crouch: 1 - smooth(0, 0.7, P.t), hand: me.hand.clone().add(new THREE.Vector3(0, 0.02, 0)), bag }; if (P.t > 0.7) { P.ph = 'stow'; P.t = 0; } }
           else if (P.ph === 'stow') { W.pickPose = { crouch: 0, hand: 'pocket', bag: bag && P.t < 0.5 }; if (P.t > 0.9) W.pick = null; }
         }
-        want = mag * 2.2;   // 拾いに行く時はゆっくり歩み寄る
+        want = Math.min(mag, 1) * 2.2;   // 拾いに行く時はゆっくり歩み寄る
       }
       {
         const cx = collar.x - walker.x, cz = collar.z - walker.z, cl = Math.hypot(cx, cz) || 1;
@@ -4041,7 +4044,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       if (W.stam <= 0) W.spent = true; else if (W.stam > 0.45) W.spent = false;   // 尽きたら、半分近く戻るまで走れない
       want = Math.min(want, W.spent ? 1.5 : 3 + 3.5 * smooth(0, 0.3, W.stam));   // 残りが少ないと速さが落ちていく
       W.tired = Math.max(W.spent ? 1 : 0, 1 - smooth(0.05, 0.35, W.stam));
-      walker.speed += (want - walker.speed) * Math.min(1, dt * 5);
+      walker.speed += (want - walker.speed) * Math.min(1, dt * (want > walker.speed && walker.speed > 1.8 ? 1.8 : 5));   // 走りへは少しずつ上がる（歩きの速さまではすぐ）
       let nx = walker.x + Math.sin(walker.yaw) * walker.speed * dt, nz = walker.z + Math.cos(walker.yaw) * walker.speed * dt;
       if (townBlocked(nx, nz)) { nx = walker.x; nz = walker.z; }
 
@@ -5079,9 +5082,9 @@ function stepInner(dt, t) {
   if (keys.KeyW || keys.ArrowUp) iy += 1;
   if (keys.KeyS || keys.ArrowDown) iy -= 1;
   if (titleOn) ix = iy = 0;   // タイトルの間は歩かない
-  let mag = Math.min(Math.hypot(ix, iy), 1);
+  let mag = Math.min(Math.hypot(ix, iy), WALK ? STICK_RUN : 1);   // 散歩は 1 を越えると走る（輪の外へ押し出した分）
   // 散歩をキーで歩く時：ふだんは柴と同じ速さで歩き、Shift を押している間だけ走る（キーは全開か0なので、そのままだと常に全力疾走になる）
-  if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag *= keys.ShiftLeft || keys.ShiftRight ? 1 : 0.6; }   // キーはふつうの歩き（6割）
+  if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag = Math.min(mag, 1) * (keys.ShiftLeft || keys.ShiftRight ? STICK_RUN : 0.6); }   // キーはふつうの歩き（6割）
   // 歩く向きの基準：倒し始めた時のカメラの向きを、離すまで使う（カメラが飼い主を追って回ると、横に倒したまま向きが回り続けて、ぐるぐる回ってしまう）。
   // 自分でカメラを回した時だけ、基準をその向きに合わせる。一人称は見ている向きのまま
   // 一人称も同じ：倒し始めの向きを覚える（目が体について回るので、覚えないと手前に倒した時に向きが回り続ける）
