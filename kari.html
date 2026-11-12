@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v199';
+const VERSION = 'v202';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5081,7 +5081,8 @@ function stepInner(dt, t) {
   if (WALK && ix === Math.round(ix) && iy === Math.round(iy) && (ix || iy)) { const kbd = !input.x && !input.y; if (kbd) mag *= keys.ShiftLeft || keys.ShiftRight ? 1 : 0.6; }   // キーはふつうの歩き（6割）
   // 歩く向きの基準：倒し始めた時のカメラの向きを、離すまで使う（カメラが飼い主を追って回ると、横に倒したまま向きが回り続けて、ぐるぐる回ってしまう）。
   // 自分でカメラを回した時だけ、基準をその向きに合わせる。一人称は見ている向きのまま
-  if (WALK && !fpv && mag > 0.08) { if (moveRef === null || t - camDragT < 0.25) moveRef = camYaw; } else moveRef = null;
+  // 一人称も同じ：倒し始めの向きを覚える（目が体について回るので、覚えないと手前に倒した時に向きが回り続ける）
+  if (WALK && mag > 0.08) { if (moveRef === null || t - camDragT < 0.25) moveRef = camYaw; } else moveRef = null;
   const ref = moveRef ?? camYaw, fx = Math.sin(ref), fz = Math.cos(ref);
   let dx = fx * iy - fz * ix, dz = fz * iy + fx * ix;
   const user = mag > 0.08;
@@ -5190,6 +5191,8 @@ function stepInner(dt, t) {
   if (fpv) {   // 一人称：目の位置から。リードを引く・拾う・おやつ・なでる時は、柴の方へ目を落とす
     const W = WALK.W, eye = WALK.me.__head.localToWorld(fpvV.set(0, 0.035, 0.11));
     camera.position.copy(eye);
+    // 歩いている間は、目を体の向きにつける（手前や横に倒すと体ごと振り向いて、その向きを見て歩く。目だけ前に残ると、自分の上着の襟の中をのぞき込んでしまう）
+    if (mag > 0.08 && !(gyro && gyroQ) && t - camDragT > 0.25) camYaw += angDiff(camYaw, walker.yaw) * Math.min(1, dt * 8);
     const busy = W.grab && W.grab.ph !== 'let' || W.pick || W.feed || W.crouch && dog.state.lick || W.loose && W.loose.catching;
     if (busy && t - camDragT > 1.5) {
       const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.35 - eye.y;
