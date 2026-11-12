@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v215';
+const VERSION = 'v216';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -259,7 +259,7 @@ if (LITE) TOWNS.home.file = 'assets/town-kari.json';   // 北迫新町のまわ�
 // 読み込みが済むまで、今の遊びのボタンは「読み込み中…」。押しておけば済んだ時に始まる。別の遊び・別の町を選んだら、すぐそちらを読み込み直す
 // 遊び：walk＝町を散歩（?walk）・town＝柴だけで町を走る（?town=町）・meadow＝草原。MODE_BTN はタイトルのボタン
 const PAGE = /[?&]walk/.test(location.search) ? 'walk' : /[?&]town/.test(location.search) ? 'town' : 'meadow', MODE_BTN = { walk: 'tWalk', town: 'tTownRun', meadow: 'tMeadow' };
-const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', (location.search.match(/[?&](hum=[0-9])/) || [])[1], (location.search.match(/[?&](hand=[0-9])/) || [])[1], 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
+const modeURL = (m, t, go) => '?' + [m === 'walk' ? 'walk' + (/[?&]town=/.test(location.search) ? '&town=' + t : '') : m === 'town' ? 'town=' + t : '', go ? 'go' : '', (location.search.match(/[?&](hum=[0-9])/) || [])[1], 'v=' + Date.now().toString(36)].filter(Boolean).join('&');   // v：毎回ちがう URL にして、端末が覚えている古い版のページを使わせない
 const early = { on: !/[?&](test|tune)/.test(location.search) && !/[?&]go(&|$)/.test(location.search), ready: false, want: null };
 if (early.on) {
   const main = document.getElementById(MODE_BTN[PAGE]);
@@ -3325,7 +3325,7 @@ const walker = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
 const HUM = true;   // 人の作り込み：裾と襟のある上着・肩かけ鞄・ブーツ・くせ毛・頭を小さく脚を長く
 function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long = false, bag = 0, boots = 0 }) {
   const fpvHide = [];   // 一人称で隠す部品（目のすぐ下に来る襟）
-  const H2 = TOON, HN = HUM, HAND = +((location.search.match(/[?&]hand=(\d)/) || [])[1] || 0), H3 = HUM && /[?&]hum=2/.test(location.search);   // H3：作り込みの次の案（上着の前合わせ・ポケット・太めの袖・指のある手）   // アニメ調：段のある陰影・一続きの頭と髪・大きめの目
+  const H2 = TOON, HN = HUM, H3 = HUM && /[?&]hum=2/.test(location.search);   // H3：作り込みの次の案（上着の前合わせ・ポケット・太めの袖・指のある手）   // アニメ調：段のある陰影・一続きの頭と髪・大きめの目
   const mat = (c, r = 0.85) => H2 ? toonFill(new THREE.MeshToonMaterial({ color: new THREE.Color(c).offsetHSL(0, 0.03, 0.025), gradientMap: toonRamp })) : new THREE.MeshStandardMaterial({ color: c, roughness: r });
   const M = { shirt: mat(shirt), pants: mat(pants), hair: mat(hair, 0.7), skin: mat(skin, 0.75), shoes: mat(shoes, 0.6), dark: mat(0x1a1410, 0.4) };
   if (H2) { M.face = mat(skin); M.locks = mat(hair); M.locks0 = mat(hair); M.sole = mat(0xece8de); M.white = new THREE.MeshBasicMaterial({ color: 0xffffff }); M.lip = mat(0xb5705a); }
@@ -3457,8 +3457,8 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
       const fg = blob(M.skin, 0.017, 0.038, 0.036, -0.008 * s, -0.076, 0.004, hand); fg.rotation.z = -0.28 * s;
       const th = blob(M.skin, 0.012, 0.03, 0.013, -0.004 * s, -0.04, 0.043, hand); th.rotation.x = -0.45;
       const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.047, 0.034, 14), M.trim); cuff.position.y = 0.045; hand.add(cuff);
-    } else if (HAND) {   // 手（試し ?hand=1/2）：握りこぶし。幅は前後（親指が前）、厚みは左右、指先は下。指は手のひら側（体の内側）へ折る
-      const HM = HAND === 2 ? mat(0x3b3430, 0.8) : M.skin, ps = -s;   // 2＝手袋
+    } else {   // 手：握りこぶし（球ひとつだと丸い手に見える）。幅は前後（親指が前）、厚みは左右、指先は下。指は手のひら側（体の内側）へ折る
+      const HM = M.skin, ps = -s;
       const cap = (r, len, x, y, z, rx, rz, sx = 1, sz = 1) => { const o = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), HM); o.position.set(x, y, z); o.rotation.set(rx, 0, rz); o.scale.set(sx, 1, sz); hand.add(o); return o; };
       blob(HM, 0.024, 0.028, 0.028, 0, 0.022, 0, hand);                        // 手首
       cap(0.02, 0.03, 0.002 * s, -0.028, -0.002, 0, 0, 0.95, 1.85);            // 甲と手のひら（平たい板）
@@ -3469,9 +3469,6 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
       }
       cap(0.0085, 0.022, 0.026 * ps, -0.05, 0.026, -0.9, 0);                   // 親指：折った指の上へかぶせる
       const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.044, 0.03, 14), M.trim || M.shirt); cuff.position.y = 0.045; hand.add(cuff);
-    } else {
-    blob(M.skin, 0.03, 0.03, 0.03, 0, 0.025, 0, hand);                        // 手首
-    blob(M.skin, 0.028, 0.05, 0.042, 0, -0.035, 0.005, hand);                 // 手
     }
     const bag = blob(new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.35, transparent: true, opacity: 0.85 }), 0.045, 0.07, 0.055, 0, -0.045, 0.01, hand);
     bag.visible = false;                                                        // ビニル袋（フンを拾う時に手にかぶせる）
