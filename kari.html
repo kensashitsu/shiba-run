@@ -224,7 +224,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v202';
+const VERSION = 'v203';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3329,6 +3329,7 @@ const walker = { x: 0, z: 0, yaw: 0, speed: 0, jumpY: 0 };
 // 歩く・走るは脚の付け根とひざ、腕の付け根とひじの角度を1歩の周期で動かす。リードを持つ手は肩・ひじ・手の3点で犬の方へ伸ばす
 const HUM = !/[?&]hum=0/.test(location.search);   // 人の作り込み（既定。?hum=0 で前の人）：裾と襟のある上着・肩かけ鞄・ブーツ・くせ毛・頭を小さく脚を長く
 function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long = false, bag = 0, boots = 0 }) {
+  const fpvHide = [];   // 一人称で隠す部品（目のすぐ下に来る襟）
   const H2 = TOON, HN = HUM, H3 = HUM && /[?&]hum=2/.test(location.search);   // H3：作り込みの次の案（上着の前合わせ・ポケット・太めの袖・指のある手）   // アニメ調：段のある陰影・一続きの頭と髪・大きめの目
   const mat = (c, r = 0.85) => H2 ? toonFill(new THREE.MeshToonMaterial({ color: new THREE.Color(c).offsetHSL(0, 0.03, 0.025), gradientMap: toonRamp })) : new THREE.MeshStandardMaterial({ color: c, roughness: r });
   const M = { shirt: mat(shirt), pants: mat(pants), hair: mat(hair, 0.7), skin: mat(skin, 0.75), shoes: mat(shoes, 0.6), dark: mat(0x1a1410, 0.4) };
@@ -3384,7 +3385,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
   if (HN) {   // 上着：腰までかぶる裾（少し広がる）・裾の折り返し・立った襟
     coat.geometry = new THREE.LatheGeometry([[0.001, -0.085], [0.186, -0.085], [0.193, -0.07], [0.184, -0.005], [0.162, 0.09], [0.158, 0.2], [0.178, 0.33], [0.186, 0.41], [0.172, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 28);
     const hem = new THREE.Mesh(new THREE.LatheGeometry([[0.188, -0.09], [0.199, -0.087], [0.2, -0.06], [0.19, -0.056]].map(([r, y]) => new THREE.Vector2(r, y)), 28), M.trim); hem.scale.z = 0.64; torso.add(hem);
-    const collar = new THREE.Mesh(new THREE.LatheGeometry([[0.05, 0.5], [0.086, 0.497], [0.094, 0.53], [0.08, 0.566], [0.064, 0.562], [0.07, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 20), M.trim); collar.scale.z = 0.86; collar.position.z = -0.006; torso.add(collar);
+    const collar = fpvHide[fpvHide.length] = new THREE.Mesh(new THREE.LatheGeometry([[0.05, 0.5], [0.086, 0.497], [0.094, 0.53], [0.08, 0.566], [0.064, 0.562], [0.07, 0.53]].map(([r, y]) => new THREE.Vector2(r, y)), 20), M.trim); collar.scale.z = 0.86; collar.position.z = -0.006; torso.add(collar);
     if (H3) {   // 上着の表面に沿わせた薄い部品（前合わせ・えり元・ポケット）。上着と同じ輪郭を使うので浮かない
       const CP = [[0.001, -0.085], [0.186, -0.085], [0.193, -0.07], [0.184, -0.005], [0.162, 0.09], [0.158, 0.2], [0.178, 0.33], [0.186, 0.41], [0.172, 0.47], [0.12, 0.51], [0.06, 0.525], [0.001, 0.53]];
       const coatR = y => { for (let i = 1; i < CP.length; i++) if (y <= CP[i][1]) { const [r0, y0] = CP[i - 1], [r1, y1] = CP[i]; return r0 + (r1 - r0) * (y - y0) / ((y1 - y0) || 1); } return 0; };
@@ -3518,7 +3519,7 @@ function makeHuman({ shirt, pants, hair, skin = 0xe2bc98, shoes = 0x3a3a3c, long
     A.el.quaternion.setFromUnitVectors(DOWN, tmpV);
   }
   const freeHand = new THREE.Vector3();
-  return { object: root, hand, freeHand, __legs: legs, __head: head, __neck: neck, __chest: chest, update(dt, x, z, yaw, speed, aim, tension, act = null) {
+  return { object: root, hand, freeHand, __legs: legs, __head: head, __neck: neck, __chest: chest, __fpvHide: fpvHide, update(dt, x, z, yaw, speed, aim, tension, act = null) {
     const crouch = act ? act.crouch || 0 : 0, tired = act ? act.tired || 0 : 0, lick = act ? act.lick || 0 : 0;
     breathPh += dt * (2 + 4 * tired);
     root.position.set(x, H(x, z), z); root.rotation.y = yaw;
@@ -4627,7 +4628,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
       if (W.pantStop > 0 && W.mode === 'follow' && !W.ev) { sx = st.x; sz = st.z; }   // ひと息つく：立ち止まってハアハア
       const tied = W.ev !== 'loose', cross0 = tied && lowCross(walker.x, walker.z, st.x, st.z);   // すでにまたいでいる時（置き直した直後など）は、それ以上は止めない
-      const manHits = (x, z) => townBlocked(x, z) || [0, 1.57, 3.14, 4.71].some(a => lowHit(x + Math.sin(a) * 0.17, z + Math.cos(a) * 0.17)) || tied && !cross0 && lowCross(x, z, st.x, st.z);   // リードが塀に掛かって、塀の向こうとこちらには分かれられない
+      const bodyN = (x, z) => { let n = 0; for (let i = 0; i < 8; i++) { const a = i * 0.7854; if (townBlocked(x + Math.sin(a) * 0.27, z + Math.cos(a) * 0.27)) n++; } return n; }, body0 = bodyN(walker.x, walker.z);   // 体の幅：まわり8方向のうち壁に掛かる数
+      const manHits = (x, z) => townBlocked(x, z) || bodyN(x, z) > body0 || [0, 1.57, 3.14, 4.71].some(a => lowHit(x + Math.sin(a) * 0.17, z + Math.cos(a) * 0.17)) || tied && !cross0 && lowCross(x, z, st.x, st.z);   // リードが塀に掛かって、塀の向こうとこちらには分かれられない
       if (!manHits(nx, nz)) { walker.x = nx; walker.z = nz; }
       else if (!manHits(nx, walker.z)) walker.x = nx;
       else if (!manHits(walker.x, nz)) walker.z = nz;
@@ -5189,7 +5191,7 @@ function stepInner(dt, t) {
     camYaw -= cv(lookIn.x) * 1.8 * dt; camPitch = Math.max(-1.35, Math.min(0.5, camPitch + cv(lookIn.y) * 1.2 * dt)); camDragT = t;
   }
   if (fpv) {   // 一人称：目の位置から。リードを引く・拾う・おやつ・なでる時は、柴の方へ目を落とす
-    const W = WALK.W, eye = WALK.me.__head.localToWorld(fpvV.set(0, 0.035, 0.11));
+    const W = WALK.W, eye = WALK.me.__head.localToWorld(fpvV.set(0, 0.035, 0)); eye.x += Math.sin(camYaw) * 0.12; eye.z += Math.cos(camYaw) * 0.12;
     camera.position.copy(eye);
     // 歩いている間は、目を体の向きにつける（手前や横に倒すと体ごと振り向いて、その向きを見て歩く。目だけ前に残ると、自分の上着の襟の中をのぞき込んでしまう）
     if (mag > 0.08 && !(gyro && gyroQ) && t - camDragT > 0.25) camYaw += angDiff(camYaw, walker.yaw) * Math.min(1, dt * 8);
@@ -5347,7 +5349,7 @@ const fpvBtn = document.getElementById('fpvBtn'), dogArrow = document.getElement
 function setFpv(v) {
   fpv = v; document.body.classList.toggle('fpv', fpv); lookPad.hidden = !WALK; document.body.classList.toggle('pad', !!WALK); lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; camPitch = -0.38; camSnap = true;
   fpvBtn.classList.toggle('on', fpv); fpvBtn.innerHTML = (fpv ? '後ろから' : '一人称') + '<span class="key">V</span>';
-  if (WALK) WALK.me.__head.visible = WALK.me.__neck.visible = !fpv;   // 自分の頭と首は描かない（髪や、うつむいた時に首が目の前に来ないように）
+  if (WALK) { WALK.me.__head.visible = WALK.me.__neck.visible = !fpv; for (const o of WALK.me.__fpvHide) o.visible = !fpv; }   // 自分の頭と首は描かない（髪や、うつむいた時に首が目の前に来ないように）
   gyroBtn.hidden = !(fpv && gyroOk);
 }
 const gyroBtn = document.getElementById('gyroBtn'), gyroOk = 'DeviceOrientationEvent' in window && matchMedia('(pointer: coarse)').matches;
