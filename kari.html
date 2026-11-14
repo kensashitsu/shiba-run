@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v222';
+const VERSION = 'v223';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1991,7 +1991,7 @@ const TOON = TUNE || LITE;   // 柴（仮）版はいつもアニメ調   // ア
 const SMOOTH = TOON;
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 120, 120, 120, 255, 205, 205, 205, 255, 255, 255, 255, 255]), 4, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 // 柴の形のつまみ（?tune で動かす。倍率は 1＝v181 の部品の大きさ、ずらしは 0＝なし）
-const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1, eyeTilt: 0.34, eyeRound: 1, eyeW: 1, noseSize: 1, skull: 1, earTilt: 0.12, earOut: 0.28, earW: 1, earLen: 1, wCheekUp: 0, wCheekFwd: 0, mayuSize: 1, mayuUp: 0, mayuGap: 0, mayuSharp: 0, mayuOut: 0, redBridgeW: 1, redBridgeLen: 1, faceWhite: 0, faceWhiteUp: 0, faceWhiteW: 1, faceWhiteSharp: 0, throatW: 1, chestW: 1, legWhite: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
+const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1, eyeTilt: 0.34, eyeRound: 1, eyeW: 1, lineIn: 0, lineInAng: 0.5, lineOut: 0, lineOutAng: 0, lineW: 0.0018, noseSize: 1, skull: 1, earTilt: 0.12, earOut: 0.28, earW: 1, earLen: 1, wCheekUp: 0, wCheekFwd: 0, mayuSize: 1, mayuUp: 0, mayuGap: 0, mayuSharp: 0, mayuOut: 0, redBridgeW: 1, redBridgeLen: 1, faceWhite: 0, faceWhiteUp: 0, faceWhiteW: 1, faceWhiteSharp: 0, throatW: 1, chestW: 1, legWhite: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
 const FORM = { ...FORM_DEF };
 const FORM_G = FORM;   // 柴の形（makeDog の中では犬種ごとの形で FORM を置き換えるので、外の名前で持っておく）
 // 柴以外の犬種も、柴と同じ作り（本物寄りの体つき・段のある塗り・同じ目）で作る。柴の形からの違いだけを書く
@@ -2344,6 +2344,21 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     if (F2) {   // 目は皮の表面に合わせて置く（頭の形を変えても埋もれたり飛び出したりしない）
       sk.skeleton.update(); const rc = new THREE.Raycaster(), o = new THREE.Vector3(), d = new THREE.Vector3();
       eyes.forEach(e => { o.set(e.position.x, e.position.y, 0.4); head.localToWorld(o); d.set(0, 0, -1).transformDirection(head.matrixWorld); rc.set(o, d); const h = rc.intersectObject(sk, false)[0]; if (h) e.position.z = head.worldToLocal(h.point).z - 0.006 * FORM.eyeSize; });
+      // 目の切開ライン：目頭・目尻から細い黒い線をのばす。点を並べ、1つずつ皮の表面に置く（頭の丸みに沿う）
+      const lineM = new THREE.MeshStandardMaterial({ color: 0x17100c, roughness: 0.8 }), q = new THREE.Vector3();
+      eyes.forEach((e, i) => { const s = i ? -1 : 1, c = e.position, hw = e.scale.x;
+        const oc = new THREE.Vector3(s * hw, 0, 0).applyEuler(e.rotation), v = new THREE.Vector2(oc.x, oc.y).normalize();
+        for (const [len, ang, sg] of [[FORM.lineOut, FORM.lineOutAng, 1], [FORM.lineIn, FORM.lineInAng, -1]]) {
+          if (len < 0.001) continue;
+          const st = new THREE.Vector2(c.x + sg * oc.x * 0.92, c.y + sg * oc.y * 0.92), dv = v.clone().multiplyScalar(sg).rotateAround(new THREE.Vector2(), ang * s), n = Math.max(3, Math.ceil(len / 0.0025));
+          const P = [];   // 線の上の点を皮に落とす（頭の丸みに沿う）
+          for (let j = 0; j <= n; j++) { const t = j / n, px = st.x + dv.x * len * t, py = st.y + dv.y * len * t;
+            o.set(px, py, 0.4); head.localToWorld(o); rc.set(o, d); const h = rc.intersectObject(sk, false)[0]; if (!h) break;
+            q.copy(h.point); head.worldToLocal(q); P.push(new THREE.Vector3(px, py, q.z + 0.0004)); }
+          for (let j = 0; j + 1 < P.length; j++) { const t = (j + 0.5) / n, a0 = P[j], a1 = P[j + 1], dir = a1.clone().sub(a0), L2 = dir.length(); if (L2 < 1e-6) continue;
+            const dot = new THREE.Mesh(SPH, lineM); dot.position.copy(a0).add(a1).multiplyScalar(0.5); dot.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.normalize());
+            dot.scale.set(L2 * 0.62 + FORM.lineW * 0.5, FORM.lineW * (1 - 0.6 * t * t), 0.0016); head.add(dot); }
+        } });
     }
   }
 
@@ -5408,7 +5423,7 @@ if (TUNE) {
     ['頭'], ['頭の大きさ', 'headSize', 0.8, 1.35, 0.01], ['頭の高さ', 'headUp', -0.04, 0.07, 0.002], ['頭の前後', 'headFwd', -0.05, 0.05, 0.002], ['頬の張り', 'cheek', 0.5, 1.4, 0.01], ['マズルの長さ', 'muzzleLen', 0.6, 1.5, 0.01], ['マズルの太さ', 'muzzleThick', 0.7, 1.4, 0.01],
     ['顔'], ['顔の幅', 'faceW', 0.7, 1.2, 0.01], ['額の段差', 'stop', 0, 1.6, 0.02], ['眉の出っ張り', 'brow', 0, 1.5, 0.02], ['鼻すじの高さ', 'bridge', -0.012, 0.02, 0.001], ['下あごの長さ', 'jawLen', 0.5, 1.2, 0.01], ['下あごの厚み', 'jawThick', 0.5, 1.5, 0.01], ['下あごの高さ', 'jawUp', -0.012, 0.012, 0.001], ['あご下のふくらみ', 'jowl', 0.4, 1.3, 0.01],
     ['耳と目'], ['耳の大きさ', 'earSize', 0.6, 1.5, 0.01], ['耳の間隔', 'earSpread', -0.025, 0.025, 0.001], ['目の大きさ', 'eyeSize', 0.5, 1.8, 0.01], ['目の間隔', 'eyeSpread', -0.02, 0.02, 0.001], ['目の高さ', 'eyeUp', -0.02, 0.02, 0.001],
-    ['顔つき'], ['つり目の角度', 'eyeTilt', 0, 0.8, 0.01], ['目の縦の長さ', 'eyeRound', 0.5, 1.7, 0.01], ['目の横の長さ', 'eyeW', 0.6, 1.6, 0.01], ['鼻の大きさ', 'noseSize', 0.6, 1.7, 0.01], ['頭のてっぺん', 'skull', 0.8, 1.25, 0.01], ['耳の前への傾き', 'earTilt', -0.3, 0.6, 0.01], ['耳の外への開き', 'earOut', 0, 0.7, 0.01], ['耳の幅', 'earW', 0.6, 1.5, 0.01], ['耳の長さ', 'earLen', 0.7, 1.5, 0.01],
+    ['顔つき'], ['つり目の角度', 'eyeTilt', 0, 0.8, 0.01], ['目の縦の長さ', 'eyeRound', 0.5, 1.7, 0.01], ['目の横の長さ', 'eyeW', 0.6, 1.6, 0.01], ['目頭の切開ライン（0で無し）', 'lineIn', 0, 0.035, 0.0005], ['目頭のラインの向き（＋で下へ）', 'lineInAng', -0.6, 1.4, 0.02], ['目尻の切開ライン（0で無し）', 'lineOut', 0, 0.03, 0.0005], ['目尻のラインの向き（＋で上へ）', 'lineOutAng', -1, 1, 0.02], ['ラインの太さ', 'lineW', 0.0008, 0.004, 0.0001], ['鼻の大きさ', 'noseSize', 0.6, 1.7, 0.01], ['頭のてっぺん', 'skull', 0.8, 1.25, 0.01], ['耳の前への傾き', 'earTilt', -0.3, 0.6, 0.01], ['耳の外への開き', 'earOut', 0, 0.7, 0.01], ['耳の幅', 'earW', 0.6, 1.5, 0.01], ['耳の長さ', 'earLen', 0.7, 1.5, 0.01],
     ['白の入り方'], ['頬の白の高さ', 'wCheekUp', -0.03, 0.04, 0.001], ['頬の白の前後', 'wCheekFwd', -0.03, 0.03, 0.001], ['麻呂眉の大きさ（0で消える）', 'mayuSize', 0, 2.5, 0.02], ['麻呂眉の高さ', 'mayuUp', -0.012, 0.02, 0.001], ['麻呂眉の間隔', 'mayuGap', -0.02, 0.02, 0.001], ['麻呂眉のくっきり', 'mayuSharp', 0, 1, 0.02], ['麻呂眉の浮き出し', 'mayuOut', 0, 0.012, 0.0005], ['目の下の白（0で無し）', 'faceWhite', 0, 1, 0.02], ['目の下の白の上端', 'faceWhiteUp', -0.04, 0.012, 0.001], ['目の下の白の横の広さ', 'faceWhiteW', 0.5, 1.6, 0.01], ['目の下の白のくっきり', 'faceWhiteSharp', 0, 1, 0.02], ['鼻すじの赤の幅（0で白）', 'redBridgeW', 0, 2, 0.02], ['鼻すじの赤の長さ', 'redBridgeLen', 0.3, 1.3, 0.01], ['のどの白の幅', 'throatW', 0.5, 1.4, 0.01], ['胸の白の広さ', 'chestW', 0.6, 1.3, 0.01], ['脚の白の高さ', 'legWhite', 0, 2, 0.02],
     ['尾と毛'], ['尾の大きさ', 'tailSize', 0.6, 1.5, 0.01], ['尾の高さ', 'tailUp', -0.04, 0.06, 0.002], ['毛の長さ', 'fur', 0, 2.5, 0.05],
     ['姿勢：おすわり', 'sit'], ['腰の高さ', 'sitY', -0.22, -0.04, 0.005], ['体の起こし', 'sitPitch', 0.2, 1.2, 0.02], ['首の角度（−で起こす）', 'sitNeck', -1.2, 0.6, 0.02], ['頭の上下（＋で下向き）', 'sitHead', -0.8, 0.8, 0.02], ['前足の前後', 'sitFront', 0.05, 0.4, 0.005], ['後ろ足の前後', 'sitRear', -0.2, 0.15, 0.005], ['後ろ足の開き', 'sitRearX', 0.04, 0.2, 0.005],
@@ -5437,9 +5452,9 @@ if (TUNE) {
   };
   const VAL = k => k in POSE_DEF ? POSEF : FORM;
   const out = () => { const d = {}, q = {}; for (const k in FORM_DEF) if (Math.abs(FORM[k] - FORM_DEF[k]) > 1e-6) d[k] = +FORM[k].toFixed(3); for (const k in POSE_DEF) if (Math.abs(POSEF[k] - POSE_DEF[k]) > 1e-6) q[k] = +POSEF[k].toFixed(3); document.getElementById('tOut').value = 'shiba-form ' + JSON.stringify(d) + '\nshiba-pose ' + JSON.stringify(q); try { localStorage.setItem('shiba-form', JSON.stringify(d)); localStorage.setItem('shiba-pose', JSON.stringify(q)); } catch (e) { /* 覚えられなくても、この画面では使える */ } };
-  const show = () => el.querySelectorAll('input[type=range]').forEach(i => { const v = VAL(i.dataset.k)[i.dataset.k]; i.value = v; document.getElementById('tv_' + i.dataset.k).textContent = (+v).toFixed(i.step < 0.01 ? 3 : 2); });
+  const show = () => el.querySelectorAll('input[type=range]').forEach(i => { const v = VAL(i.dataset.k)[i.dataset.k]; i.value = v; document.getElementById('tv_' + i.dataset.k).textContent = (+v).toFixed(i.step < 0.001 ? 4 : i.step < 0.01 ? 3 : 2); });
   el.querySelectorAll('input[type=range]').forEach(i => {
-    i.addEventListener('input', () => { const k = i.dataset.k; VAL(k)[k] = +i.value; document.getElementById('tv_' + k).textContent = (+i.value).toFixed(i.step < 0.01 ? 3 : 2); if (k in POSE_DEF) { out(); const want = k.match(/^(sit|down|pee|poop)/)[1]; if (pose !== want) setPose(want); } else busy = performance.now() + 350; });   // 手を止めて少ししたら作り直す
+    i.addEventListener('input', () => { const k = i.dataset.k; VAL(k)[k] = +i.value; document.getElementById('tv_' + k).textContent = (+i.value).toFixed(i.step < 0.001 ? 4 : i.step < 0.01 ? 3 : 2); if (k in POSE_DEF) { out(); const want = k.match(/^(sit|down|pee|poop)/)[1]; if (pose !== want) setPose(want); } else busy = performance.now() + 350; });   // 手を止めて少ししたら作り直す
   });
   const btns = (id, names, on, pick) => { const box = document.getElementById(id); names.forEach(nm => { const b = document.createElement('button'); b.textContent = nm; b.classList.toggle('on', nm === on); b.addEventListener('click', () => { box.querySelectorAll('button').forEach(c => c.classList.toggle('on', c === b)); pick(nm); }); box.appendChild(b); }); };
   btns('tView', Object.keys(VIEW), '横', nm => { const v = VIEW[nm]; orbit = { yaw: v[0], pitch: v[1], dist: v[2], h: v[3] }; });
