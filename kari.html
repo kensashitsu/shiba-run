@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v220';
+const VERSION = 'v221';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1991,7 +1991,7 @@ const TOON = TUNE || LITE;   // 柴（仮）版はいつもアニメ調   // ア
 const SMOOTH = TOON;
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 120, 120, 120, 255, 205, 205, 205, 255, 255, 255, 255, 255]), 4, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 // 柴の形のつまみ（?tune で動かす。倍率は 1＝v181 の部品の大きさ、ずらしは 0＝なし）
-const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1, eyeTilt: 0.34, eyeRound: 1, noseSize: 1, skull: 1, earTilt: 0.12, earOut: 0.28, earW: 1, earLen: 1, wCheekUp: 0, wCheekFwd: 0, mayuSize: 1, mayuUp: 0, mayuGap: 0, mayuSharp: 0, mayuOut: 0, redBridgeW: 1, redBridgeLen: 1, throatW: 1, chestW: 1, legWhite: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
+const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1, eyeTilt: 0.34, eyeRound: 1, eyeW: 1, noseSize: 1, skull: 1, earTilt: 0.12, earOut: 0.28, earW: 1, earLen: 1, wCheekUp: 0, wCheekFwd: 0, mayuSize: 1, mayuUp: 0, mayuGap: 0, mayuSharp: 0, mayuOut: 0, redBridgeW: 1, redBridgeLen: 1, throatW: 1, chestW: 1, legWhite: 1 };   // 2026-11-11 ユーザーが調整ページで決めた形
 const FORM = { ...FORM_DEF };
 const FORM_G = FORM;   // 柴の形（makeDog の中では犬種ごとの形で FORM を置き換えるので、外の名前で持っておく）
 // 柴以外の犬種も、柴と同じ作り（本物寄りの体つき・段のある塗り・同じ目）で作る。柴の形からの違いだけを書く
@@ -2209,7 +2209,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   if (SMOOTH) {   // 目：黒いふちの中に茶色の虹彩・瞳・光の点。首輪：首の付け根に赤い輪と金の札
     const iris = new THREE.MeshStandardMaterial({ color: 0x4a2912, roughness: 0.2 }), glint = new THREE.MeshBasicMaterial({ color: 0xffffff });
     eyes.forEach((e, i) => { const s = i ? -1 : 1; e.position.set(0.054 * s, 0.03, 0.116); e.scale.set(0.019, 0.02, 0.013); e.rotation.y = 0.35 * s;
-      if (F2) { const k = FORM.eyeSize; e.position.set((0.044 + FORM.eyeSpread) * s, 0.022 + FORM.eyeUp, 0.093); e.scale.set(0.019 * k, 0.0135 * k * FORM.eyeRound, 0.009 * k); e.rotation.set(0, 0.5 * s, FORM.eyeTilt * s); e.userData.sy = 0.0135 * k * FORM.eyeRound; }   // eyeTilt：つり目の角度・eyeRound：縦の丸さ
+      if (F2) { const k = FORM.eyeSize; e.position.set((0.044 + FORM.eyeSpread) * s, 0.022 + FORM.eyeUp, 0.093); e.scale.set(0.019 * k * FORM.eyeW, 0.0135 * k * FORM.eyeRound, 0.009 * k); e.rotation.set(0, 0.5 * s, FORM.eyeTilt * s); e.userData.sy = 0.0135 * k * FORM.eyeRound; }   // eyeTilt：つり目の角度・eyeRound：縦の丸さ
       if (!F2) { blob(iris, 0.74, 0.74, 0.8, 0, 0, 0.27, e); blob(mats.black, 0.5, 0.5, 0.5, 0, 0, 0.6, e); } blob(glint, 0.13, 0.13, 0.08, 0.26, 0.3, 0.95, e); });
     collar = new THREE.Group(); collar.position.set(0, 0.035, 0.03); collar.rotation.x = -0.8; neck.add(collar);
     if (F2) { collar.position.set(0, 0.05, 0.012); collar.rotation.x = -0.5; collar.scale.setScalar(1.12); }
@@ -5402,7 +5402,7 @@ if (TUNE) {
     ['頭'], ['頭の大きさ', 'headSize', 0.8, 1.35, 0.01], ['頭の高さ', 'headUp', -0.04, 0.07, 0.002], ['頭の前後', 'headFwd', -0.05, 0.05, 0.002], ['頬の張り', 'cheek', 0.5, 1.4, 0.01], ['マズルの長さ', 'muzzleLen', 0.6, 1.5, 0.01], ['マズルの太さ', 'muzzleThick', 0.7, 1.4, 0.01],
     ['顔'], ['顔の幅', 'faceW', 0.7, 1.2, 0.01], ['額の段差', 'stop', 0, 1.6, 0.02], ['眉の出っ張り', 'brow', 0, 1.5, 0.02], ['鼻すじの高さ', 'bridge', -0.012, 0.02, 0.001], ['下あごの長さ', 'jawLen', 0.5, 1.2, 0.01], ['下あごの厚み', 'jawThick', 0.5, 1.5, 0.01], ['下あごの高さ', 'jawUp', -0.012, 0.012, 0.001], ['あご下のふくらみ', 'jowl', 0.4, 1.3, 0.01],
     ['耳と目'], ['耳の大きさ', 'earSize', 0.6, 1.5, 0.01], ['耳の間隔', 'earSpread', -0.025, 0.025, 0.001], ['目の大きさ', 'eyeSize', 0.5, 1.8, 0.01], ['目の間隔', 'eyeSpread', -0.02, 0.02, 0.001], ['目の高さ', 'eyeUp', -0.02, 0.02, 0.001],
-    ['顔つき'], ['つり目の角度', 'eyeTilt', 0, 0.8, 0.01], ['目の丸さ', 'eyeRound', 0.5, 1.7, 0.01], ['鼻の大きさ', 'noseSize', 0.6, 1.7, 0.01], ['頭のてっぺん', 'skull', 0.8, 1.25, 0.01], ['耳の前への傾き', 'earTilt', -0.3, 0.6, 0.01], ['耳の外への開き', 'earOut', 0, 0.7, 0.01], ['耳の幅', 'earW', 0.6, 1.5, 0.01], ['耳の長さ', 'earLen', 0.7, 1.5, 0.01],
+    ['顔つき'], ['つり目の角度', 'eyeTilt', 0, 0.8, 0.01], ['目の縦の長さ', 'eyeRound', 0.5, 1.7, 0.01], ['目の横の長さ', 'eyeW', 0.6, 1.6, 0.01], ['鼻の大きさ', 'noseSize', 0.6, 1.7, 0.01], ['頭のてっぺん', 'skull', 0.8, 1.25, 0.01], ['耳の前への傾き', 'earTilt', -0.3, 0.6, 0.01], ['耳の外への開き', 'earOut', 0, 0.7, 0.01], ['耳の幅', 'earW', 0.6, 1.5, 0.01], ['耳の長さ', 'earLen', 0.7, 1.5, 0.01],
     ['白の入り方'], ['頬の白の高さ', 'wCheekUp', -0.03, 0.04, 0.001], ['頬の白の前後', 'wCheekFwd', -0.03, 0.03, 0.001], ['麻呂眉の大きさ（0で消える）', 'mayuSize', 0, 2.5, 0.02], ['麻呂眉の高さ', 'mayuUp', -0.012, 0.02, 0.001], ['麻呂眉の間隔', 'mayuGap', -0.02, 0.02, 0.001], ['麻呂眉のくっきり', 'mayuSharp', 0, 1, 0.02], ['麻呂眉の浮き出し', 'mayuOut', 0, 0.012, 0.0005], ['鼻すじの赤の幅（0で白）', 'redBridgeW', 0, 2, 0.02], ['鼻すじの赤の長さ', 'redBridgeLen', 0.3, 1.3, 0.01], ['のどの白の幅', 'throatW', 0.5, 1.4, 0.01], ['胸の白の広さ', 'chestW', 0.6, 1.3, 0.01], ['脚の白の高さ', 'legWhite', 0, 2, 0.02],
     ['尾と毛'], ['尾の大きさ', 'tailSize', 0.6, 1.5, 0.01], ['尾の高さ', 'tailUp', -0.04, 0.06, 0.002], ['毛の長さ', 'fur', 0, 2.5, 0.05],
     ['姿勢：おすわり', 'sit'], ['腰の高さ', 'sitY', -0.22, -0.04, 0.005], ['体の起こし', 'sitPitch', 0.2, 1.2, 0.02], ['首の角度（−で起こす）', 'sitNeck', -1.2, 0.6, 0.02], ['頭の上下（＋で下向き）', 'sitHead', -0.8, 0.8, 0.02], ['前足の前後', 'sitFront', 0.05, 0.4, 0.005], ['後ろ足の前後', 'sitRear', -0.2, 0.15, 0.005], ['後ろ足の開き', 'sitRearX', 0.04, 0.2, 0.005],
