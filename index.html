@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v236';
+const VERSION = 'v237';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2175,11 +2175,14 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
 
   // ----- 首と頭 -----
   const neck = new THREE.Group(); neck.position.set(0, 0.06, 0.24 * L); front.add(neck);
-  if (F2) { const nt = FORM.neckThick, nl = FORM.neckLen - 1; furOf(blob(mats.red, 0.128 * nt, 0.14 * (1 + 0.6 * nl), 0.128 * nt, 0, 0.028 + 0.055 * nl, -0.005 + 0.045 * nl, neck), 0.014); const tw = FORM.throatW; furOf(blob(mats.cream, 0.1 * nt * tw, 0.12 * (0.6 + 0.4 * tw) * (1 + 0.5 * nl), 0.085 * nt, 0, -0.015 + 0.05 * nl, 0.064 * nt + 0.04 * nl, neck), 0.012); }   // neckLen：首の長さ（頭の付け根を首の向きに遠ざけ、首とのどの毛も伸ばす）   // 毛の厚い太い首と、のどの白
+  if (F2) { const nt = FORM.neckThick, nl = FORM.neckLen - 1; const tw = FORM.throatW; furOf(blob(mats.cream, 0.1 * nt * tw, 0.12 * (0.6 + 0.4 * tw) * (1 + 0.5 * nl), 0.085 * nt, 0, -0.015 + 0.05 * nl, 0.064 * nt + 0.04 * nl, neck), 0.012); }   // neckLen：首の長さ（頭の付け根を首の向きに遠ざけ、首とのどの毛も伸ばす）   // 毛の厚い太い首と、のどの白
   else furOf(blob(mats.red, 0.1, 0.12, 0.12, 0, 0.03, 0.02, neck), 0.026);
   const head = new THREE.Group(); head.position.set(0, 0.11, 0.09); neck.add(head);
   const fw = F2 ? FORM.faceW : 1;   // 顔の幅
   let snout = head;   // マズル（長さと太さを変えられるよう、柴は別の入れ物にする）
+  if (F2) {   // 首の後ろ側：胴（肩の中）から頭の付け根へ向かう先細りの筒（だ円体だと真ん中がふくらみ、首の後ろが盛り上がった）
+    const nt = FORM.neckThick, b0 = new THREE.Vector3(0, -0.05, -0.035), h0 = new THREE.Vector3(0, 0.11 * FORM.neckLen + FORM.headUp - 0.01, 0.09 * FORM.neckLen + FORM.headFwd - 0.02), dv = h0.clone().sub(b0), len = dv.length();
+    const g = new THREE.CylinderGeometry(0.078 * nt, 0.115 * nt, len, 14); g.translate(0, len / 2, 0); const m = new THREE.Mesh(g, mats.red); m.position.copy(b0); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv.normalize()); neck.add(furOf(m, 0.014)); }
   if (F2) { head.position.set(0, 0.11 * FORM.neckLen + FORM.headUp, 0.09 * FORM.neckLen + FORM.headFwd); head.scale.setScalar(FORM.headSize); snout = new THREE.Group(); snout.position.set(0, -0.012, 0.05); snout.scale.set(FORM.muzzleThick, FORM.muzzleThick, FORM.muzzleLen); head.add(snout); }
   if (F2) {   // 丸く幅広い頭・平たい額・短く白いマズルに赤い鼻すじ・大きく白い頬
     const kk = (m, k) => { m.userData.sdf = { k }; return m; };   // 形をくっきり残す（なじませすぎない）
