@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v225';
+const VERSION = 'v226';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5436,7 +5436,7 @@ if (TUNE) {
   css.textContent += '#tSave{position:sticky;top:-10px;margin:-10px -12px 8px;padding:8px 12px;background:rgba(24,22,18,.97);border-bottom:1px solid rgba(255,255,255,.15);z-index:1}#tSave small{display:block;opacity:.75;margin-top:4px;min-height:1em}#tSaveBtn{background:#d08340!important;color:#fff!important;font-weight:600}';
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'tune';
-  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
+  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button></div><div id="tFitMsg" style="display:none;background:rgba(255,179,71,.18);border:1px solid #ffb347;border-radius:8px;padding:8px;margin:6px 0;line-height:1.5"></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
     SL.map(a => a.length <= 2 ? '<h3>' + a[0] + '</h3>' : '<label><b>' + a[0] + '</b><i id="tv_' + a[1] + '"></i><input type="range" data-k="' + a[1] + '" min="' + a[2] + '" max="' + a[3] + '" step="' + a[4] + '"></label>').join('') +
     '<h3>決まったら</h3><div class="row"><button id="tCopy">値をコピー</button><button id="tReset">最初に戻す</button></div><textarea id="tOut" readonly></textarea><p>「保存」を押すと、今の形と姿勢をこのブラウザに保存します。つまみを試しに動かしたあとでも「保存した形に戻す」で戻せます。動かしている途中の値も散歩の柴にそのまま使われます。「値をコピー」した文字を Claude に貼ると、正式な形として組み込みます。</p>';
   document.body.appendChild(el);
@@ -5692,7 +5692,17 @@ if (TUNE) {
         refresh();
       }, 30);
     };
-    const apply = () => { for (const k of FIT_K) FORM[k] = +result.form[k].toFixed(3); show(); out(); build(); close(); };
+    const NAME = {}; SL.forEach(a => { if (a.length > 2) NAME[a[1]] = a[0]; });
+    const apply = () => {   // 反映して、何が変わったかを調整画面の上に出す（合わせる前に戻せる）
+      const prev = {}, ch = [];
+      for (const k of FIT_K) { prev[k] = FORM[k]; const v = +result.form[k].toFixed(3); if (Math.abs(v - FORM[k]) > 1e-4) ch.push(NAME[k] + ' ' + (+FORM[k].toFixed(3)) + '→' + v); FORM[k] = v; }
+      show(); out(); build(); close();
+      const box = document.getElementById('tFitMsg'); box.style.display = 'block';
+      box.innerHTML = '<b>写真から合わせました</b>' + (ch.length ? '：' + ch.join('、') : '（今の形とほぼ同じでした）') + '<div class="row"><button id="tFitUndo">合わせる前に戻す</button><button id="tFitOk">OK</button></div>';
+      document.getElementById('tFitUndo').onclick = () => { Object.assign(FORM, prev); show(); out(); build(); box.innerHTML = '合わせる前の形に戻しました'; setTimeout(() => { box.style.display = 'none'; }, 2500); };
+      document.getElementById('tFitOk').onclick = () => { box.style.display = 'none'; };
+      el.scrollTop = 0;
+    };
     const open = () => { ui.classList.add('on'); shape = bareShape({ ...FORM }); resize(); fitView(); refresh(); };
     const close = () => { ui.classList.remove('on'); };   // 写真と点は、ページを閉じるまでこの画面の中だけに残る（もう一度開くと続きから）
     new ResizeObserver(() => { if (ui.classList.contains('on')) resize(); }).observe(cv);   // 下のボタンの段数が変わると写真の欄の高さも変わる→絵が伸びて、押した所とずれる
