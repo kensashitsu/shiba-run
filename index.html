@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v241';
+const VERSION = 'v242';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5454,7 +5454,8 @@ if (TUNE) {
     if (td) { scene.remove(td.object, td.points, td.extras); td.object.traverse(o => { if (o.isSkinnedMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     td = makeDog({ bare: showParts }); scene.add(td.object, td.points, td.extras);
     if (td.__collar) td.__collar.visible = showCollar;   // 調整ページは首輪を出さない（首の形が見えない）。ボタンで出せる
-    if (showParts) { let n = 0; td.object.traverse(o => { if (o.isMesh && o !== td.__collar && !(td.__collar && td.__collar.children.includes(o))) { const h = (n++ * 0.618) % 1; o.material = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(h, 0.55, 0.58), roughness: 0.7 }); } }); td.points.visible = false; partsInfo(n); }   // 中の部品：皮と毛を作る前の球と筒を、1つずつ色を変えて
+    if (showParts) { let n = 0; td.object.traverse(o => { if (o.isMesh && o.userData.paint) { o.visible = false; return; }   // 色を塗るだけの部品（鼻すじの赤・目の下の白）は形を作らないので出さない
+      if (o.isMesh && o !== td.__collar && !(td.__collar && td.__collar.children.includes(o))) { const h = (n++ * 0.618) % 1; o.material = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(h, 0.55, 0.58), roughness: 0.7 }); } }); td.points.visible = false; partsInfo(n); }   // 中の部品：皮と毛を作る前の球と筒を、1つずつ色を変えて
     if (pose === 'sit' || pose === 'down') td.command(pose, ts);
     if (pose === 'pee') td.__start('mark', { ph: 4, pt: 1, side: 1 });   // おしっこ・うんちは、している最中の形で止める
     if (pose === 'poop') td.__start('poop', { ph: 3, pt: 1 });
