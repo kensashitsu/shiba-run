@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v230';
+const VERSION = 'v231';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5420,7 +5420,7 @@ let tuneFrame = null;
 if (TUNE) {
   const SL = [   // [見出し] か [名前, キー, 最小, 最大, 刻み]
     ['体'], ['脚の長さ', 'legLen', 0.75, 1.3, 0.01], ['脚の太さ', 'legThick', 0.5, 1.3, 0.01], ['足先の大きさ', 'paw', 0.5, 1.3, 0.01], ['胴の長さ', 'bodyLen', 0.8, 1.2, 0.01], ['胴の太さ', 'bodyThick', 0.7, 1.2, 0.01], ['胸の深さ', 'chest', 0.6, 1.4, 0.01], ['腹の巻き上がり', 'tuck', 0, 1, 0.02], ['首の太さ', 'neckThick', 0.6, 1.2, 0.01],
-    ['頭'], ['頭の大きさ', 'headSize', 0.8, 1.35, 0.01], ['頭の高さ', 'headUp', -0.04, 0.07, 0.002], ['頭の前後', 'headFwd', -0.05, 0.05, 0.002], ['頬の張り', 'cheek', 0.5, 1.4, 0.01], ['マズルの長さ', 'muzzleLen', 0.6, 1.5, 0.01], ['マズルの太さ', 'muzzleThick', 0.7, 1.4, 0.01],
+    ['頭'], ['頭の大きさ', 'headSize', 0.7, 1.35, 0.01], ['頭の高さ', 'headUp', -0.04, 0.07, 0.002], ['頭の前後', 'headFwd', -0.05, 0.05, 0.002], ['頬の張り', 'cheek', 0.5, 1.4, 0.01], ['マズルの長さ', 'muzzleLen', 0.6, 1.5, 0.01], ['マズルの太さ', 'muzzleThick', 0.7, 1.4, 0.01],
     ['顔'], ['顔の幅', 'faceW', 0.7, 1.2, 0.01], ['額の段差', 'stop', 0, 1.6, 0.02], ['眉の出っ張り', 'brow', 0, 1.5, 0.02], ['鼻すじの高さ', 'bridge', -0.012, 0.02, 0.001], ['下あごの長さ', 'jawLen', 0.5, 1.2, 0.01], ['下あごの厚み', 'jawThick', 0.5, 1.5, 0.01], ['下あごの高さ', 'jawUp', -0.012, 0.012, 0.001], ['あご下のふくらみ', 'jowl', 0.4, 1.3, 0.01],
     ['耳と目'], ['耳の大きさ', 'earSize', 0.6, 1.5, 0.01], ['耳の間隔', 'earSpread', -0.025, 0.025, 0.001], ['目の大きさ', 'eyeSize', 0.5, 1.8, 0.01], ['目の間隔', 'eyeSpread', -0.02, 0.02, 0.001], ['目の高さ', 'eyeUp', -0.02, 0.02, 0.001],
     ['顔つき'], ['つり目の角度', 'eyeTilt', 0, 0.8, 0.01], ['目の縦の長さ', 'eyeRound', 0.5, 1.7, 0.01], ['目の横の長さ', 'eyeW', 0.6, 1.6, 0.01], ['目頭の切開ライン（0で無し）', 'lineIn', 0, 0.035, 0.0005], ['目頭のラインの向き（＋で下へ）', 'lineInAng', -0.6, 1.4, 0.02], ['目尻の切開ライン（0で無し）', 'lineOut', 0, 0.03, 0.0005], ['目尻のラインの向き（＋で上へ）', 'lineOutAng', -1, 1, 0.02], ['ラインの太さ', 'lineW', 0.0008, 0.004, 0.0001], ['鼻の大きさ', 'noseSize', 0.6, 1.7, 0.01], ['頭のてっぺん', 'skull', 0.8, 1.25, 0.01], ['耳の前への傾き', 'earTilt', -0.3, 0.6, 0.01], ['耳の外への開き', 'earOut', 0, 0.7, 0.01], ['耳の幅', 'earW', 0.6, 1.5, 0.01], ['耳の長さ', 'earLen', 0.7, 1.5, 0.01],
@@ -5508,7 +5508,7 @@ if (TUNE) {
   // 真横の写真に打った点と、柴の同じ場所を重ねる。柴は皮を作らない骨組みだけの版（bare）で何度も作って測り、
   // 毛の厚み（皮と骨組みの差）は今の柴で一度だけ測って足す。写真は端末の中だけで使う（送らない・残さない）
   const MARKS = [   // [キー, 名前, 押す場所の説明]
-    ['nose', '鼻先', '鼻のいちばん前'], ['ear', '耳の先', '耳のいちばん上'], ['withers', '肩のいちばん高い所', '首と背中の境目（き甲）。毛の上から'],
+    ['nose', '鼻先', '鼻のいちばん前'], ['ear', '耳の先', '耳のいちばん上'], ['withers', '肩のいちばん高い所', '背中の線が首へ上がり始める所（き甲・前足の真上あたり）。首の途中ではなく。毛の上から'],
     ['chestF', '胸のいちばん前', '前足の付け根の前、胸の出っ張り'], ['chestL', '胸のいちばん下', '前足のすぐ後ろ、胸の底'], ['elbow', 'ひじ', '前足の付け根の下の、後ろへ出た関節'],
     ['pawF', '前足の先', '前足が地面に着いている所'], ['belly', 'お腹のくびれ', 'お腹の線のいちばん上がった所'], ['butt', 'お尻のいちばん後ろ', '尾の下、お尻の出っ張り'],
     ['hock', 'かかと', '後ろ足の、後ろへ出た関節'], ['pawR', '後ろ足の先', '後ろ足が地面に着いている所'], ['tail', '尾のいちばん上', '巻いた尾のてっぺん'],
@@ -5558,10 +5558,10 @@ if (TUNE) {
     return m;
   };
   const settle = d => { const s = fitTs(); for (let i = 0; i < 12; i++) d.update(0.05, i * 0.05, s, camera.position); };
-  const bareMarks = f => {   // 形 f の骨組みだけの柴を作って測る（FORM を一時的に差し替える）
-    const keep = { ...FORM }; Object.assign(FORM, f);
-    try { const d = makeDog({ bare: true }); settle(d); return marksOf(d); } finally { Object.assign(FORM, keep); }
-  };
+  // 骨組みの柴を作る（形 f。FORM を一時的に差し替える）。__neck は合わせる時だけの首の角度（立ち姿の頭の構えは犬と写真で違う＝形ではない）
+  const bareDog = f => { const keep = { ...FORM }, g = { ...f }; delete g.__neck; Object.assign(FORM, g);
+    try { const d = makeDog({ bare: true }); settle(d); if (f.__neck) { d.__parts.neck.rotation.x += f.__neck; d.object.updateMatrixWorld(true); } return d; } finally { Object.assign(FORM, keep); } };
+  const bareMarks = f => marksOf(bareDog(f));
   // 写真の点 P（画面の px）と柴の点を重ねる：大きさ・回転・位置は自由（相似）、左右は向きで決める。ずれ（m の二乗平均）を返す
   // 平らな所の点（胸の前・肩・尾のてっぺん・お腹など）は、面に沿った向きでは場所が決まらない→その向きは比べない（写真の点まで滑らせる）。端の点は少し形が変わると別の部品へ飛び移るので、幅を限ると計算が乱れる
   const SLIDE = { withers: 'z', chestF: 'y', chestL: 'z', butt: 'y', tail: 'z', belly: 'z', pawF: 'z', pawR: 'z', hock: 'z', ear: 'z' };   // 足先・かかとの前後は立ち方（足の開き）、耳の先の前後は顔の向きで変わる（形ではない）ので高さだけ比べる
@@ -5602,21 +5602,22 @@ if (TUNE) {
     for (const k in skin) { off[k] = { z: skin[k].z - bare0[k].z, y: skin[k].y - bare0[k].y }; if (SLIDE[k]) off[k][SLIDE[k]] = 0; }   // 毛の厚み（平らな向きの差は、点の選び方の違いなので足さない）
     const withOff = M => { const r = {}; for (const k in M) r[k] = { z: M[k].z + off[k].z, y: M[k].y + off[k].y }; return r; };
     const flip = (() => { const a = align(skin, P, 1), b = align(skin, P, -1); return !b || (a && a.err <= b.err) ? 1 : -1; })();
-    const span = FIT_K.map(k => RANGE[k][1] - RANGE[k][0]);
-    const toForm = x => { const f = { ...base }; FIT_K.forEach((k, i) => { f[k] = Math.min(RANGE[k][1], Math.max(RANGE[k][0], x[i])); }); return f; };
+    const FIT_V = [...FIT_K, '__neck']; RANGE.__neck = [-0.7, 0.5]; base.__neck = 0;   // 首の角度は形のつまみではない（反映しない）・弱くしか引き戻さない
+    const span = FIT_V.map(k => RANGE[k][1] - RANGE[k][0]);
+    const toForm = x => { const f = { ...base }; FIT_V.forEach((k, i) => { f[k] = Math.min(RANGE[k][1], Math.max(RANGE[k][0], x[i])); }); return f; };
     let evals = 0;
     const H0 = bare0.withers.y;   // 肩の高さ（体高）は今のまま：写真には大きさが写らないので、決めないと全部を少しずつ縮めて形を合わせ、ゲームの柴が小さくなる
-    const resid = x => { evals++; const f = toForm(x), B = bareMarks(f), r = align(withOff(B), P, flip); return r.res.concat(FIT_K.map((k, i) => LAM * (f[k] - base[k]) / span[i]), [B.withers.y - H0]); };
+    const resid = x => { evals++; const f = toForm(x), B = bareMarks(f), r = align(withOff(B), P, flip); return r.res.concat(FIT_V.map((k, i) => LAM * (k === '__neck' ? 0.3 : 1) * (f[k] - base[k]) / span[i]), [B.withers.y - H0]); };
     const ss = r => r.reduce((s, v) => s + v * v, 0);
-    let x = FIT_K.map(k => base[k]), r = resid(x), c = ss(r), mu = 1e-3; const first = c;
+    let x = FIT_V.map(k => base[k]), r = resid(x), c = ss(r), mu = 1e-3; const first = c;
     for (let it = 0; it < 25; it++) {
-      const J = FIT_K.map((k, i) => { const h = span[i] * 0.02, xp = x.slice(); xp[i] = Math.min(RANGE[k][1], x[i] + h); if (xp[i] - x[i] < h * 0.5) xp[i] = x[i] - h; const rp = resid(xp), d = xp[i] - x[i]; return rp.map((v, j) => (v - r[j]) / d); });   // J[つまみ][ずれ]
-      const n = FIT_K.length, A = [], g = [];
+      const J = FIT_V.map((k, i) => { const h = span[i] * 0.02, xp = x.slice(); xp[i] = Math.min(RANGE[k][1], x[i] + h); if (xp[i] - x[i] < h * 0.5) xp[i] = x[i] - h; const rp = resid(xp), d = xp[i] - x[i]; return rp.map((v, j) => (v - r[j]) / d); });   // J[つまみ][ずれ]
+      const n = FIT_V.length, A = [], g = [];
       for (let i = 0; i < n; i++) { A.push([]); for (let j = 0; j < n; j++) { let s = 0; for (let q = 0; q < r.length; q++) s += J[i][q] * J[j][q]; A[i].push(s); } let s = 0; for (let q = 0; q < r.length; q++) s += J[i][q] * r[q]; g.push(-s); }
       let ok = false;
       for (let t = 0; t < 6 && !ok; t++) {
         const Ad = A.map((row, i) => row.map((v, j) => i === j ? v * (1 + mu) + 1e-12 : v)), dx = solve(Ad, g);
-        const xn = x.map((v, i) => Math.min(RANGE[FIT_K[i]][1], Math.max(RANGE[FIT_K[i]][0], v + dx[i]))), rn = resid(xn), cn = ss(rn);
+        const xn = x.map((v, i) => Math.min(RANGE[FIT_V[i]][1], Math.max(RANGE[FIT_V[i]][0], v + dx[i]))), rn = resid(xn), cn = ss(rn);
         if (cn < c) { const gain = c - cn; x = xn; r = rn; c = cn; mu = Math.max(1e-6, mu / 3); ok = true; if (gain < c * 1e-4) it = 99; } else mu *= 4;
       }
       if (onStep) onStep(it, evals);
@@ -5627,7 +5628,7 @@ if (TUNE) {
   };
   window.__tune.fit = { bareMarks, marksOf, align, fitBody, settle, MARKS, get td() { return td; } };
   // 写真の上に点を打つ画面：写真は読み込んだこの画面の中だけ（送らない・保存しない）。点は写真の画素の位置で持つ（拡大しても変わらない）
-  const bareShape = f => { const keep = { ...FORM }; Object.assign(FORM, f); try { const d = makeDog({ bare: true }); settle(d); return { C: cloud(d), M: marksOf(d) }; } finally { Object.assign(FORM, keep); } };
+  const bareShape = f => { const d = bareDog(f); return { C: cloud(d), M: marksOf(d) }; };
   {
     const fcss = document.createElement('style');
     fcss.textContent = '#fitUI{position:fixed;inset:0;z-index:90;background:#1b1916;color:#f4efe6;font:14px var(--font-ui,sans-serif);display:none;flex-direction:column;-webkit-user-select:none;user-select:none;touch-action:none}#fitUI.on{display:flex}#fitTop{display:flex;gap:10px;align-items:center;padding:8px 12px;background:#2a2620;height:104px;overflow:hidden;box-sizing:border-box;flex:none}#fitTop canvas{flex:none;background:#3a352d;border-radius:8px}#fitMsg{flex:1;line-height:1.4}#fitMsg b{color:#ffd9a0;font-size:16px}#fitMsg small{display:block;opacity:.75;font-size:12px}#fitCv{flex:1;min-height:0;width:100%;display:block}#fitBot{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;padding:8px 10px env(safe-area-inset-bottom);height:calc(92px + env(safe-area-inset-bottom));box-sizing:border-box;background:#2a2620;flex:none}#fitBot button,#fitBot label{background:#f4efe6;color:#2b2118;border:0;border-radius:16px;padding:8px 13px;font:600 13px var(--font-ui,sans-serif)}#fitBot .go{background:#d08340;color:#fff}#fitBot button:disabled{opacity:.35}#fitBot input{display:none}';
