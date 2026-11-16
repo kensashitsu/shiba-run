@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v243';
+const VERSION = 'v244';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2381,7 +2381,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     _u.set(0, 1, 0).applyQuaternion(_q);                 // 親から見た「真上」
     _f.set(0, 0, 1).applyQuaternion(root.quaternion).setY(0).normalize().applyQuaternion(_q);   // 親から見た「前（水平）」
     const [a, b, c] = L.lens;
-    const back = L.isFront ? 0.012 : -0.035;             // 手首は足先の少し前、かかとは少し後ろ
+    const back = L.isFront ? 0.012 : -0.012;             // 手首は足先の少し前、かかとは少し後ろ（-0.035 だと短い中足が35度傾き、後ろ足が「く」の字に折れてしゃがんで見えた）
     const cu = c * (1 - lie) + 0.006 * lie, cf = back * (1 - lie) - c * lie;
     const jy = ty + _u.y * cu + _f.y * cf, jz = tz + _u.z * cu + _f.z * cf;
     L.reach = Math.hypot(jy, jz) / (a + b);              // 1を超えると足が届いていない
@@ -5517,7 +5517,7 @@ if (TUNE) {
   tFloor.rotation.x = -Math.PI / 2; tFloor.receiveShadow = true; scene.add(tFloor);
   const plainBg = () => { scene.background = ovOn ? null : tBg; for (const o of scene.children) o.visible = o.isLight || (o === tFloor && !ovOn) || (td && (o === td.object || o === td.points || o === td.extras)); };
   show(); out(); build();
-  window.__tune = { get dog() { return td; }, ts, set: (k, v) => { FORM[k] = v; show(); out(); build(); }, view: nm => { const v = VIEW[nm]; orbit = { yaw: v[0], pitch: v[1], dist: v[2], h: v[3] }; }, cam: (yaw, pitch, dist, h) => { orbit = { yaw, pitch, dist, h }; }, FORM };   // cam：確認用に視点を数値で
+  window.__tune = { get dog() { return td; }, ts, set: (k, v) => { FORM[k] = v; show(); out(); build(); }, view: nm => { const v = VIEW[nm]; orbit = { yaw: v[0], pitch: v[1], dist: v[2], h: v[3] }; }, cam: (yaw, pitch, dist, h, dz = 0) => { orbit = { yaw, pitch, dist, h, dz }; }, FORM };   // cam：確認用に視点を数値で
   // ----- 写真から体形を合わせる -----
   // 真横の写真に打った点と、柴の同じ場所を重ねる。柴は皮を作らない骨組みだけの版（bare）で何度も作って測り、
   // 毛の厚み（皮と骨組みの差）は今の柴で一度だけ測って足す。写真は端末の中だけで使う（送らない・残さない）
@@ -5800,7 +5800,7 @@ if (TUNE) {
     if (pose === 'walk') { const v = 1.3; ts.yaw += v / 3 * dt; ts.x += Math.sin(ts.yaw) * v * dt; ts.z += Math.cos(ts.yaw) * v * dt; ts.speed = v; } else ts.speed = 0;
     td.update(dt, t, ts, camera.position);
     const a = ts.yaw + orbit.yaw, c = Math.cos(orbit.pitch), wide = innerWidth > 700, D = orbit.dist * (wide ? 1 : Math.max(1, 1.1 * innerHeight / innerWidth)), gy = td.object.position.y;
-    const tx = ts.x, tz = ts.z;
+    const tx = ts.x + Math.sin(ts.yaw) * (orbit.dz || 0), tz = ts.z + Math.cos(ts.yaw) * (orbit.dz || 0);   // dz：見る所を体の前後へ（確認用）
     camera.position.set(tx + Math.sin(a) * c * D, gy + orbit.h + Math.sin(orbit.pitch) * D, tz + Math.cos(a) * c * D);
     camera.lookAt(tx, gy + orbit.h, tz); camera.fov = 26;
     camera.setViewOffset(innerWidth, innerHeight, wide ? 150 : 0, wide ? 0 : innerHeight * 0.24, innerWidth, innerHeight);   // つまみの列に隠れないよう、柴を空いている側へ寄せて写す
