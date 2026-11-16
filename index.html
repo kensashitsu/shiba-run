@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v242';
+const VERSION = 'v243';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2303,7 +2303,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     const hip = new THREE.Group(); hip.position.set(x, y, z); parent.add(hip);
     const b1 = new THREE.Group(), b2 = new THREE.Group(), b3 = new THREE.Group();
     hip.add(b1); b2.position.y = -lens[0]; b1.add(b2); b3.position.y = -lens[1]; b2.add(b3);
-    const lt = F2 ? FORM.legThick : 1, pw = F2 ? FORM.paw : 1;
+    const lt = F2 ? FORM.legThick : 1, pw = F2 ? FORM.paw : 1; let paw = null;
     if (isFront) blob(mats.red, F2 ? 0.052 * lt : 0.05, F2 ? 0.085 : 0.075, F2 ? 0.066 * lt : 0.06, 0, -0.04, 0, b1);           // 肩
     else if (F2) furOf(blob(mats.red, 0.068 * lt, 0.11, 0.095 * lt, 0, -0.05, 0.0, b1), 0.024);
     else furOf(blob(mats.red, 0.062, 0.085, 0.078, 0, -0.045, 0.012, b1), 0.026);           // 太もも
@@ -2311,15 +2311,16 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       seg(b1, lens[0], (isFront ? 0.038 : 0.04) * lt, (isFront ? 0.05 : 0.056) * lt, mats.red, isFront ? 0.008 : 0.02);
       seg(b2, lens[1], (isFront ? 0.03 : 0.028) * lt, (isFront ? 0.036 : 0.038) * lt, mats.ltan, 0.006);
       seg(b3, lens[2], 0.028 * lt, (isFront ? 0.029 : 0.027) * lt, mats.lpale, 0.003);
-      furOf(blob(mats.cream, 0.033 * pw, 0.02 * pw, 0.038 * pw, 0, -lens[2] + 0.003, 0.01 * pw, b3), 0);
-      for (const tx of [-0.018, 0, 0.018]) furOf(blob(mats.cream, 0.012 * pw, 0.014 * pw, 0.015 * pw, tx * pw, -lens[2] + 0.001, (0.04 - Math.abs(tx) * 0.4) * pw, b3), 0);   // 指
+      paw = new THREE.Group(); paw.position.y = -lens[2]; b3.add(paw);   // 足先は別の関節：中足（かかと・手首から下）が傾いても足の裏を地面と平行に保つ（solveLeg で向きを戻す）
+      furOf(blob(mats.cream, 0.033 * pw, 0.02 * pw, 0.038 * pw, 0, 0.003, 0.01 * pw, paw), 0);
+      for (const tx of [-0.018, 0, 0.018]) furOf(blob(mats.cream, 0.012 * pw, 0.014 * pw, 0.015 * pw, tx * pw, 0.001, (0.04 - Math.abs(tx) * 0.4) * pw, paw), 0);   // 指
     } else {
     seg(b1, lens[0], 0.04, 0.032, mats.red, 0.012);
     seg(b2, lens[1], 0.031, 0.026, isFront ? mats.red : mats.red, 0.007);
     seg(b3, lens[2], 0.026, 0.026, mats.cream);
     furOf(blob(mats.cream, 0.034, 0.022, 0.045, 0, -lens[2], 0.016, b3), 0);           // 足先
     }
-    return { hip, b1, b2, b3, lens, bend, isFront };
+    return { hip, b1, b2, b3, paw, lens, bend, isFront };
   };
   const FY = 0.004;   // 柴と同じ作りの前脚の付け根：-0.02 だと立った時に前脚が長すぎて、ひじが60度ほど曲がった（付け根は肩のふくらみの中）
   const bw = F2 ? FORM.bodyThick : 1;   // 胴の太さに合わせて、脚の付け根と足の置き場も左右へ動かす
@@ -2369,7 +2370,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
 
   const FOOT_UP = 0.022;   // 足先の厚み（地面から足首の付け根まで）
   const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
-  const _v = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3(), _q = new THREE.Quaternion();
+  const _v = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion();
   // 足先（世界座標）に届くよう3節の角度を決める。最後の節（中手・中足）は地面に対してほぼ立てておく
   function solveLeg(L, footW, lie = 0) {   // lie：ふせ。最後の節（前足の先）を立てず、前へ寝かせて地面に置く
     const parent = L.hip.parent;
@@ -2393,6 +2394,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     const rz = kz + b * Math.sin(th2), ry = ky - b * Math.cos(th2);
     const th3 = Math.atan2(tz - rz, -(ty - ry));
     L.b1.rotation.x = -th1; L.b2.rotation.x = -(th2 - th1); L.b3.rotation.x = -(th3 - th2);
+    if (L.paw) { L.b3.getWorldQuaternion(_pq).invert(); root.getWorldQuaternion(_q); L.paw.quaternion.copy(_pq.multiply(_q)); }   // 足の裏は体（足元）の向きのまま＝地面と平行
   }
 
   // ----- 歩き方 -----
