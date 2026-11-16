@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v224';
+const VERSION = 'v225';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2122,7 +2122,7 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
 // 足先の位置を先に決め、関節の角度を逆算する（IK）。歩く時、着地中の足は地面に固定し、浮いている足だけ次の着地点へ運ぶ。
 // 何をするか（姿勢・仕草）は dog.think、形と動きは dog.update が受け持つ。
 // 毛色を変えれば別の犬も作れる（散歩で出会う犬など）
-const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1, ears: earType = 'prick', tail: tailType = 'curl', muzzle: mz = 1, gloss = false, blaze = false, ruff = false, long: L = 1, leg: lg = 1, shibaFace = true, collar: collarCol = 0xa32a20, breed = null } = {}) => {
+const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1, ears: earType = 'prick', tail: tailType = 'curl', muzzle: mz = 1, gloss = false, blaze = false, ruff = false, long: L = 1, leg: lg = 1, shibaFace = true, collar: collarCol = 0xa32a20, breed = null, bare = false } = {}) => {   // bare：皮（smoothSkin）を作らず部品のまま返す（写真合わせで何度も作る用・速い）
   const FORM = breed ? { ...(shibaFace ? FORM_G : FORM_DEF), ...BREED_FORM[breed] } : FORM_G;   // 犬種の形
   const F2 = TOON && (shibaFace || !!breed);   // 本物寄りの体つき（脚を長く・胴を短く浅く・頭を小さく）
   if (F2) { L *= 0.93 * FORM.bodyLen; lg *= 1.1 * FORM.legLen; if (red === 0xc4692e) { red = 0xd08340; cream = 0xf7eddc; earIn = 0xd8ae96; } }   // 写真の柴：脚が長く胴は浅い。毛は明るい赤茶
@@ -2328,7 +2328,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   root.scale.setScalar(size);
   const NEUTRAL = [[0.075, 0.2], [-0.075, 0.2], [0.08, -0.2], [-0.08, -0.2]].map(([x, z]) => [x * size * bw, z * size * L]);   // 立った時の足の位置（足元の中心から）
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  if (SMOOTH) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn, mats.tan, mats.pale, mats.ltan, mats.lpale], { kc: F2 ? 0.011 : 0.005, split: [jaw], rough: gloss ? 0.6 : 0.85, shade: TOON ? 0.1 : 0.14, fur: (F2 ? 0.012 : 0.016) * coat, toon: TOON, furDens: TOON ? 0.3 : 0.5, furW: TOON ? 0.5 : 0.28 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() });
+  if (SMOOTH && !bare) { const sk = smoothSkin(root, [mats.red, mats.cream, mats.earRed, mats.earIn, mats.tan, mats.pale, mats.ltan, mats.lpale], { kc: F2 ? 0.011 : 0.005, split: [jaw], rough: gloss ? 0.6 : 0.85, shade: TOON ? 0.1 : 0.14, fur: (F2 ? 0.012 : 0.016) * coat, toon: TOON, furDens: TOON ? 0.3 : 0.5, furW: TOON ? 0.5 : 0.28 }); fur.length = 0; fur.push({ m: sk.material, base: sk.material.color.clone() });
     if (F2 && collar) {   // 首輪は首の皮に沿わせる（首の太さや毛を変えても浮かない・埋もれない）：輪の面の近くにある皮の点を、向きごとに拾う
       collar.scale.setScalar(1); collar.position.copy(head.position).multiplyScalar(0.5); collar.rotation.x = -Math.atan2(head.position.y, head.position.z);   // 首の付け根と頭の真ん中に、首の向きと直角に巻く（斜めにすると胸まで垂れる）
       root.updateMatrixWorld(true);
@@ -3167,7 +3167,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   }
 
   const takePoop = g => { const k = poops.indexOf(g); if (k >= 0) { poops.splice(k, 1); extras.remove(g); } };
-  return { object: root, points, extras, radius: 0.5, think, command, update, state: S, __start: start, __startSeq: startSeq, __feet: feet, __legs: legs, __head: head, __collar: collar, poops, takePoop };
+  return { object: root, points, extras, radius: 0.5, think, command, update, state: S, __start: start, __startSeq: startSeq, __feet: feet, __legs: legs, __head: head, __collar: collar, __parts: { front, rear, neck, head, tail }, poops, takePoop };
 };
 const dog = makeDog();
 scene.add(dog.object, dog.points, dog.extras);
@@ -5436,7 +5436,7 @@ if (TUNE) {
   css.textContent += '#tSave{position:sticky;top:-10px;margin:-10px -12px 8px;padding:8px 12px;background:rgba(24,22,18,.97);border-bottom:1px solid rgba(255,255,255,.15);z-index:1}#tSave small{display:block;opacity:.75;margin-top:4px;min-height:1em}#tSaveBtn{background:#d08340!important;color:#fff!important;font-weight:600}';
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'tune';
-  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
+  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
     SL.map(a => a.length <= 2 ? '<h3>' + a[0] + '</h3>' : '<label><b>' + a[0] + '</b><i id="tv_' + a[1] + '"></i><input type="range" data-k="' + a[1] + '" min="' + a[2] + '" max="' + a[3] + '" step="' + a[4] + '"></label>').join('') +
     '<h3>決まったら</h3><div class="row"><button id="tCopy">値をコピー</button><button id="tReset">最初に戻す</button></div><textarea id="tOut" readonly></textarea><p>「保存」を押すと、今の形と姿勢をこのブラウザに保存します。つまみを試しに動かしたあとでも「保存した形に戻す」で戻せます。動かしている途中の値も散歩の柴にそのまま使われます。「値をコピー」した文字を Claude に貼ると、正式な形として組み込みます。</p>';
   document.body.appendChild(el);
@@ -5496,6 +5496,228 @@ if (TUNE) {
   dog.object.visible = false; dog.points.visible = false; dog.extras.visible = false;
   show(); out(); build();
   window.__tune = { get dog() { return td; }, ts, set: (k, v) => { FORM[k] = v; show(); out(); build(); }, view: nm => { const v = VIEW[nm]; orbit = { yaw: v[0], pitch: v[1], dist: v[2], h: v[3] }; }, FORM };
+  // ----- 写真から体形を合わせる -----
+  // 真横の写真に打った点と、柴の同じ場所を重ねる。柴は皮を作らない骨組みだけの版（bare）で何度も作って測り、
+  // 毛の厚み（皮と骨組みの差）は今の柴で一度だけ測って足す。写真は端末の中だけで使う（送らない・残さない）
+  const MARKS = [   // [キー, 名前, 押す場所の説明]
+    ['nose', '鼻先', '鼻のいちばん前'], ['ear', '耳の先', '耳のいちばん上'], ['withers', '肩のいちばん高い所', '首と背中の境目（き甲）。毛の上から'],
+    ['chestF', '胸のいちばん前', '前足の付け根の前、胸の出っ張り'], ['chestL', '胸のいちばん下', '前足のすぐ後ろ、胸の底'], ['elbow', 'ひじ', '前足の付け根の下の、後ろへ出た関節'],
+    ['pawF', '前足の先', '前足が地面に着いている所'], ['belly', 'お腹のくびれ', 'お腹の線のいちばん上がった所'], ['butt', 'お尻のいちばん後ろ', '尾の下、お尻の出っ張り'],
+    ['hock', 'かかと', '後ろ足の、後ろへ出た関節'], ['pawR', '後ろ足の先', '後ろ足が地面に着いている所'], ['tail', '尾のいちばん上', '巻いた尾のてっぺん'],
+  ];
+  const FIT_K = ['legLen', 'bodyLen', 'chest', 'tuck', 'headSize', 'muzzleLen', 'headUp', 'headFwd', 'tailSize', 'tailUp'];
+  const RANGE = {}; SL.forEach(a => { if (a.length > 2) RANGE[a[1]] = [a[2], a[3]]; });
+  const fitTs = () => ({ x: home.x, z: home.z, yaw: 0, speed: 0, jumpY: 0 });
+  // 柴の部品の点を「どこの部品か」付きで集める（足元の中心から見た z＝前・y＝上）
+  const tagger = d => {
+    const P = d.__parts, tags = new Map([[P.tail, 'tail'], [P.head, 'head'], [P.neck, 'neck'], [P.front, 'front'], [P.rear, 'rear']]);
+    d.__legs.forEach((l, i) => { tags.set(l.hip, 'leg' + i); tags.set(l.b3, 'paw' + i); });
+    return o => { for (let q = o; q; q = q.parent) { if (q === d.__collar) return null; if (tags.has(q)) return tags.get(q); } return null; };
+  };
+  const cloud = d => {
+    const root = d.object, tag = tagger(d), C = [], v = new THREE.Vector3(), inv = new THREE.Matrix4();
+    root.updateMatrixWorld(true); inv.copy(root.matrixWorld).invert();
+    root.traverse(o => {
+      if (!o.isMesh || !o.visible) return;
+      const ps = o.geometry.attributes.position, N = ps.count;
+      if (o.isSkinnedMesh) {   // 皮：点ごとに一番重い骨の部品
+        o.skeleton.update(); const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight, bones = o.skeleton.bones, tg = bones.map(tag);
+        for (let i = 0; i < N; i++) {
+          let bk = 0; for (let j = 1; j < 4; j++) if (sw.getComponent(i, j) > sw.getComponent(i, bk)) bk = j;
+          const k = tg[si.getComponent(i, bk)]; if (!k) continue;
+          v.fromBufferAttribute(ps, i); o.boneTransform(i, v); v.applyMatrix4(o.matrixWorld).applyMatrix4(inv); C.push({ k, z: v.z, y: v.y });
+        }
+      } else { const k = tag(o); if (!k) return; const M = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld); for (let i = 0; i < N; i++) { v.fromBufferAttribute(ps, i).applyMatrix4(M); C.push({ k, z: v.z, y: v.y }); }
+        if (o.geometry.type === 'SphereGeometry') { const e = M.elements;   // 球（だ円体）の前後上下の端は式で正確に（頂点で測ると端が頂点の間隔ごとに飛び、合わせる計算が乱れる）
+          for (const [dy, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ax = e[1] * dy + e[2] * dz, ay = e[5] * dy + e[6] * dz, az = e[9] * dy + e[10] * dz, L = Math.hypot(ax, ay, az) || 1;   // Aᵀd
+            C.push({ k, y: e[13] + (e[1] * ax + e[5] * ay + e[9] * az) / L, z: e[14] + (e[2] * ax + e[6] * ay + e[10] * az) / L }); } } }   // 端＝中心＋A·Aᵀd／|Aᵀd|（e は列ごとの並び）
+    });
+    return C;
+  };
+  const marksOf = d => {
+    const C = cloud(d), inv = new THREE.Matrix4().copy(d.object.matrixWorld).invert(), w = new THREE.Vector3();
+    const of = (...ks) => C.filter(p => ks.includes(p.k)), best = (A, f) => { let b = null, bv = -1e9; for (const p of A) { const x = f(p); if (x > bv) { bv = x; b = p; } } return b ? { z: b.z, y: b.y } : null; };
+    const jnt = o => { o.getWorldPosition(w).applyMatrix4(inv); return { z: w.z, y: w.y }; };
+    const head = of('head'), front = of('front'), rear = of('rear'), L = d.__legs, m = {};
+    m.nose = best(head, p => p.z); m.ear = best(head, p => p.y); m.withers = best(front, p => p.y);
+    m.chestF = best(front, p => p.z); m.chestL = best(front, p => -p.y); m.butt = best(rear, p => -p.z); m.tail = best(of('tail'), p => p.y);
+    m.elbow = jnt(L[0].b2); m.hock = jnt(L[2].b3);
+    const paw = A => { const y0 = Math.min(...A.map(p => p.y)), B = A.filter(p => p.y < y0 + 0.012); return { z: B.reduce((s, p) => s + p.z, 0) / B.length, y: y0 }; };
+    m.pawF = paw(of('paw0', 'paw1')); m.pawR = paw(of('paw2', 'paw3'));
+    { const z0 = jnt(L[2].hip).z + 0.02, z1 = m.elbow.z - 0.02, ym = (m.withers.y + m.chestL.y) / 2, lo = new Map();   // お腹のくびれ：前足と後ろ足の間で、胴の下の線がいちばん高い所（胴の下半分の点だけ。背中の点を拾わない）
+      for (const p of front.concat(rear)) { if (p.z < z0 || p.z > z1 || p.y > ym) continue; const b = Math.round(p.z * 50); if (!lo.has(b) || p.y < lo.get(b).y) lo.set(b, p); }
+      m.belly = best([...lo.values()], p => p.y); }
+    return m;
+  };
+  const settle = d => { const s = fitTs(); for (let i = 0; i < 12; i++) d.update(0.05, i * 0.05, s, camera.position); };
+  const bareMarks = f => {   // 形 f の骨組みだけの柴を作って測る（FORM を一時的に差し替える）
+    const keep = { ...FORM }; Object.assign(FORM, f);
+    try { const d = makeDog({ bare: true }); settle(d); return marksOf(d); } finally { Object.assign(FORM, keep); }
+  };
+  // 写真の点 P（画面の px）と柴の点を重ねる：大きさ・回転・位置は自由（相似）、左右は向きで決める。ずれ（m の二乗平均）を返す
+  // 平らな所の点（胸の前・肩・尾のてっぺん・お腹など）は、面に沿った向きでは場所が決まらない→その向きは比べない（写真の点まで滑らせる）。端の点は少し形が変わると別の部品へ飛び移るので、幅を限ると計算が乱れる
+  const SLIDE = { withers: 'z', chestF: 'y', chestL: 'z', butt: 'y', tail: 'z', belly: 'z' };
+  const align = (M, P, flip) => {
+    let r = align0(M, P, flip); if (!r) return null;
+    for (let it = 0; it < 3; it++) {
+      const Q = { ...M };
+      for (const k in SLIDE) { if (!P[k] || !M[k]) continue; const ax = SLIDE[k]; Q[k] = { ...M[k], [ax]: r.inv(P[k])[ax] }; }
+      r = align0(Q, P, flip);
+    }
+    return r;
+  };
+  const MW = { belly: 0.3 };   // 比べる重み：お腹の線は骨組みと皮で形が違いやすいので軽く
+  const align0 = (M, P, flip) => {
+    const ks = Object.keys(P).filter(k => M[k]), n = ks.length; if (n < 3) return null;
+    const wt = ks.map(k => MW[k] ?? 1), W = wt.reduce((s, x) => s + x, 0);
+    const mz = ks.map(k => [flip * M[k].z, -M[k].y]), pz = ks.map(k => [P[k].x, P[k].y]);
+    const mc = [0, 0], pc = [0, 0]; mz.forEach((q, i) => { mc[0] += wt[i] * q[0] / W; mc[1] += wt[i] * q[1] / W; }); pz.forEach((q, i) => { pc[0] += wt[i] * q[0] / W; pc[1] += wt[i] * q[1] / W; });
+    let re = 0, im = 0, den = 0;
+    for (let i = 0; i < n; i++) { const ax = mz[i][0] - mc[0], ay = mz[i][1] - mc[1], bx = pz[i][0] - pc[0], by = pz[i][1] - pc[1]; re += wt[i] * (ax * bx + ay * by); im += wt[i] * (ax * by - ay * bx); den += wt[i] * (ax * ax + ay * ay); }
+    const a = [re / den, im / den], s2 = a[0] * a[0] + a[1] * a[1], sc = Math.sqrt(s2);
+    const map = q => { const ax = flip * q.z - mc[0], ay = -q.y - mc[1]; return { x: pc[0] + a[0] * ax - a[1] * ay, y: pc[1] + a[1] * ax + a[0] * ay }; };
+    const res = []; let e = 0; ks.forEach((k, i) => { const q = map(M[k]), w = Math.sqrt(wt[i] / W), dx = (q.x - P[k].x) / sc * w, dy = (q.y - P[k].y) / sc * w; res.push(dx, dy); e += dx * dx + dy * dy; });   // ずれは柴の大きさ（m）で
+    const inv = p => { const bx = p.x - pc[0], by = p.y - pc[1], wx = (a[0] * bx + a[1] * by) / s2, wy = (a[0] * by - a[1] * bx) / s2; return { z: flip * (wx + mc[0]), y: -(wy + mc[1]) }; };   // 写真の点→柴の座標
+    return { err: e, res, map, inv, flip, scale: sc, M };
+  };
+  // つまみを探す（レーベンバーグ・マルカート法）：全部のつまみを同時に動かす。脚・胴・頭の大きさは互いに効き合う
+  // （全部一緒に大きくしても形は同じ）ので、1つずつ動かすと谷の途中で止まる。今の値から離れすぎないよう弱く引き戻す
+  const LAM = 0.006;   // 引き戻しの強さ（m 相当：つまみの幅いっぱい動かすと 0.6cm のずれと同じ重さ）
+  const solve = (A, b) => { const n = b.length, M = A.map((r, i) => [...r, b[i]]);
+    for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r; [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c] || 1e-12;
+      for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c] / d; for (let j = c; j <= n; j++) M[r][j] -= f * M[c][j]; } }
+    return M.map((r, i) => r[n] / (r[i] || 1e-12)); };
+  const fitBody = (P, onStep) => {
+    const now = td; settle(now);
+    const base = {}; for (const k in FORM) base[k] = FORM[k];
+    const skin = marksOf(now), bare0 = bareMarks(base), off = {};
+    for (const k in skin) { off[k] = { z: skin[k].z - bare0[k].z, y: skin[k].y - bare0[k].y }; if (SLIDE[k]) off[k][SLIDE[k]] = 0; }   // 毛の厚み（平らな向きの差は、点の選び方の違いなので足さない）
+    const withOff = M => { const r = {}; for (const k in M) r[k] = { z: M[k].z + off[k].z, y: M[k].y + off[k].y }; return r; };
+    const flip = (() => { const a = align(skin, P, 1), b = align(skin, P, -1); return !b || (a && a.err <= b.err) ? 1 : -1; })();
+    const span = FIT_K.map(k => RANGE[k][1] - RANGE[k][0]);
+    const toForm = x => { const f = { ...base }; FIT_K.forEach((k, i) => { f[k] = Math.min(RANGE[k][1], Math.max(RANGE[k][0], x[i])); }); return f; };
+    let evals = 0;
+    const H0 = bare0.withers.y;   // 肩の高さ（体高）は今のまま：写真には大きさが写らないので、決めないと全部を少しずつ縮めて形を合わせ、ゲームの柴が小さくなる
+    const resid = x => { evals++; const f = toForm(x), B = bareMarks(f), r = align(withOff(B), P, flip); return r.res.concat(FIT_K.map((k, i) => LAM * (f[k] - base[k]) / span[i]), [B.withers.y - H0]); };
+    const ss = r => r.reduce((s, v) => s + v * v, 0);
+    let x = FIT_K.map(k => base[k]), r = resid(x), c = ss(r), mu = 1e-3; const first = c;
+    for (let it = 0; it < 25; it++) {
+      const J = FIT_K.map((k, i) => { const h = span[i] * 0.02, xp = x.slice(); xp[i] = Math.min(RANGE[k][1], x[i] + h); if (xp[i] - x[i] < h * 0.5) xp[i] = x[i] - h; const rp = resid(xp), d = xp[i] - x[i]; return rp.map((v, j) => (v - r[j]) / d); });   // J[つまみ][ずれ]
+      const n = FIT_K.length, A = [], g = [];
+      for (let i = 0; i < n; i++) { A.push([]); for (let j = 0; j < n; j++) { let s = 0; for (let q = 0; q < r.length; q++) s += J[i][q] * J[j][q]; A[i].push(s); } let s = 0; for (let q = 0; q < r.length; q++) s += J[i][q] * r[q]; g.push(-s); }
+      let ok = false;
+      for (let t = 0; t < 6 && !ok; t++) {
+        const Ad = A.map((row, i) => row.map((v, j) => i === j ? v * (1 + mu) + 1e-12 : v)), dx = solve(Ad, g);
+        const xn = x.map((v, i) => Math.min(RANGE[FIT_K[i]][1], Math.max(RANGE[FIT_K[i]][0], v + dx[i]))), rn = resid(xn), cn = ss(rn);
+        if (cn < c) { const gain = c - cn; x = xn; r = rn; c = cn; mu = Math.max(1e-6, mu / 3); ok = true; if (gain < c * 1e-4) it = 99; } else mu *= 4;
+      }
+      if (onStep) onStep(it, evals);
+      if (!ok) break;
+    }
+    const form = toForm(x), fin = align(withOff(bareMarks(form)), P, flip);
+    return { form, err0: Math.sqrt(first), err: Math.sqrt(fin.err), map: fin.map, scale: fin.scale, flip, evals, marks: fin.M };
+  };
+  window.__tune.fit = { bareMarks, marksOf, align, fitBody, settle, MARKS, get td() { return td; } };
+  // 写真の上に点を打つ画面：写真は読み込んだこの画面の中だけ（送らない・保存しない）。点は写真の画素の位置で持つ（拡大しても変わらない）
+  const bareShape = f => { const keep = { ...FORM }; Object.assign(FORM, f); try { const d = makeDog({ bare: true }); settle(d); return { C: cloud(d), M: marksOf(d) }; } finally { Object.assign(FORM, keep); } };
+  {
+    const fcss = document.createElement('style');
+    fcss.textContent = '#fitUI{position:fixed;inset:0;z-index:90;background:#1b1916;color:#f4efe6;font:14px var(--font-ui,sans-serif);display:none;flex-direction:column;-webkit-user-select:none;user-select:none;touch-action:none}#fitUI.on{display:flex}#fitTop{display:flex;gap:10px;align-items:center;padding:8px 12px;background:#2a2620;height:104px;overflow:hidden;box-sizing:border-box;flex:none}#fitTop canvas{flex:none;background:#3a352d;border-radius:8px}#fitMsg{flex:1;line-height:1.4}#fitMsg b{color:#ffd9a0;font-size:16px}#fitMsg small{display:block;opacity:.75;font-size:12px}#fitCv{flex:1;min-height:0;width:100%;display:block}#fitBot{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;padding:8px 10px env(safe-area-inset-bottom);height:calc(92px + env(safe-area-inset-bottom));box-sizing:border-box;background:#2a2620;flex:none}#fitBot button,#fitBot label{background:#f4efe6;color:#2b2118;border:0;border-radius:16px;padding:8px 13px;font:600 13px var(--font-ui,sans-serif)}#fitBot .go{background:#d08340;color:#fff}#fitBot button:disabled{opacity:.35}#fitBot input{display:none}';
+    document.head.appendChild(fcss);
+    const ui = document.createElement('div'); ui.id = 'fitUI';
+    ui.innerHTML = '<div id="fitTop"><canvas id="fitGuide" width="240" height="150" style="width:120px;height:75px"></canvas><div id="fitMsg"></div></div><canvas id="fitCv"></canvas><div id="fitBot"></div>';
+    document.body.appendChild(ui);
+    for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'touchstart', 'touchmove', 'keydown']) ui.addEventListener(ev, e => e.stopPropagation());
+    const cv = ui.querySelector('#fitCv'), cx = cv.getContext('2d'), gcv = ui.querySelector('#fitGuide'), gx = gcv.getContext('2d'), msg = ui.querySelector('#fitMsg'), bot = ui.querySelector('#fitBot');
+    let img = null, url = null, P = {}, idx = 0, view = { s: 1, x: 0, y: 0 }, shape = null, result = null, alpha = 0.55;
+    const DPR = () => Math.min(2, devicePixelRatio || 1);
+    const resize = () => { const r = cv.getBoundingClientRect(), d = DPR(); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); draw(); };
+    const fitView = () => { if (!img) return; const r = cv.getBoundingClientRect(), s = Math.min(r.width / img.width, r.height / img.height) * 0.96; view = { s, x: (r.width - img.width * s) / 2, y: (r.height - img.height * s) / 2 }; };
+    const toScr = p => ({ x: view.x + p.x * view.s, y: view.y + p.y * view.s }), toImg = (x, y) => ({ x: (x - view.x) / view.s, y: (y - view.y) / view.s });
+    const facingLeft = () => { const r = P.butt || P.pawR || P.tail || P.hock; return P.nose && r ? P.nose.x < r.x : false; };
+    // 見本：骨組みの柴を横から、押す場所に赤い点（写真の向きに合わせて左右を返す）
+    const drawGuide = () => {
+      const W = gcv.width, H = gcv.height; gx.clearRect(0, 0, W, H); if (!shape) return;
+      const fl = facingLeft() ? -1 : 1, s = H / 0.78, ox = W / 2 - fl * 0.08 * s, oy = H - 8, pt = q => [ox + fl * q.z * s, oy - q.y * s];
+      gx.fillStyle = 'rgba(232,170,110,.55)'; for (let i = 0; i < shape.C.length; i += 3) { const [x, y] = pt(shape.C[i]); gx.fillRect(x, y, 2, 2); }
+      gx.strokeStyle = 'rgba(255,255,255,.3)'; gx.beginPath(); gx.moveTo(0, oy); gx.lineTo(W, oy); gx.stroke();
+      const k = MARKS[idx]?.[0]; if (k && shape.M[k]) { const [x, y] = pt(shape.M[k]); gx.fillStyle = '#ff3b30'; gx.strokeStyle = '#fff'; gx.lineWidth = 2; gx.beginPath(); gx.arc(x, y, 7, 0, 7); gx.fill(); gx.stroke(); }
+    };
+    const draw = () => {
+      const d = DPR(), W = cv.width / d, H = cv.height / d; cx.setTransform(d, 0, 0, d, 0, 0); cx.clearRect(0, 0, W, H);
+      if (!img) { cx.fillStyle = '#bbb'; cx.font = '15px sans-serif'; cx.textAlign = 'center'; ['下の「写真を選ぶ」から', '真横を向いて立っている写真を', '選んでください', '', '（写真はこの画面の中だけで使い、', 'どこにも送りません）'].forEach((t, i) => cx.fillText(t, W / 2, H / 2 - 60 + i * 24)); drawGuide(); return; }
+      cx.drawImage(img, view.x, view.y, img.width * view.s, img.height * view.s);
+      if (result) {   // 合わせた柴（骨組み）を重ねる
+        cx.fillStyle = 'rgba(255,150,60,' + alpha + ')';
+        for (let i = 0; i < result.C.length; i += 2) { const q = toScr(result.map(result.C[i])); cx.fillRect(q.x - 1, q.y - 1, 2.2, 2.2); }
+        cx.lineWidth = 2;
+        for (const k in P) { const m = result.marks[k]; if (!m) continue; const a = toScr(P[k]), b = toScr(result.map(m)); cx.strokeStyle = '#fff'; cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke(); cx.fillStyle = '#ff9a3c'; cx.beginPath(); cx.arc(b.x, b.y, 4, 0, 7); cx.fill(); }
+      }
+      cx.font = '600 12px sans-serif'; cx.textAlign = 'left';
+      MARKS.forEach(([k, nm], i) => { if (!P[k]) return; const q = toScr(P[k]), far = result && result.far[k];
+        cx.fillStyle = far ? '#ff3b30' : i === idx ? '#ffd23c' : '#3cc8ff'; cx.strokeStyle = '#fff'; cx.lineWidth = 2; cx.beginPath(); cx.arc(q.x, q.y, 7, 0, 7); cx.fill(); cx.stroke();
+        cx.lineWidth = 3; cx.strokeStyle = 'rgba(0,0,0,.6)'; cx.strokeText(nm, q.x + 10, q.y - 8); cx.fillStyle = '#fff'; cx.fillText(nm, q.x + 10, q.y - 8); });
+      drawGuide();
+    };
+    const B = (label, fn, cls) => { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; b.addEventListener('click', fn); bot.appendChild(b); return b; };
+    const nPts = () => Object.keys(P).length, canFit = () => P.nose && (P.pawF || P.pawR) && nPts() >= 6;
+    const refresh = () => {
+      bot.innerHTML = '';
+      const pick = document.createElement('label'); pick.innerHTML = (img ? '写真を替える' : '写真を選ぶ') + '<input type="file" accept="image/*">'; bot.appendChild(pick);
+      pick.querySelector('input').addEventListener('change', e => { const f = e.target.files[0]; if (!f) return; if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(f); const im = new Image(); im.onload = () => { img = im; P = {}; idx = 0; result = null; fitView(); refresh(); }; im.src = url; });
+      if (result) {
+        msg.innerHTML = '<b>合わせました</b>　ずれ 平均' + (result.err * 100).toFixed(1) + 'cm<small>オレンジ＝合わせた柴の骨組み（毛の分だけ細い）。赤い点はずれが2cm超。肩の高さは今の柴のまま。</small>';
+        B('この形にする', apply, 'go'); B('点を直す', () => { result = null; refresh(); }); B(alpha > 0.3 ? '重ねを薄く' : '重ねを濃く', () => { alpha = alpha > 0.3 ? 0.18 : 0.55; refresh(); });
+      } else {
+        const m = MARKS[idx];
+        msg.innerHTML = !img ? '<b>写真から体形を合わせる</b><small>真横から撮った、4本足で立っている写真で。言われた場所を順に押します。2本指で拡大・移動、置いた点は指でずらせます。</small>'
+          : m ? '<b>' + (idx + 1) + '/' + MARKS.length + '　' + m[1] + '</b><small>' + m[2] + 'を押してください。見えなければ「飛ばす」。</small>'
+          : '<b>点を打ち終わりました</b><small>点は指でずらして直せます。「合わせる」を押してください。</small>';
+        if (img) { B('ひとつ戻る', back).disabled = idx === 0; if (m) B('飛ばす', () => { idx++; refresh(); }); B('合わせる', runFit, 'go').disabled = !canFit(); }
+      }
+      B('閉じる', close);
+      draw();
+    };
+    const back = () => { idx = Math.max(0, idx - 1); delete P[MARKS[idx][0]]; refresh(); };
+    const nextFree = () => { while (idx < MARKS.length && P[MARKS[idx][0]]) idx++; };
+    const runFit = () => {
+      msg.innerHTML = '<b>合わせています…</b><small>数秒かかります</small>'; bot.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      setTimeout(() => {
+        try {
+          if (pose !== 'stand') setPose('stand');
+          const r = fitBody(P), sh = bareShape(r.form), far = {};
+          for (const k in P) { const m = r.marks[k]; if (!m) continue; const q = r.map(m); if (Math.hypot(q.x - P[k].x, q.y - P[k].y) / r.scale > 0.02) far[k] = 1; }
+          result = { ...r, C: sh.C, far };
+        } catch (e) { msg.innerHTML = '<b>合わせられませんでした</b><small>' + e.message + '</small>'; return; }
+        refresh();
+      }, 30);
+    };
+    const apply = () => { for (const k of FIT_K) FORM[k] = +result.form[k].toFixed(3); show(); out(); build(); close(); };
+    const open = () => { ui.classList.add('on'); shape = bareShape({ ...FORM }); resize(); fitView(); refresh(); };
+    const close = () => { ui.classList.remove('on'); };   // 写真と点は、ページを閉じるまでこの画面の中だけに残る（もう一度開くと続きから）
+    new ResizeObserver(() => { if (ui.classList.contains('on')) resize(); }).observe(cv);   // 下のボタンの段数が変わると写真の欄の高さも変わる→絵が伸びて、押した所とずれる
+    // 指の操作：1本＝点を置く・ずらす（何もない所をなぞると写真を動かす）、2本＝拡大と移動、ホイール＝拡大
+    const ptr = new Map(); let drag = null, pan = null, pinch = null;
+    const near = (x, y) => { let best = null, bd = 24; for (const k in P) { const q = toScr(P[k]), d = Math.hypot(q.x - x, q.y - y); if (d < bd) { bd = d; best = k; } } return best; };
+    const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    cv.addEventListener('pointerdown', e => { if (!img) return; cv.setPointerCapture(e.pointerId); const [x, y] = pos(e); ptr.set(e.pointerId, [x, y]);
+      if (ptr.size === 2) { drag = null; pan = null; const [a, b] = [...ptr.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], v: { ...view } }; return; }
+      pan = { x, y, v: { ...view }, moved: false, k: result ? null : near(x, y) }; });   // 点の上で押しても、動かさずに離せば新しい点を置く（近い点どうしを取り違えない）
+    cv.addEventListener('pointermove', e => { if (!ptr.has(e.pointerId)) return; const [x, y] = pos(e); ptr.set(e.pointerId, [x, y]);
+      if (pinch && ptr.size === 2) { const [a, b] = [...ptr.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], f = d / pinch.d, v = pinch.v;
+        view = { s: v.s * f, x: m[0] - (pinch.m[0] - v.x) * f, y: m[1] - (pinch.m[1] - v.y) * f }; draw(); return; }
+      if (drag) { P[drag] = toImg(x, y); draw(); return; }
+      if (pan) { if (Math.hypot(x - pan.x, y - pan.y) > 8) { pan.moved = true; if (pan.k) { drag = pan.k; pan = null; P[drag] = toImg(x, y); draw(); return; } } if (pan.moved) { view = { ...pan.v, x: pan.v.x + x - pan.x, y: pan.v.y + y - pan.y }; draw(); } } });
+    const up = e => { if (!ptr.has(e.pointerId)) return; const [x, y] = pos(e); ptr.delete(e.pointerId);
+      if (pinch) { if (ptr.size < 2) pinch = null; pan = null; return; }
+      if (drag) { drag = null; refresh(); return; }
+      if (pan && !pan.moved && !result && idx < MARKS.length) { P[MARKS[idx][0]] = toImg(x, y); idx++; nextFree(); refresh(); }
+      pan = null; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', e => { ptr.delete(e.pointerId); drag = pan = pinch = null; });
+    cv.addEventListener('wheel', e => { e.preventDefault(); if (!img) return; const [x, y] = pos(e), f = e.deltaY > 0 ? 0.9 : 1.11; view = { s: view.s * f, x: x - (x - view.x) * f, y: y - (y - view.y) * f }; draw(); }, { passive: false });
+    document.getElementById('tPhoto').addEventListener('click', open);
+    window.__tune.photo = { open, toScr, get P() { return P; }, setImg: (im, pts) => { img = im; P = pts || {}; idx = 0; nextFree(); result = null; fitView(); refresh(); }, runFit, apply, get result() { return result; } };
+  }
   tuneFrame = (dt, t) => {
     input.x = input.y = 0; st.x = home.x; st.z = home.z; st.speed = 0;   // 元の柴は隠して動かさない
     if (busy && performance.now() > busy) { busy = 0; out(); build(); }
