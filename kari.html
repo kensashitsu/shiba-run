@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v231';
+const VERSION = 'v232';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5603,13 +5603,14 @@ if (TUNE) {
     const withOff = M => { const r = {}; for (const k in M) r[k] = { z: M[k].z + off[k].z, y: M[k].y + off[k].y }; return r; };
     const flip = (() => { const a = align(skin, P, 1), b = align(skin, P, -1); return !b || (a && a.err <= b.err) ? 1 : -1; })();
     const FIT_V = [...FIT_K, '__neck']; RANGE.__neck = [-0.7, 0.5]; base.__neck = 0;   // 首の角度は形のつまみではない（反映しない）・弱くしか引き戻さない
+    const prior = { ...base }; for (const k of FIT_K) prior[k] = FORM_DEF[k];   // 出発点と引き戻す先は最初の形：今の形からだと、前に合わせた（失敗した）値が、写真で決まりきらない所にそのまま残る
     const span = FIT_V.map(k => RANGE[k][1] - RANGE[k][0]);
     const toForm = x => { const f = { ...base }; FIT_V.forEach((k, i) => { f[k] = Math.min(RANGE[k][1], Math.max(RANGE[k][0], x[i])); }); return f; };
     let evals = 0;
     const H0 = bare0.withers.y;   // 肩の高さ（体高）は今のまま：写真には大きさが写らないので、決めないと全部を少しずつ縮めて形を合わせ、ゲームの柴が小さくなる
-    const resid = x => { evals++; const f = toForm(x), B = bareMarks(f), r = align(withOff(B), P, flip); return r.res.concat(FIT_V.map((k, i) => LAM * (k === '__neck' ? 0.3 : 1) * (f[k] - base[k]) / span[i]), [B.withers.y - H0]); };
+    const resid = x => { evals++; const f = toForm(x), B = bareMarks(f), r = align(withOff(B), P, flip); return r.res.concat(FIT_V.map((k, i) => LAM * (k === '__neck' ? 0.3 : 1) * (f[k] - prior[k]) / span[i]), [B.withers.y - H0]); };
     const ss = r => r.reduce((s, v) => s + v * v, 0);
-    let x = FIT_V.map(k => base[k]), r = resid(x), c = ss(r), mu = 1e-3; const first = c;
+    let x = FIT_V.map(k => prior[k]), r = resid(x), c = ss(r), mu = 1e-3; const first = c;
     for (let it = 0; it < 25; it++) {
       const J = FIT_V.map((k, i) => { const h = span[i] * 0.02, xp = x.slice(); xp[i] = Math.min(RANGE[k][1], x[i] + h); if (xp[i] - x[i] < h * 0.5) xp[i] = x[i] - h; const rp = resid(xp), d = xp[i] - x[i]; return rp.map((v, j) => (v - r[j]) / d); });   // J[つまみ][ずれ]
       const n = FIT_V.length, A = [], g = [];
