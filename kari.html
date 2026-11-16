@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v247';
+const VERSION = 'v248';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2295,8 +2295,9 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   // ----- 脚（3節） -----
   const seg = (parent, len, r0, r1, mat, fl = 0, end = true) => {   // end：先の関節のふくらみ
     const g = new THREE.CylinderGeometry(r1, r0, len, 8); g.translate(0, -len / 2, 0);
-    parent.add(furOf(new THREE.Mesh(g, mat), fl));
-    const rj = F2 ? r0 * 0.9 : r1 * 1.02; if (end) furOf(blob(mat, rj, rj, rj, 0, -len, 0, parent), fl);   // 関節のふくらみ
+    const m = furOf(new THREE.Mesh(g, mat), fl); parent.add(m);
+    if (F2) { m.userData.sdf = { k: 0.4 }; return; }   // 柴の脚：関節の球は付けず（筒の端は丸い）、なじませ幅も小さく。皮は重なった部品の数だけふくらむので、筒・関節の球・次の筒が重なる手首やひじが太くなっていた
+    const rj = r1 * 1.02; if (end) furOf(blob(mat, rj, rj, rj, 0, -len, 0, parent), fl);   // 関節のふくらみ
   };
   // side: +1=左(+x) / -1=右。bend: +1=膝が前（後脚）/ -1=肘が後ろ（前脚）
   const makeLeg = (parent, x, y, z, lens, bend, isFront) => {
