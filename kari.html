@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v229';
+const VERSION = 'v230';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5513,7 +5513,7 @@ if (TUNE) {
     ['pawF', '前足の先', '前足が地面に着いている所'], ['belly', 'お腹のくびれ', 'お腹の線のいちばん上がった所'], ['butt', 'お尻のいちばん後ろ', '尾の下、お尻の出っ張り'],
     ['hock', 'かかと', '後ろ足の、後ろへ出た関節'], ['pawR', '後ろ足の先', '後ろ足が地面に着いている所'], ['tail', '尾のいちばん上', '巻いた尾のてっぺん'],
   ];
-  const FIT_K = ['legLen', 'bodyLen', 'chest', 'tuck', 'headSize', 'muzzleLen', 'headUp', 'headFwd', 'tailSize', 'tailUp'];
+  const FIT_K = ['legLen', 'bodyLen', 'bodyThick', 'chest', 'tuck', 'headSize', 'muzzleLen', 'headUp', 'headFwd', 'tailSize', 'tailUp'];   // 胴の太さはあばらの深さも決める（胸の底の高さに効く）
   const RANGE = {}; SL.forEach(a => { if (a.length > 2) RANGE[a[1]] = [a[2], a[3]]; });
   const fitTs = () => ({ x: home.x, z: home.z, yaw: 0, speed: 0, jumpY: 0 });
   // 柴の部品の点を「どこの部品か」付きで集める（足元の中心から見た z＝前・y＝上）
@@ -5564,7 +5564,7 @@ if (TUNE) {
   };
   // 写真の点 P（画面の px）と柴の点を重ねる：大きさ・回転・位置は自由（相似）、左右は向きで決める。ずれ（m の二乗平均）を返す
   // 平らな所の点（胸の前・肩・尾のてっぺん・お腹など）は、面に沿った向きでは場所が決まらない→その向きは比べない（写真の点まで滑らせる）。端の点は少し形が変わると別の部品へ飛び移るので、幅を限ると計算が乱れる
-  const SLIDE = { withers: 'z', chestF: 'y', chestL: 'z', butt: 'y', tail: 'z', belly: 'z' };
+  const SLIDE = { withers: 'z', chestF: 'y', chestL: 'z', butt: 'y', tail: 'z', belly: 'z', pawF: 'z', pawR: 'z', hock: 'z', ear: 'z' };   // 足先・かかとの前後は立ち方（足の開き）、耳の先の前後は顔の向きで変わる（形ではない）ので高さだけ比べる
   const align = (M, P, flip) => {
     let r = align0(M, P, flip); if (!r) return null;
     for (let it = 0; it < 3; it++) {
@@ -5674,7 +5674,8 @@ if (TUNE) {
       const pick = document.createElement('label'); pick.innerHTML = (img ? '写真を替える' : '写真を選ぶ') + '<input type="file" accept="image/*">'; bot.appendChild(pick);
       pick.querySelector('input').addEventListener('change', e => { const f = e.target.files[0]; if (!f) return; if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(f); const im = new Image(); im.onload = () => { img = im; P = {}; idx = 0; result = null; fitView(); refresh(); }; im.src = url; });
       if (result) {
-        msg.innerHTML = '<b>合わせました</b>　ずれ 平均' + (result.err * 100).toFixed(1) + 'cm<small>オレンジ＝合わせた柴の骨組み（毛の分だけ細い）。赤い点はずれが2cm超。肩の高さは今の柴のまま。</small>';
+        const edge = FIT_K.filter(k => { const [lo, hi] = RANGE[k], v = result.form[k], e = (hi - lo) * 0.01; return v <= lo + e || v >= hi - e; }).map(k => NAME[k]);   // つまみの端に張り付いた値＝写真の向き・姿勢が合っていないしるし
+        msg.innerHTML = '<b>合わせました</b>　ずれ 平均' + (result.err * 100).toFixed(1) + 'cm<small>' + (edge.length ? '<span style="color:#ffb3a0">「' + edge.join('」「') + '」がつまみの端まで動きました。写真が真横でない・頭や足の構えが違うと起きます。</span>' : 'オレンジ＝合わせた柴の骨組み（毛の分だけ細い）。赤い点はずれが2cm超。肩の高さは今の柴のまま。') + '</small>';
         B('この形にする', apply, 'go'); B('点を直す', () => { result = null; refresh(); }); B(alpha > 0.3 ? '重ねを薄く' : '重ねを濃く', () => { alpha = alpha > 0.3 ? 0.18 : 0.55; refresh(); });
       } else {
         const m = MARKS[idx];
