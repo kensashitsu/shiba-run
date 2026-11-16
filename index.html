@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v237';
+const VERSION = 'v238';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5441,7 +5441,7 @@ if (TUNE) {
   css.textContent += '#tSave{position:sticky;top:-10px;margin:-10px -12px 8px;padding:8px 12px;background:rgba(24,22,18,.97);border-bottom:1px solid rgba(255,255,255,.15);z-index:1}#tSave small{display:block;opacity:.75;margin-top:4px;min-height:1em}#tSaveBtn{background:#d08340!important;color:#fff!important;font-weight:600}';
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'tune';
-  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button><span style="margin-left:auto;align-self:center;opacity:.7;font-size:12px">' + VERSION + '</span></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button><label id="tOvPick" style="display:inline-block;margin:0;background:#f4efe6;color:#2b2118;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)">写真を重ねる<input type="file" accept="image/*"></label></div><div id="tOv"><div class="row"><button id="tOvMode"></button></div><label><b>柴の濃さ</b><i></i><input type="range" id="tOvA" min="0.15" max="1" step="0.05"></label><label><b>写真の傾き</b><i></i><input type="range" id="tOvR" min="-0.6" max="0.6" step="0.01"></label><div class="row"><button id="tOvFlip">左右反転</button><button id="tOvFit">大きさを戻す</button><button id="tOvOff">写真を外す</button></div><p>写真を動かす中：なぞって移動、2本指で拡大と回転（PCはホイールで拡大）。柴を回す中：なぞって柴を回し、ホイール・2本指で寄る。写真と同じ向きにしてから、つまみで形を寄せてください。写真はこの画面の中だけで使います。</p></div><div id="tFitMsg" style="display:none;background:rgba(255,179,71,.18);border:1px solid #ffb347;border-radius:8px;padding:8px;margin:6px 0;line-height:1.5"></div><div class="row"><button id="tParts">中の部品を見る</button><small id="tPartsN" style="align-self:center;opacity:.75"></small></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
+  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button><span style="margin-left:auto;align-self:center;opacity:.7;font-size:12px">' + VERSION + '</span></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button><label id="tOvPick" style="display:inline-block;margin:0;background:#f4efe6;color:#2b2118;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)">写真を重ねる<input type="file" accept="image/*"></label></div><div id="tOv"><div class="row"><button id="tOvMode"></button></div><label><b>柴の濃さ</b><i></i><input type="range" id="tOvA" min="0.15" max="1" step="0.05"></label><label><b>写真の傾き</b><i></i><input type="range" id="tOvR" min="-0.6" max="0.6" step="0.01"></label><div class="row"><button id="tOvFlip">左右反転</button><button id="tOvFit">大きさを戻す</button><button id="tOvOff">写真を外す</button></div><p>写真を動かす中：なぞって移動、2本指で拡大と回転（PCはホイールで拡大）。柴を回す中：なぞって柴を回し、ホイール・2本指で寄る。写真と同じ向きにしてから、つまみで形を寄せてください。写真はこの画面の中だけで使います。</p></div><div id="tFitMsg" style="display:none;background:rgba(255,179,71,.18);border:1px solid #ffb347;border-radius:8px;padding:8px;margin:6px 0;line-height:1.5"></div><div class="row"><button id="tParts">中の部品を見る</button><button id="tCollar">首輪を出す</button><small id="tPartsN" style="align-self:center;opacity:.75"></small></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
     SL.map(a => a.length <= 2 ? '<h3>' + a[0] + '</h3>' : '<label><b>' + a[0] + '</b><i id="tv_' + a[1] + '"></i><input type="range" data-k="' + a[1] + '" min="' + a[2] + '" max="' + a[3] + '" step="' + a[4] + '"></label>').join('') +
     '<h3>決まったら</h3><div class="row"><button id="tCopy">値をコピー</button><button id="tReset">最初に戻す</button></div><textarea id="tOut" readonly></textarea><p>「保存」を押すと、今の形と姿勢をこのブラウザに保存します。つまみを試しに動かしたあとでも「保存した形に戻す」で戻せます。動かしている途中の値も散歩の柴にそのまま使われます。「値をコピー」した文字を Claude に貼ると、正式な形として組み込みます。</p>';
   document.body.appendChild(el);
@@ -5452,13 +5452,14 @@ if (TUNE) {
   const build = () => {
     if (td) { scene.remove(td.object, td.points, td.extras); td.object.traverse(o => { if (o.isSkinnedMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     td = makeDog({ bare: showParts }); scene.add(td.object, td.points, td.extras);
+    if (td.__collar) td.__collar.visible = showCollar;   // 調整ページは首輪を出さない（首の形が見えない）。ボタンで出せる
     if (showParts) { let n = 0; td.object.traverse(o => { if (o.isMesh && o !== td.__collar && !(td.__collar && td.__collar.children.includes(o))) { const h = (n++ * 0.618) % 1; o.material = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(h, 0.55, 0.58), roughness: 0.7 }); } }); td.points.visible = false; partsInfo(n); }   // 中の部品：皮と毛を作る前の球と筒を、1つずつ色を変えて
     if (pose === 'sit' || pose === 'down') td.command(pose, ts);
     if (pose === 'pee') td.__start('mark', { ph: 4, pt: 1, side: 1 });   // おしっこ・うんちは、している最中の形で止める
     if (pose === 'poop') td.__start('poop', { ph: 3, pt: 1 });
   };
   const VAL = k => k in POSE_DEF ? POSEF : FORM;
-  let showParts = false; const partsInfo = n => { document.getElementById("tPartsN").textContent = n ? "部品 " + n + " 個" : ""; };
+  let showParts = false, showCollar = false; const partsInfo = n => { document.getElementById("tPartsN").textContent = n ? "部品 " + n + " 個" : ""; };
   const out = () => { const d = {}, q = {}; for (const k in FORM_DEF) if (Math.abs(FORM[k] - FORM_DEF[k]) > 1e-6) d[k] = +FORM[k].toFixed(3); for (const k in POSE_DEF) if (Math.abs(POSEF[k] - POSE_DEF[k]) > 1e-6) q[k] = +POSEF[k].toFixed(3); document.getElementById('tOut').value = 'shiba-form ' + JSON.stringify(d) + '\nshiba-pose ' + JSON.stringify(q); try { localStorage.setItem('shiba-form', JSON.stringify(d)); localStorage.setItem('shiba-pose', JSON.stringify(q)); } catch (e) { /* 覚えられなくても、この画面では使える */ } };
   const show = () => el.querySelectorAll('input[type=range][data-k]').forEach(i => { const v = VAL(i.dataset.k)[i.dataset.k]; i.value = v; document.getElementById('tv_' + i.dataset.k).textContent = (+v).toFixed(i.step < 0.001 ? 4 : i.step < 0.01 ? 3 : 2); });
   el.querySelectorAll('input[type=range][data-k]').forEach(i => {
@@ -5469,6 +5470,7 @@ if (TUNE) {
   const PN = { 立つ: 'stand', 歩く: 'walk', おすわり: 'sit', ふせ: 'down', おしっこ: 'pee', うんち: 'poop' };
   const setPose = v => { pose = v; ts.x = home.x; ts.z = home.z; ts.yaw = 0; ts.speed = 0; build(); document.querySelectorAll('#tPose button').forEach(b => b.classList.toggle('on', PN[b.textContent] === v)); };   // 姿勢のつまみを触ったら、その姿勢に切り替える
   btns('tPose', Object.keys(PN), '立つ', nm => setPose(PN[nm]));
+  document.getElementById('tCollar').addEventListener('click', e => { showCollar = !showCollar; e.target.textContent = showCollar ? '首輪を隠す' : '首輪を出す'; if (td.__collar) td.__collar.visible = showCollar; });
   document.getElementById('tParts').addEventListener('click', e => { showParts = !showParts; e.target.textContent = showParts ? 'ふだんの柴に戻す' : '中の部品を見る'; e.target.classList.toggle('on', showParts); if (!showParts) partsInfo(0); build(); });
   // 保存：今の値を「保存した形」として別に覚える（動かしている途中の値は shiba-form にいつも入る）。保存した時刻も出す
   const SAVE_K = 'shiba-saved', savedMsg = t => { document.getElementById('tSaved').textContent = t; };
