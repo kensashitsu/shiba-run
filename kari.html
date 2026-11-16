@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v245';
+const VERSION = 'v246';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -1991,7 +1991,7 @@ const TOON = TUNE || LITE;   // 柴（仮）版はいつもアニメ調   // ア
 const SMOOTH = TOON;
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 120, 120, 120, 255, 205, 205, 205, 255, 255, 255, 255, 255]), 4, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 // 柴の形のつまみ（?tune で動かす。倍率は 1＝v181 の部品の大きさ、ずらしは 0＝なし）
-const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1, eyeTilt: 0.34, eyeRound: 1, eyeW: 1, lineIn: 0, lineInAng: 0.5, lineOut: 0, lineOutAng: 0, lineW: 0.0018, noseSize: 1, skull: 1, earTilt: 0.12, earOut: 0.28, earW: 1, earLen: 1, wCheekUp: 0, wCheekFwd: 0, mayuSize: 1, mayuUp: 0, mayuGap: 0, mayuSharp: 0, mayuOut: 0, redBridgeW: 1, redBridgeLen: 1, faceWhite: 0, faceWhiteUp: 0, faceWhiteW: 1, faceWhiteSharp: 0, throatW: 1, chestW: 1, legWhite: 1, chestOut: 1, neckLen: 1, legF: 0, legR: 0, muzzleTip: 1, rearUp: 0.25 };   // 2026-11-11 ユーザーが調整ページで決めた形
+const FORM_DEF = { legLen: 0.83, legThick: 0.56, paw: 0.54, bodyLen: 0.97, bodyThick: 0.93, chest: 0.7, tuck: 0.46, neckThick: 0.76, headSize: 0.97, headUp: 0, headFwd: -0.012, cheek: 0.71, muzzleLen: 1, muzzleThick: 0.84, faceW: 0.8, stop: 0.82, brow: 0.2, bridge: 0.002, jawLen: 0.88, jawThick: 0.8, jawUp: 0, jowl: 1, earSize: 0.8, earSpread: -0.017, eyeSize: 1, eyeSpread: 0, eyeUp: 0, tailSize: 1, tailUp: 0, fur: 1, eyeTilt: 0.34, eyeRound: 1, eyeW: 1, lineIn: 0, lineInAng: 0.5, lineOut: 0, lineOutAng: 0, lineW: 0.0018, noseSize: 1, skull: 1, earTilt: 0.12, earOut: 0.28, earW: 1, earLen: 1, wCheekUp: 0, wCheekFwd: 0, mayuSize: 1, mayuUp: 0, mayuGap: 0, mayuSharp: 0, mayuOut: 0, redBridgeW: 1, redBridgeLen: 1, faceWhite: 0, faceWhiteUp: 0, faceWhiteW: 1, faceWhiteSharp: 0, throatW: 1, chestW: 1, legWhite: 1, chestOut: 1, neckLen: 1, legF: 0, legR: 0, muzzleTip: 1, rearUp: 0.45 };   // 2026-11-11 ユーザーが調整ページで決めた形
 const FORM = { ...FORM_DEF };
 const FORM_G = FORM;   // 柴の形（makeDog の中では犬種ごとの形で FORM を置き換えるので、外の名前で持っておく）
 // 柴以外の犬種も、柴と同じ作り（本物寄りの体つき・段のある塗り・同じ目）で作る。柴の形からの違いだけを書く
@@ -2305,7 +2305,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     hip.add(b1); b2.position.y = -lens[0]; b1.add(b2); b3.position.y = -lens[1]; b2.add(b3);
     const lt = F2 ? FORM.legThick : 1, pw = F2 ? FORM.paw : 1; let paw = null;
     if (isFront) blob(mats.red, F2 ? 0.052 * lt : 0.05, F2 ? 0.085 : 0.075, F2 ? 0.066 * lt : 0.06, 0, -0.04, 0, b1);           // 肩
-    else if (F2) furOf(blob(mats.red, 0.068 * lt, 0.11, 0.095 * lt, 0, -0.05, 0.0, b1), 0.024);
+    else if (F2) furOf(blob(mats.red, 0.068 * lt, 0.085, 0.095 * lt, 0, -0.03, -0.008, b1), 0.024);   // もも：ひざの上で終わる長さ（縦0.11だとすねの上まで垂れ、輪郭がひざから斜めに流れて後ろ足が折れて見えた）
     else furOf(blob(mats.red, 0.062, 0.085, 0.078, 0, -0.045, 0.012, b1), 0.026);           // 太もも
     if (F2) {   // 太い柱のような脚：上は赤毛、手首・かかとから下は白。丸く大きい足先に指
       seg(b1, lens[0], (isFront ? 0.038 : 0.04) * lt, (isFront ? 0.05 : 0.056) * lt, mats.red, isFront ? 0.008 : 0.02);
