@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v233';
+const VERSION = 'v234';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2002,8 +2002,8 @@ const BREED_FORM = {
   poodle: { legLen: 0.95, legThick: 0.75, paw: 0.7, bodyLen: 1.0, chest: 0.8, tuck: 0.45, headSize: 1.05, muzzleLen: 1.2, muzzleThick: 0.72, faceW: 0.85, cheek: 0.85, stop: 0.8, fur: 1.5 },
 };
 // 柴の姿勢のつまみ（?tune で動かす。長さは m、角度は rad）
-const POSE_OLD = { sitY: -0.125, sitPitch: 0.72, sitNeck: -0.5, sitHead: 0, sitFront: 0.21, sitRear: -0.03, sitRearX: 0.1, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.42, downRear: -0.06, downRearX: 0.15, peeUp: 0.62, peeOut: 0.14, peeBack: 0.04, peeRearRoll: 0.45, peeRoll: 0.1, peeY: -0.02, peeNeck: 0, peeHeadYaw: 0.3, peeTail: -0.25, poopY: -0.13, poopPitch: 0.42, poopFlex: -0.4, poopNeck: -0.1, poopHead: 0, poopOut: 0.11, poopFwd: 0.12, poopFront: 0.04, poopTail: -0.6 };   // ほかの犬種が使う元の姿勢
-const POSE_DEF = { sitY: -0.07, sitPitch: 0.54, sitNeck: -0.26, sitHead: -0.16, sitFront: 0.185, sitRear: -0.095, sitRearX: 0.115, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.425, downRear: -0.13, downRearX: 0.15, peeUp: 0.42, peeOut: 0.3, peeBack: 0.2, peeRearRoll: 0.55, peeRoll: 0.4, peeY: 0.005, peeNeck: 0.08, peeHeadYaw: 0.06, peeTail: -0.02, poopY: -0.035, poopPitch: 0.52, poopFlex: -0.5, poopNeck: -0.42, poopHead: -0.02, poopOut: 0.11, poopFwd: 0.12, poopFront: -0.005, poopTail: -0.6 };   // 2026-11-11 ユーザーが調整ページで決めた姿勢
+const POSE_OLD = { standNeck: 0, sitY: -0.125, sitPitch: 0.72, sitNeck: -0.5, sitHead: 0, sitFront: 0.21, sitRear: -0.03, sitRearX: 0.1, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.42, downRear: -0.06, downRearX: 0.15, peeUp: 0.62, peeOut: 0.14, peeBack: 0.04, peeRearRoll: 0.45, peeRoll: 0.1, peeY: -0.02, peeNeck: 0, peeHeadYaw: 0.3, peeTail: -0.25, poopY: -0.13, poopPitch: 0.42, poopFlex: -0.4, poopNeck: -0.1, poopHead: 0, poopOut: 0.11, poopFwd: 0.12, poopFront: 0.04, poopTail: -0.6 };   // ほかの犬種が使う元の姿勢
+const POSE_DEF = { standNeck: 0, sitY: -0.07, sitPitch: 0.54, sitNeck: -0.26, sitHead: -0.16, sitFront: 0.185, sitRear: -0.095, sitRearX: 0.115, downY: -0.195, downPitch: 0.06, downNeck: -0.25, downHead: 0, downFront: 0.425, downRear: -0.13, downRearX: 0.15, peeUp: 0.42, peeOut: 0.3, peeBack: 0.2, peeRearRoll: 0.55, peeRoll: 0.4, peeY: 0.005, peeNeck: 0.08, peeHeadYaw: 0.06, peeTail: -0.02, poopY: -0.035, poopPitch: 0.52, poopFlex: -0.5, poopNeck: -0.42, poopHead: -0.02, poopOut: 0.11, poopFwd: 0.12, poopFront: -0.005, poopTail: -0.6 };   // 2026-11-11 ユーザーが調整ページで決めた姿勢
 const POSEF = { ...POSE_DEF };
 try { const sv = JSON.parse(localStorage.getItem('shiba-pose') || '{}'); for (const k in POSE_DEF) if (typeof sv[k] === 'number' && isFinite(sv[k])) POSEF[k] = sv[k]; } catch (e) { /* 覚えていなければ元の姿勢 */ }
 try { const sv = JSON.parse(localStorage.getItem('shiba-form') || '{}'); for (const k in FORM_DEF) if (typeof sv[k] === 'number' && isFinite(sv[k])) FORM[k] = sv[k]; } catch (e) { /* 覚えていなければ元の形 */ }
@@ -2905,7 +2905,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     P.pitch = 0.09 * run * Math.sin(2 * Math.PI * phase + 1.2) * amp - clamp(S.accel * 0.025, -0.15, 0.12);
     P.flex = (0.17 + 0.07 * dash) * run * Math.sin(2 * Math.PI * phase) * amp;                   // 全力で走ると背中が伸び縮みする
     P.roll = clamp(-S.yawRate * sp * 0.045, -0.3, 0.3);                           // 曲がる時は内側に傾く
-    P.neck = -0.1 * run + 0.08 * trot;
+    P.neck = -0.1 * run + 0.08 * trot + (F2 && !breed ? POSEF.standNeck : 0);   // standNeck：柴のふだんの首の構え（＋で頭を低く。調整ページ・写真合わせで決める）
     P.earsBack = run * (0.7 + 0.3 * dash);                                      // ダッシュでは耳を後ろへぴったり倒す
     P.wag = sp < 0.5 ? 0.14 : 0.05; P.wagHz = sp < 0.5 ? 8 : 5;
     if (S.fatigue > 0.3 && sp < 4.5) { const k = smooth(0.3, 0.6, S.fatigue); P.jaw = 0.42 * k; P.tongue = k; P.breath = k; }   // 走った後はハアハア
@@ -5426,6 +5426,7 @@ if (TUNE) {
     ['顔つき'], ['つり目の角度', 'eyeTilt', 0, 0.8, 0.01], ['目の縦の長さ', 'eyeRound', 0.5, 1.7, 0.01], ['目の横の長さ', 'eyeW', 0.6, 1.6, 0.01], ['目頭の切開ライン（0で無し）', 'lineIn', 0, 0.035, 0.0005], ['目頭のラインの向き（＋で下へ）', 'lineInAng', -0.6, 1.4, 0.02], ['目尻の切開ライン（0で無し）', 'lineOut', 0, 0.03, 0.0005], ['目尻のラインの向き（＋で上へ）', 'lineOutAng', -1, 1, 0.02], ['ラインの太さ', 'lineW', 0.0008, 0.004, 0.0001], ['鼻の大きさ', 'noseSize', 0.6, 1.7, 0.01], ['頭のてっぺん', 'skull', 0.8, 1.25, 0.01], ['耳の前への傾き', 'earTilt', -0.3, 0.6, 0.01], ['耳の外への開き', 'earOut', 0, 0.7, 0.01], ['耳の幅', 'earW', 0.6, 1.5, 0.01], ['耳の長さ', 'earLen', 0.7, 1.5, 0.01],
     ['白の入り方'], ['頬の白の高さ', 'wCheekUp', -0.03, 0.04, 0.001], ['頬の白の前後', 'wCheekFwd', -0.03, 0.03, 0.001], ['麻呂眉の大きさ（0で消える）', 'mayuSize', 0, 2.5, 0.02], ['麻呂眉の高さ', 'mayuUp', -0.012, 0.02, 0.001], ['麻呂眉の間隔', 'mayuGap', -0.02, 0.02, 0.001], ['麻呂眉のくっきり', 'mayuSharp', 0, 1, 0.02], ['麻呂眉の浮き出し', 'mayuOut', 0, 0.012, 0.0005], ['目の下の白（0で無し）', 'faceWhite', 0, 1, 0.02], ['目の下の白の上端', 'faceWhiteUp', -0.04, 0.012, 0.001], ['目の下の白の横の広さ', 'faceWhiteW', 0.5, 1.6, 0.01], ['目の下の白のくっきり', 'faceWhiteSharp', 0, 1, 0.02], ['鼻すじの赤の幅（0で白）', 'redBridgeW', 0, 2, 0.02], ['鼻すじの赤の長さ', 'redBridgeLen', 0.3, 1.3, 0.01], ['のどの白の幅', 'throatW', 0.5, 1.4, 0.01], ['胸の白の広さ', 'chestW', 0.6, 1.3, 0.01], ['脚の白の高さ', 'legWhite', 0, 2, 0.02],
     ['尾と毛'], ['尾の大きさ', 'tailSize', 0.6, 1.5, 0.01], ['尾の高さ', 'tailUp', -0.04, 0.06, 0.002], ['毛の長さ', 'fur', 0, 2.5, 0.05],
+    ['姿勢：立つ', 'stand'], ['首の角度（＋で頭を低く）', 'standNeck', -0.4, 0.6, 0.01],
     ['姿勢：おすわり', 'sit'], ['腰の高さ', 'sitY', -0.22, -0.04, 0.005], ['体の起こし', 'sitPitch', 0.2, 1.2, 0.02], ['首の角度（−で起こす）', 'sitNeck', -1.2, 0.6, 0.02], ['頭の上下（＋で下向き）', 'sitHead', -0.8, 0.8, 0.02], ['前足の前後', 'sitFront', 0.05, 0.4, 0.005], ['後ろ足の前後', 'sitRear', -0.2, 0.15, 0.005], ['後ろ足の開き', 'sitRearX', 0.04, 0.2, 0.005],
     ['姿勢：ふせ', 'down'], ['体の高さ', 'downY', -0.3, -0.1, 0.005], ['体の傾き', 'downPitch', -0.3, 0.4, 0.02], ['首の角度（−で起こす）', 'downNeck', -1.2, 0.8, 0.02], ['頭の上下（＋で下向き）', 'downHead', -0.8, 0.8, 0.02], ['前足の前後', 'downFront', 0.25, 0.6, 0.005], ['後ろ足の前後', 'downRear', -0.25, 0.15, 0.005], ['後ろ足の開き', 'downRearX', 0.06, 0.25, 0.005],
     ['姿勢：おしっこ', 'pee'], ['上げる脚の高さ', 'peeUp', 0.1, 0.9, 0.01], ['上げる脚の横への開き', 'peeOut', 0, 0.3, 0.005], ['上げる脚の前後', 'peeBack', -0.15, 0.2, 0.005], ['腰のひねり', 'peeRearRoll', 0, 0.9, 0.01], ['体の傾き', 'peeRoll', -0.2, 0.4, 0.01], ['体の高さ', 'peeY', -0.1, 0.04, 0.005], ['首の角度（−で起こす）', 'peeNeck', -0.8, 0.8, 0.02], ['顔の向き', 'peeHeadYaw', -0.8, 0.8, 0.02], ['尾の上げ下げ（−で上げる）', 'peeTail', -1, 0.6, 0.02],
@@ -5455,7 +5456,7 @@ if (TUNE) {
   const out = () => { const d = {}, q = {}; for (const k in FORM_DEF) if (Math.abs(FORM[k] - FORM_DEF[k]) > 1e-6) d[k] = +FORM[k].toFixed(3); for (const k in POSE_DEF) if (Math.abs(POSEF[k] - POSE_DEF[k]) > 1e-6) q[k] = +POSEF[k].toFixed(3); document.getElementById('tOut').value = 'shiba-form ' + JSON.stringify(d) + '\nshiba-pose ' + JSON.stringify(q); try { localStorage.setItem('shiba-form', JSON.stringify(d)); localStorage.setItem('shiba-pose', JSON.stringify(q)); } catch (e) { /* 覚えられなくても、この画面では使える */ } };
   const show = () => el.querySelectorAll('input[type=range][data-k]').forEach(i => { const v = VAL(i.dataset.k)[i.dataset.k]; i.value = v; document.getElementById('tv_' + i.dataset.k).textContent = (+v).toFixed(i.step < 0.001 ? 4 : i.step < 0.01 ? 3 : 2); });
   el.querySelectorAll('input[type=range][data-k]').forEach(i => {
-    i.addEventListener('input', () => { const k = i.dataset.k; VAL(k)[k] = +i.value; document.getElementById('tv_' + k).textContent = (+i.value).toFixed(i.step < 0.001 ? 4 : i.step < 0.01 ? 3 : 2); if (k in POSE_DEF) { out(); const want = k.match(/^(sit|down|pee|poop)/)[1]; if (pose !== want) setPose(want); } else busy = performance.now() + 350; });   // 手を止めて少ししたら作り直す
+    i.addEventListener('input', () => { const k = i.dataset.k; VAL(k)[k] = +i.value; document.getElementById('tv_' + k).textContent = (+i.value).toFixed(i.step < 0.001 ? 4 : i.step < 0.01 ? 3 : 2); if (k in POSE_DEF) { out(); const want = k.match(/^(stand|sit|down|pee|poop)/)[1]; if (pose !== want) setPose(want); } else busy = performance.now() + 350; });   // 手を止めて少ししたら作り直す
   });
   const btns = (id, names, on, pick) => { const box = document.getElementById(id); names.forEach(nm => { const b = document.createElement('button'); b.textContent = nm; b.classList.toggle('on', nm === on); b.addEventListener('click', () => { box.querySelectorAll('button').forEach(c => c.classList.toggle('on', c === b)); pick(nm); }); box.appendChild(b); }); };
   btns('tView', Object.keys(VIEW), '横', nm => { const v = VIEW[nm]; orbit = { yaw: v[0], pitch: v[1], dist: v[2], h: v[3] }; });
@@ -5705,12 +5706,13 @@ if (TUNE) {
     };
     const NAME = {}; SL.forEach(a => { if (a.length > 2) NAME[a[1]] = a[0]; });
     const apply = () => {   // 反映して、何が変わったかを調整画面の上に出す（合わせる前に戻せる）
-      const prev = {}, ch = [];
+      const prev = {}, ch = [], prevNeck = POSEF.standNeck;
+      if (result.form.__neck) { const v = +Math.min(0.6, Math.max(-0.4, POSEF.standNeck + result.form.__neck)).toFixed(3); if (Math.abs(v - POSEF.standNeck) > 1e-3) ch.push('立ち姿の首の角度 ' + (+POSEF.standNeck.toFixed(3)) + '→' + v); POSEF.standNeck = v; }   // 首の構えは姿勢のつまみへ
       for (const k of FIT_K) { prev[k] = FORM[k]; const v = +result.form[k].toFixed(3); if (Math.abs(v - FORM[k]) > 1e-4) ch.push(NAME[k] + ' ' + (+FORM[k].toFixed(3)) + '→' + v); FORM[k] = v; }
       show(); out(); build(); close();
       const box = document.getElementById('tFitMsg'); box.style.display = 'block';
       box.innerHTML = '<b>写真から合わせました</b>' + (ch.length ? '：' + ch.join('、') : '（今の形とほぼ同じでした）') + '<div class="row"><button id="tFitUndo">合わせる前に戻す</button><button id="tFitOk">OK</button></div>';
-      document.getElementById('tFitUndo').onclick = () => { Object.assign(FORM, prev); show(); out(); build(); box.innerHTML = '合わせる前の形に戻しました'; setTimeout(() => { box.style.display = 'none'; }, 2500); };
+      document.getElementById('tFitUndo').onclick = () => { Object.assign(FORM, prev); POSEF.standNeck = prevNeck; show(); out(); build(); box.innerHTML = '合わせる前の形に戻しました'; setTimeout(() => { box.style.display = 'none'; }, 2500); };
       document.getElementById('tFitOk').onclick = () => { box.style.display = 'none'; };
       el.scrollTop = 0;
     };
