@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v248';
+const VERSION = 'v249';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2293,10 +2293,10 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
   else if (ruff) { blob(mats.cream, 0.12, 0.12, 0.09, 0, 0.0, 0.25 * L, front); blob(mats.cream, 0.105, 0.09, 0.1, 0, 0.1, 0.0, neck); }   // 首まわりの白いふさふさ
 
   // ----- 脚（3節） -----
-  const seg = (parent, len, r0, r1, mat, fl = 0, end = true) => {   // end：先の関節のふくらみ
+  const seg = (parent, len, r0, r1, mat, fl = 0, end = true, kj = 0.4) => {   // end：先の関節のふくらみ
     const g = new THREE.CylinderGeometry(r1, r0, len, 8); g.translate(0, -len / 2, 0);
     const m = furOf(new THREE.Mesh(g, mat), fl); parent.add(m);
-    if (F2) { m.userData.sdf = { k: 0.4 }; return; }   // 柴の脚：関節の球は付けず（筒の端は丸い）、なじませ幅も小さく。皮は重なった部品の数だけふくらむので、筒・関節の球・次の筒が重なる手首やひじが太くなっていた
+    if (F2) { m.userData.sdf = { k: kj }; return; }   // 柴の脚：関節の球は付けず（筒の端は丸い）、なじませ幅も小さく。皮は重なった部品の数だけふくらむので、筒・関節の球・次の筒が重なる手首やひじが太くなっていた
     const rj = r1 * 1.02; if (end) furOf(blob(mat, rj, rj, rj, 0, -len, 0, parent), fl);   // 関節のふくらみ
   };
   // side: +1=左(+x) / -1=右。bend: +1=膝が前（後脚）/ -1=肘が後ろ（前脚）
@@ -2309,8 +2309,8 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
     else if (F2) furOf(blob(mats.red, 0.068 * lt, 0.085, 0.095 * lt, 0, -0.03, -0.008, b1), 0.024);   // もも：ひざの上で終わる長さ（縦0.11だとすねの上まで垂れ、輪郭がひざから斜めに流れて後ろ足が折れて見えた）
     else furOf(blob(mats.red, 0.062, 0.085, 0.078, 0, -0.045, 0.012, b1), 0.026);           // 太もも
     if (F2) {   // 太い柱のような脚：上は赤毛、手首・かかとから下は白。丸く大きい足先に指
-      seg(b1, lens[0], (isFront ? 0.038 : 0.04) * lt, (isFront ? 0.05 : 0.056) * lt, mats.red, isFront ? 0.008 : 0.02);
-      seg(b2, lens[1], (isFront ? 0.03 : 0.028) * lt, (isFront ? 0.036 : 0.038) * lt, mats.ltan, 0.006);
+      seg(b1, lens[0], (isFront ? 0.045 : 0.046) * lt, (isFront ? 0.05 : 0.056) * lt, mats.red, isFront ? 0.008 : 0.02, true, 1);   // 上の節は体・肩となじませる（細くすると付け根がくびれた）
+      seg(b2, lens[1], (isFront ? 0.03 : 0.028) * lt, (isFront ? 0.043 : 0.044) * lt, mats.ltan, 0.006);   // 上の端は前の節の下の端に合わせて太く（関節の球をなくした分、ひじ・ひざから上が細くなった）
       seg(b3, lens[2], 0.028 * lt, (isFront ? 0.029 : 0.027) * lt, mats.lpale, 0.003, false);   // 先の関節の球は付けない（肉球より下に垂れ、そこで地面に着いてかかと立ちに見えた）
       paw = new THREE.Group(); paw.position.y = -lens[2] - (0.022 - (0.02 * pw - 0.003)); b3.add(paw);   // 肉球の底がちょうど地面（骨の先は地面から FOOT_UP=0.022 上）   // 足先は別の関節：中足（かかと・手首から下）が傾いても足の裏を地面と平行に保つ（solveLeg で向きを戻す）
       furOf(blob(mats.cream, 0.033 * pw, 0.02 * pw, 0.038 * pw, 0, 0.003, 0.018 * pw, paw), 0);
