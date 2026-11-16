@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v232';
+const VERSION = 'v233';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -608,7 +608,7 @@ const townRoad = (x, z) => { const k = townCell(x, z); return k < 0 ? 0 : townTi
 
 // ---------- renderer / scene ----------
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance', alpha: /[?&]tune/.test(location.search) });   // 調整ページは背景を透かせる（写真を柴の下に敷く）
 const PR_FULL = Math.min(window.devicePixelRatio || 1, low ? 1 : 1.5), PR_ECO = Math.min(PR_FULL, 1);   // 省電力：画面の細かさは1倍（描く点の数が1.2倍の時の約7割）
 const eco = true;   // いつも省電力（描く回数を30回/秒までに間引き、解像度も抑える）
 let pixelRatio = eco ? PR_ECO : PR_FULL;
@@ -5436,7 +5436,7 @@ if (TUNE) {
   css.textContent += '#tSave{position:sticky;top:-10px;margin:-10px -12px 8px;padding:8px 12px;background:rgba(24,22,18,.97);border-bottom:1px solid rgba(255,255,255,.15);z-index:1}#tSave small{display:block;opacity:.75;margin-top:4px;min-height:1em}#tSaveBtn{background:#d08340!important;color:#fff!important;font-weight:600}';
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'tune';
-  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button><span style="margin-left:auto;align-self:center;opacity:.7;font-size:12px">' + VERSION + '</span></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button><label id="tOvPick" style="display:inline-block;margin:0;background:#f4efe6;color:#2b2118;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)">写真を重ねる<input type="file" accept="image/*"></label></div><div id="tOv"><div class="row"><button id="tOvMode"></button></div><label><b>写真の濃さ</b><i></i><input type="range" id="tOvA" min="0.1" max="0.9" step="0.05"></label><label><b>写真の傾き</b><i></i><input type="range" id="tOvR" min="-0.6" max="0.6" step="0.01"></label><div class="row"><button id="tOvFlip">左右反転</button><button id="tOvFit">大きさを戻す</button><button id="tOvOff">写真を外す</button></div><p>写真を動かす中：なぞって移動、2本指で拡大と回転（PCはホイールで拡大）。柴を回す中：なぞって柴を回し、ホイール・2本指で寄る。写真と同じ向きにしてから、つまみで形を寄せてください。写真はこの画面の中だけで使います。</p></div><div id="tFitMsg" style="display:none;background:rgba(255,179,71,.18);border:1px solid #ffb347;border-radius:8px;padding:8px;margin:6px 0;line-height:1.5"></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
+  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button><span style="margin-left:auto;align-self:center;opacity:.7;font-size:12px">' + VERSION + '</span></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button><label id="tOvPick" style="display:inline-block;margin:0;background:#f4efe6;color:#2b2118;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)">写真を重ねる<input type="file" accept="image/*"></label></div><div id="tOv"><div class="row"><button id="tOvMode"></button></div><label><b>柴の濃さ</b><i></i><input type="range" id="tOvA" min="0.15" max="1" step="0.05"></label><label><b>写真の傾き</b><i></i><input type="range" id="tOvR" min="-0.6" max="0.6" step="0.01"></label><div class="row"><button id="tOvFlip">左右反転</button><button id="tOvFit">大きさを戻す</button><button id="tOvOff">写真を外す</button></div><p>写真を動かす中：なぞって移動、2本指で拡大と回転（PCはホイールで拡大）。柴を回す中：なぞって柴を回し、ホイール・2本指で寄る。写真と同じ向きにしてから、つまみで形を寄せてください。写真はこの画面の中だけで使います。</p></div><div id="tFitMsg" style="display:none;background:rgba(255,179,71,.18);border:1px solid #ffb347;border-radius:8px;padding:8px;margin:6px 0;line-height:1.5"></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
     SL.map(a => a.length <= 2 ? '<h3>' + a[0] + '</h3>' : '<label><b>' + a[0] + '</b><i id="tv_' + a[1] + '"></i><input type="range" data-k="' + a[1] + '" min="' + a[2] + '" max="' + a[3] + '" step="' + a[4] + '"></label>').join('') +
     '<h3>決まったら</h3><div class="row"><button id="tCopy">値をコピー</button><button id="tReset">最初に戻す</button></div><textarea id="tOut" readonly></textarea><p>「保存」を押すと、今の形と姿勢をこのブラウザに保存します。つまみを試しに動かしたあとでも「保存した形に戻す」で戻せます。動かしている途中の値も散歩の柴にそのまま使われます。「値をコピー」した文字を Claude に貼ると、正式な形として組み込みます。</p>';
   document.body.appendChild(el);
@@ -5485,7 +5485,7 @@ if (TUNE) {
   document.getElementById('tCopy').addEventListener('click', () => { const t = document.getElementById('tOut'); t.select(); navigator.clipboard?.writeText(t.value).catch(() => {}); try { document.execCommand('copy'); } catch (e) { /* 選んだ状態にはなる */ } document.getElementById('tCopy').textContent = 'コピーしました'; setTimeout(() => { document.getElementById('tCopy').textContent = '値をコピー'; }, 1500); });
   // 画面をなぞって回す・寄る
   const cv = renderer.domElement, ptr = new Map(); let pinch = 0;
-  let ovMove = false;   // 写真を重ねて「写真を動かす」の間は、柴を回さない
+  let ovMove = false, ovOn = false;   // 写真を重ねて「写真を動かす」の間は、柴を回さない／写真を敷いている間は背景と床を消す
   const notOrbit = e => ovMove || (e.target.closest && e.target.closest('#tune, #fitUI'));
   addEventListener('pointerdown', e => { if (notOrbit(e)) return; ptr.set(e.pointerId, [e.clientX, e.clientY]); }, true);
   addEventListener('pointerup', e => { ptr.delete(e.pointerId); pinch = 0; }, true);
@@ -5501,7 +5501,7 @@ if (TUNE) {
   const noFog = () => { const f = scene.fog; if (!f) return; if (f.isFogExp2) f.density = 0; else { f.near = 1e4; f.far = 2e4; } };   // 霧は消さずに効かなくする（霧の色を読む所があるので null にはしない）
   const tFloor = new THREE.Mesh(new THREE.CircleGeometry(40, 64), new THREE.MeshStandardMaterial({ color: 0xd9d1c3, roughness: 1 }));
   tFloor.rotation.x = -Math.PI / 2; tFloor.receiveShadow = true; scene.add(tFloor);
-  const plainBg = () => { scene.background = tBg; for (const o of scene.children) o.visible = o.isLight || o === tFloor || (td && (o === td.object || o === td.points || o === td.extras)); };
+  const plainBg = () => { scene.background = ovOn ? null : tBg; for (const o of scene.children) o.visible = o.isLight || (o === tFloor && !ovOn) || (td && (o === td.object || o === td.points || o === td.extras)); };
   show(); out(); build();
   window.__tune = { get dog() { return td; }, ts, set: (k, v) => { FORM[k] = v; show(); out(); build(); }, view: nm => { const v = VIEW[nm]; orbit = { yaw: v[0], pitch: v[1], dist: v[2], h: v[3] }; }, FORM };
   // ----- 写真から体形を合わせる -----
@@ -5743,26 +5743,26 @@ if (TUNE) {
   // 写真はこの画面の中だけ（送らない・保存しない）。「写真を動かす」の間は、なぞる・2本指・ホイールが写真に効く（柴は回らない）
   {
     const css2 = document.createElement('style');
-    css2.textContent = '#ovl{position:fixed;inset:0;z-index:50;pointer-events:none;overflow:hidden;touch-action:none}#ovl.move{pointer-events:auto;cursor:move}#ovl img{position:absolute;left:0;top:0;transform-origin:50% 50%;max-width:none;-webkit-user-drag:none;user-select:none}#ovl.move img{outline:2px dashed #ffb347}#tOv{display:none;background:rgba(255,255,255,.06);border-radius:8px;padding:6px 8px;margin:4px 0 8px}#tOv label{margin-top:2px}#tOvPick input{display:none}';
+    css2.textContent = '#ovl{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;touch-action:none}canvas#c{z-index:1}#ovl.move{pointer-events:auto;cursor:move}#ovl img{position:absolute;left:0;top:0;transform-origin:50% 50%;max-width:none;-webkit-user-drag:none;user-select:none}#ovl.move img{outline:2px dashed #ffb347}#tOv{display:none;background:rgba(255,255,255,.06);border-radius:8px;padding:6px 8px;margin:4px 0 8px}#tOv label{margin-top:2px}#tOvPick input{display:none}';
     document.head.appendChild(css2);
     const ovl = document.createElement('div'); ovl.id = 'ovl'; const im = document.createElement('img'); im.alt = ''; im.draggable = false; ovl.appendChild(im); document.body.appendChild(ovl);
-    const st2 = { x: 0, y: 0, s: 1, r: 0, fx: 1, a: 0.5 };
+    const st2 = { x: 0, y: 0, s: 1, r: 0, fx: 1, a: 0.6 };   // a＝柴の濃さ（写真は柴の下に、そのままの濃さで敷く）
     let url2 = null;
-    const place = () => { im.style.opacity = st2.a; im.style.transform = 'translate(' + (st2.x - im.naturalWidth / 2) + 'px,' + (st2.y - im.naturalHeight / 2) + 'px) rotate(' + st2.r + 'rad) scale(' + st2.fx * st2.s + ',' + st2.s + ')'; };
+    const place = () => { renderer.domElement.style.opacity = ovOn ? st2.a : ''; im.style.transform = 'translate(' + (st2.x - im.naturalWidth / 2) + 'px,' + (st2.y - im.naturalHeight / 2) + 'px) rotate(' + st2.r + 'rad) scale(' + st2.fx * st2.s + ',' + st2.s + ')'; };
     const area = () => innerWidth > 700 ? { x: 0, y: 0, w: innerWidth - 300, h: innerHeight } : { x: 0, y: 0, w: innerWidth, h: innerHeight * 0.52 };   // 柴が見えている所（つまみの欄を除く）
     const fitIn = () => { const A = area(); st2.s = Math.min(A.w / im.naturalWidth, A.h / im.naturalHeight) * 0.95; st2.x = A.x + A.w / 2; st2.y = A.y + A.h / 2; st2.r = 0; place(); };
     const box = document.getElementById('tOv'), modeBtn = document.getElementById('tOvMode');
-    const setMove = on => { ovMove = on; ovl.classList.toggle('move', on); modeBtn.textContent = on ? '写真を動かす中（押すと柴を回す）' : '柴を回す中（押すと写真を動かす）'; modeBtn.classList.toggle('on', on); };
+    const setMove = on => { ovMove = on; ovl.classList.toggle('move', on); renderer.domElement.style.pointerEvents = on ? 'none' : ''; modeBtn.textContent = on ? '写真を動かす中（押すと柴を回す）' : '柴を回す中（押すと写真を動かす）'; modeBtn.classList.toggle('on', on); };
     document.querySelector('#tOvPick input').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return; if (url2) URL.revokeObjectURL(url2); url2 = URL.createObjectURL(f);
-      im.onload = () => { st2.fx = 1; fitIn(); box.style.display = 'block'; document.getElementById('tOvA').value = st2.a; document.getElementById('tOvR').value = 0; setMove(true); }; im.src = url2; e.target.value = '';
+      im.onload = () => { ovOn = true; st2.fx = 1; fitIn(); box.style.display = 'block'; document.getElementById('tOvA').value = st2.a; document.getElementById('tOvR').value = 0; setMove(true); }; im.src = url2; e.target.value = '';
     });
     modeBtn.addEventListener('click', () => setMove(!ovMove));
     document.getElementById('tOvA').addEventListener('input', e => { st2.a = +e.target.value; place(); });
     document.getElementById('tOvR').addEventListener('input', e => { st2.r = +e.target.value; place(); });
     document.getElementById('tOvFlip').addEventListener('click', () => { st2.fx *= -1; place(); });
     document.getElementById('tOvFit').addEventListener('click', fitIn);
-    document.getElementById('tOvOff').addEventListener('click', () => { im.removeAttribute('src'); if (url2) URL.revokeObjectURL(url2); url2 = null; box.style.display = 'none'; setMove(false); });
+    document.getElementById('tOvOff').addEventListener('click', () => { ovOn = false; place(); im.removeAttribute('src'); if (url2) URL.revokeObjectURL(url2); url2 = null; box.style.display = 'none'; setMove(false); });
     // 写真を動かす：1本＝移動、2本＝拡大・回転・移動、ホイール＝拡大
     const P2 = new Map(); let g0 = null;
     const snap = () => { const v = [...P2.values()]; if (v.length >= 2) { const [a, b] = v; return { d: Math.hypot(a[0] - b[0], a[1] - b[1]), ang: Math.atan2(b[1] - a[1], b[0] - a[0]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], st: { ...st2 } }; } return { m: v[0], st: { ...st2 } }; };
