@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v253';
+const VERSION = 'v254';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2047,7 +2047,8 @@ function smoothSkin(root, furMats, { vox = 0.008, k = 0.009, kw = 0.01, kc = 0.0
   const ngrp = split.length + 1, acc = new Float32Array(bones.length);
   for (let G = 0; G < ngrp; G++) {
     const pa = prims.filter(p => p.grp === G && p.paint), ps = prims.filter(p => p.grp === G && !p.paint); if (!ps.length) continue;
-    const mg = k * 5 + vox * 2, o = [0, 1, 2].map(j => Math.min(...ps.map(p => p.lo[j])) - mg), n = [0, 1, 2].map(j => Math.ceil((Math.max(...ps.map(p => p.hi[j])) + mg - o[j]) / vox) + 1);
+    const mg = k * 5 + vox * 2, o = [0, 1, 2].map(j => Math.min(...ps.map(p => p.lo[j])) - mg); o[0] = -Math.ceil(Math.max(-o[0], Math.max(...ps.map(p => p.hi[0])) + mg) / vox) * vox;   // 左右の真ん中（x=0）にマス目の点を置く：ずれていると、耳の先のような薄い所が左右で違う形に切り出される
+    const n = [0, 1, 2].map(j => Math.ceil((Math.max(...ps.map(p => p.hi[j])) + mg - o[j]) / vox) + 1);
     const [nx, ny, nz] = n, S = new Float32Array(nx * ny * nz);
     for (const P of ps) {
       const kp = k * P.kk, i0 = [0, 1, 2].map(j => Math.max(0, Math.floor((P.lo[j] - mg - o[j]) / vox))), i1 = [0, 1, 2].map(j => Math.min(n[j] - 1, Math.ceil((P.hi[j] + mg - o[j]) / vox)));
@@ -2256,9 +2257,9 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       const t2 = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.05, 4), mats.earRed); t2.position.y = 0.02; t2.rotation.y = Math.PI / 4; t2.scale.z = 0.45; tip.add(t2);
     } else {
       const outer = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.11, 4), mats.earRed);
-      outer.position.y = 0.05; outer.rotation.y = Math.PI / 4; outer.scale.z = 0.55;
+      outer.position.y = 0.05; outer.rotation.y = Math.PI / 4 * s; outer.scale.z = 0.55;   // 耳の板の向きは左右で鏡に（同じ向きに回すと、片方は外向き・片方は内向きの板になり、左右で形が違って見えた）
       const inner = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), mats.earIn);
-      inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4; inner.scale.z = 0.4;
+      inner.position.set(0, 0.04, 0.016); inner.rotation.y = Math.PI / 4 * s; inner.scale.z = 0.4;
       if (SMOOTH) { outer.scale.z = 0.36; outer.userData.sdf = { r: 0.04, tip: 0.006, k: 0.6 }; inner.scale.z = 0.3; inner.position.set(0, 0.03, 0.011); inner.userData.sdf = { r: 0.02, tip: 0.003, k: 0.6 }; outer.userData.fl = 0; inner.userData.fl = 0.012; }
       if (F2) { outer.scale.set(1.45, 0.82, 0.34); outer.position.y = 0.036; outer.userData.sdf = { r: 0.042, tip: 0.013, k: 0.6 }; inner.scale.set(1.45, 0.82, 0.26); inner.position.set(0, 0.024, 0.011); inner.userData.sdf = { r: 0.024, tip: 0.006, k: 0.6 }; inner.userData.fl = 0.006; }   // 薄く、先をとがらせる。内側の毛は前の面だけ
       ear.add(outer, inner);
