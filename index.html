@@ -227,7 +227,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v252';
+const VERSION = 'v253';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5462,7 +5462,7 @@ if (TUNE) {
   css.textContent += '#tSave{position:sticky;top:-10px;margin:-10px -12px 8px;padding:8px 12px;background:rgba(24,22,18,.97);border-bottom:1px solid rgba(255,255,255,.15);z-index:1}#tSave small{display:block;opacity:.75;margin-top:4px;min-height:1em}#tSaveBtn{background:#d08340!important;color:#fff!important;font-weight:600}';
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'tune';
-  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button><span style="margin-left:auto;align-self:center;opacity:.7;font-size:12px">' + VERSION + '</span></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button><button id="tFace">写真から顔を合わせる</button><label id="tOvPick" style="display:inline-block;margin:0;background:#f4efe6;color:#2b2118;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)">写真を重ねる<input type="file" accept="image/*"></label></div><div id="tOv"><div class="row"><button id="tOvMode"></button></div><label><b>柴の濃さ</b><i></i><input type="range" id="tOvA" min="0.15" max="1" step="0.05"></label><label><b>写真の傾き</b><i></i><input type="range" id="tOvR" min="-0.6" max="0.6" step="0.01"></label><div class="row"><button id="tOvFlip">左右反転</button><button id="tOvFit">大きさを戻す</button><button id="tOvOff">写真を外す</button></div><p>写真を動かす中：なぞって移動、2本指で拡大と回転（PCはホイールで拡大）。柴を回す中：なぞって柴を回し、ホイール・2本指で寄る。写真と同じ向きにしてから、つまみで形を寄せてください。写真はこの画面の中だけで使います。</p></div><div id="tFitMsg" style="display:none;background:rgba(255,179,71,.18);border:1px solid #ffb347;border-radius:8px;padding:8px;margin:6px 0;line-height:1.5"></div><div class="row"><button id="tParts">中の部品を見る</button><button id="tCollar">首輪を出す</button><small id="tPartsN" style="align-self:center;opacity:.75"></small></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
+  el.innerHTML = '<div id="tSave"><div class="row"><button id="tSaveBtn">保存</button><button id="tLoad">保存した形に戻す</button><span style="margin-left:auto;align-self:center;opacity:.7;font-size:12px">' + VERSION + '</span></div><small id="tSaved"></small></div><p>つまみを動かすと柴の形と姿勢が変わります。画面をなぞると回せます（ホイール・2本指で寄る）。姿勢のつまみは下のほうにあります。</p><div class="row"><button id="tPhoto">写真から体形を合わせる</button><button id="tFace">写真から顔を合わせる</button><label id="tOvPick" style="display:inline-block;margin:0;background:#f4efe6;color:#2b2118;border-radius:14px;padding:6px 11px;font:600 12px var(--font-ui,sans-serif)">写真を重ねる<input type="file" accept="image/*"></label></div><div id="tOv"><div class="row"><button id="tOvMode"></button></div><label><b>柴の濃さ</b><i></i><input type="range" id="tOvA" min="0.15" max="1" step="0.05"></label><label><b>写真の傾き</b><i></i><input type="range" id="tOvR" min="-0.6" max="0.6" step="0.01"></label><div class="row"><button id="tOvFlip">左右反転</button><button id="tOvFit">大きさを戻す</button><button id="tOvOff">写真を外す</button><button id="tOvLock" style="display:none">合わせた向きに戻す</button></div><p>写真を動かす中：なぞって移動、2本指で拡大と回転（PCはホイールで拡大）。柴を回す中：なぞって柴を回し、ホイール・2本指で寄る。写真と同じ向きにしてから、つまみで形を寄せてください。写真はこの画面の中だけで使います。</p></div><div id="tFitMsg" style="display:none;background:rgba(255,179,71,.18);border:1px solid #ffb347;border-radius:8px;padding:8px;margin:6px 0;line-height:1.5"></div><div class="row"><button id="tParts">中の部品を見る</button><button id="tCollar">首輪を出す</button><small id="tPartsN" style="align-self:center;opacity:.75"></small></div><div class="row" id="tView"></div><div class="row" id="tPose"></div>' +
     SL.map(a => a.length <= 2 ? '<h3>' + a[0] + '</h3>' : '<label><b>' + a[0] + '</b><i id="tv_' + a[1] + '"></i><input type="range" data-k="' + a[1] + '" min="' + a[2] + '" max="' + a[3] + '" step="' + a[4] + '"></label>').join('') +
     '<h3>決まったら</h3><div class="row"><button id="tCopy">値をコピー</button><button id="tReset">最初に戻す</button></div><textarea id="tOut" readonly></textarea><p>「保存」を押すと、今の形と姿勢をこのブラウザに保存します。つまみを試しに動かしたあとでも「保存した形に戻す」で戻せます。動かしている途中の値も散歩の柴にそのまま使われます。「値をコピー」した文字を Claude に貼ると、正式な形として組み込みます。</p>';
   document.body.appendChild(el);
@@ -5517,16 +5517,17 @@ if (TUNE) {
   document.getElementById('tCopy').addEventListener('click', () => { const t = document.getElementById('tOut'); t.select(); navigator.clipboard?.writeText(t.value).catch(() => {}); try { document.execCommand('copy'); } catch (e) { /* 選んだ状態にはなる */ } document.getElementById('tCopy').textContent = 'コピーしました'; setTimeout(() => { document.getElementById('tCopy').textContent = '値をコピー'; }, 1500); });
   // 画面をなぞって回す・寄る
   const cv = renderer.domElement, ptr = new Map(); let pinch = 0;
-  let ovMove = false, ovOn = false;   // 写真を重ねて「写真を動かす」の間は、柴を回さない／写真を敷いている間は背景と床を消す
+  let ovMove = false, ovOn = false, faceLock = null, lastLock = null;   // faceLock：顔を合わせた写真の向きに視点を固定し、写真を頭に重ね続ける（柴を回すと外れる）
+     // 写真を重ねて「写真を動かす」の間は、柴を回さない／写真を敷いている間は背景と床を消す
   const notOrbit = e => ovMove || (e.target.closest && e.target.closest('#tune, #fitUI'));
-  addEventListener('pointerdown', e => { if (notOrbit(e)) return; ptr.set(e.pointerId, [e.clientX, e.clientY]); }, true);
+  addEventListener('pointerdown', e => { if (notOrbit(e)) return; faceLock = null; ptr.set(e.pointerId, [e.clientX, e.clientY]); }, true);
   addEventListener('pointerup', e => { ptr.delete(e.pointerId); pinch = 0; }, true);
   addEventListener('pointercancel', e => { ptr.delete(e.pointerId); pinch = 0; }, true);
   addEventListener('pointermove', e => { const q = ptr.get(e.pointerId); if (!q) return;
     if (ptr.size === 1) { orbit.yaw -= (e.clientX - q[0]) * 0.008; orbit.pitch = Math.min(1.45, Math.max(-0.25, orbit.pitch + (e.clientY - q[1]) * 0.006)); }
     q[0] = e.clientX; q[1] = e.clientY;
     if (ptr.size === 2) { const [a, b] = [...ptr.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) orbit.dist = Math.min(6, Math.max(0.5, orbit.dist * pinch / d)); pinch = d; } }, true);
-  addEventListener('wheel', e => { if (notOrbit(e)) return; orbit.dist = Math.min(6, Math.max(0.5, orbit.dist * (e.deltaY > 0 ? 1.1 : 0.91))); }, { capture: true, passive: true });
+  addEventListener('wheel', e => { if (notOrbit(e)) return; faceLock = null; orbit.dist = Math.min(6, Math.max(0.5, orbit.dist * (e.deltaY > 0 ? 1.1 : 0.91))); }, { capture: true, passive: true });
   dog.object.visible = false; dog.points.visible = false; dog.extras.visible = false;
   { const h0 = H(home.x, home.z); H = () => h0; }   // 調整ページの地面は真っ平ら（草原のその場の傾きで、左右の足の高さが2cm違い、片側の脚が曲がっていた。地面は見せていない）
   // 背景は出さない（草・木・空・地面が形を見る邪魔）：光と柴と無地の床だけ。毎コマ隠し直す（町や草が自分で出し直す・空の写真は読み込み後に背景へ入る）
@@ -5666,8 +5667,8 @@ if (TUNE) {
   // 正面から撮った顔の写真に点を打ち、柴の頭の同じ場所と重ねる。比べるのは頭の中だけの座標（x＝横・y＝上・z＝鼻の向き）で、
   // 顔の上下の向き・左右の向き（写真ごとに違う＝形ではない）は合わせる時だけの値として一緒に探す。頭の大きさは写真に写らないので変えない
   const FMARKS = [   // 左右は「写真の中での左右」
-    ['eyeInL', '左の目の目頭', '写真で左にある目の、鼻に近いほうの端'], ['eyeOutL', '左の目の目尻', '写真で左にある目の、外側の端'],
-    ['eyeInR', '右の目の目頭', '写真で右にある目の、鼻に近いほうの端'], ['eyeOutR', '右の目の目尻', '写真で右にある目の、外側の端'],
+    ['eyeInL', '左の目の目頭', '写真で左にある目の、鼻に近いほうの端'], ['eyeOutL', '左の目の目尻', '写真で左にある目の、外側の端'], ['eyeTopL', '左の目の上の端', '写真で左にある目の、黒い所のいちばん上'], ['eyeBotL', '左の目の下の端', '写真で左にある目の、黒い所のいちばん下'],
+    ['eyeInR', '右の目の目頭', '写真で右にある目の、鼻に近いほうの端'], ['eyeOutR', '右の目の目尻', '写真で右にある目の、外側の端'], ['eyeTopR', '右の目の上の端', '写真で右にある目の、黒い所のいちばん上'], ['eyeBotR', '右の目の下の端', '写真で右にある目の、黒い所のいちばん下'],
     ['noseL', '鼻の左の端', '黒い鼻の、写真で左の端'], ['noseR', '鼻の右の端', '黒い鼻の、写真で右の端'],
     ['earL', '左の耳の先', '写真で左にある耳の、とがった先'], ['earR', '右の耳の先', '写真で右にある耳の、とがった先'],
     ['top', '頭のてっぺん', '耳と耳の間の、頭のいちばん高い所（毛の上から）'],
@@ -5675,7 +5676,7 @@ if (TUNE) {
     ['muzL', 'マズルの左の端', '鼻と目の間あたりで、口のまわりのふくらみ（ひげの生える所）の左の端'], ['muzR', 'マズルの右の端', '鼻と目の間あたりで、口のまわりのふくらみ（ひげの生える所）の右の端'],
     ['chin', 'あごの下', '口を閉じた下あごの、いちばん下'],
   ];
-  const FACE_K = ['eyeSpread', 'eyeUp', 'eyeSize', 'eyeTilt', 'earSpread', 'earLen', 'earOut', 'faceW', 'cheek', 'skull', 'muzzleThick', 'noseSize', 'jawThick', 'jawUp'];
+  const FACE_K = ['eyeSpread', 'eyeUp', 'eyeSize', 'eyeRound', 'eyeTilt', 'earSpread', 'earSize', 'earOut', 'faceW', 'cheek', 'skull', 'muzzleThick', 'noseSize', 'jawThick', 'jawUp'];
   const FSLIDE = { top: 'z', chin: 'z', cheekL: 'y', cheekR: 'y', muzL: 'y', muzR: 'y' };   // 平らな所の点：面に沿った向きは比べない（ここでの z は写真の横）
   const V3 = THREE.Vector3;
   const headInv = d => { d.object.updateMatrixWorld(true); return new THREE.Matrix4().copy(d.__parts.head.matrixWorld).invert(); };
@@ -5687,7 +5688,7 @@ if (TUNE) {
     const sup = (o, dx, dy, dz) => { const e = mat(o).elements, ax = e[0] * dx + e[1] * dy + e[2] * dz, ay = e[4] * dx + e[5] * dy + e[6] * dz, az = e[8] * dx + e[9] * dy + e[10] * dz, L = Math.hypot(ax, ay, az) || 1;   // だ円体の、向き d のいちばん端
       return new V3(e[12] + (e[0] * ax + e[4] * ay + e[8] * az) / L, e[13] + (e[1] * ax + e[5] * ay + e[9] * az) / L, e[14] + (e[2] * ax + e[6] * ay + e[10] * az) / L); };
     d.__eyes.forEach((eye, i) => { const s = i ? -1 : 1, e = mat(eye).elements, c = new V3(e[12], e[13], e[14]), u = new V3(e[0], e[1], e[2]).multiplyScalar(0.92 * s), S = s > 0 ? 'R' : 'L';   // 見えている目の端は、だ円の端の少し内側（切開ラインの起点と同じ）
-      m['eyeOut' + S] = c.clone().add(u); m['eyeIn' + S] = c.clone().sub(u); });
+      m['eyeOut' + S] = c.clone().add(u); m['eyeIn' + S] = c.clone().sub(u); const w = new V3(e[4], e[5], e[6]).multiplyScalar(0.85); m['eyeTop' + S] = c.clone().add(w); m['eyeBot' + S] = c.clone().sub(w); });
     if (by.nose) { m.noseR = sup(by.nose[0], 1, 0, 0); m.noseL = sup(by.nose[0], -1, 0, 0); }
     d.__ears.forEach((ear, i) => { const o = ear.children[0]; if (!o || !o.geometry.parameters || !o.geometry.parameters.height) return; m[i ? 'earL' : 'earR'] = new V3(0, o.geometry.parameters.height / 2, 0).applyMatrix4(mat(o)); });
     if (by.skull) m.top = sup(by.skull[0], 0, 1, 0);
@@ -5717,7 +5718,8 @@ if (TUNE) {
     return off;
   };
   // 正面から見た絵にする（pitch＝顔の上下の向き・yaw＝左右の向き）。体の時と同じ器（z＝横・y＝上）に入れる
-  const fproj = (p, pitch = 0, yaw = 0) => { const x1 = p.x * Math.cos(yaw) + p.z * Math.sin(yaw), z1 = -p.x * Math.sin(yaw) + p.z * Math.cos(yaw); return { z: x1, y: p.y * Math.cos(pitch) - z1 * Math.sin(pitch) }; };
+  const PERSP = 1;   // カメラの近さ（1／距離。頭の中の長さで 1＝およそ1m）：近くから撮ると手前の鼻が大きく、奥の耳が小さく写る分を見込む。見込まないと鼻とマズルを大きくしすぎる
+  const fproj = (p, pitch = 0, yaw = 0) => { const x1 = p.x * Math.cos(yaw) + p.z * Math.sin(yaw), z1 = -p.x * Math.sin(yaw) + p.z * Math.cos(yaw), k = 1 / (1 - (p.y * Math.sin(pitch) + z1 * Math.cos(pitch)) * PERSP); return { z: x1 * k, y: (p.y * Math.cos(pitch) - z1 * Math.sin(pitch)) * k }; };
   const faceShape = f => { const d = faceBare(f), inv = headInv(d), C = [], v = new V3(), B = faceMarks3(d), M = {};
     d.__parts.head.traverse(o => { if (!o.isMesh || !o.visible || o.userData.paint) return; const m = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld), ps = o.geometry.attributes.position; for (let i = 0; i < ps.count; i++) { v.fromBufferAttribute(ps, i).applyMatrix4(m); C.push(fproj(v, f.__pitch, f.__yaw)); } });
     for (const k in B) M[k] = fproj(B[k], f.__pitch, f.__yaw); return { C, M }; };
@@ -5749,7 +5751,7 @@ if (TUNE) {
     const form = toForm(x), fin = align(model(form), P, 1, FSLIDE);
     return { form, err0: Math.sqrt(first), err: Math.sqrt(fin.err), map: fin.map, scale: fin.scale, flip: 1, evals, marks: fin.M };
   };
-  window.__tune.face = { faceMarks3, faceBare, faceOff, fproj, faceShape, fitFace, FMARKS, FACE_K };
+  window.__tune.face = { PERSP, faceMarks3, faceBare, faceOff, fproj, faceShape, fitFace, FMARKS, FACE_K };
   // 写真の上に点を打つ画面：写真は読み込んだこの画面の中だけ（送らない・保存しない）。点は写真の画素の位置で持つ（拡大しても変わらない）
   const bareShape = f => { const d = bareDog(f); return { C: cloud(d), M: marksOf(d) }; };
   {
@@ -5835,8 +5837,10 @@ if (TUNE) {
       if (result.form.__neck) { const v = +Math.min(0.6, Math.max(-0.4, POSEF.standNeck + result.form.__neck)).toFixed(3); if (Math.abs(v - POSEF.standNeck) > 1e-3) ch.push('立ち姿の首の角度 ' + (+POSEF.standNeck.toFixed(3)) + '→' + v); POSEF.standNeck = v; }   // 首の構えは姿勢のつまみへ
       for (const k of MODE[mode].keys) { prev[k] = FORM[k]; const v = +result.form[k].toFixed(3); if (Math.abs(v - FORM[k]) > 1e-4) ch.push(NAME[k] + ' ' + (+FORM[k].toFixed(3)) + '→' + v); FORM[k] = v; }
       show(); out(); build(); close();
+      const lockNote = FACE() && img ? '<br>写真を同じ向きで柴の下に敷きました。「柴の濃さ」を動かして見比べてください（柴を回すと重ねが外れます）。' : '';
+      if (FACE() && img) { const lk = { map: result.map, pitch: result.form.__pitch || 0, yaw: result.form.__yaw || 0 }; window.__tune.overlay.show(img.src, () => { faceLock = lastLock = lk; }); }
       const box = document.getElementById('tFitMsg'); box.style.display = 'block';
-      box.innerHTML = '<b>写真から合わせました</b>' + (ch.length ? '：' + ch.join('、') : '（今の形とほぼ同じでした）') + '<div class="row"><button id="tFitUndo">合わせる前に戻す</button><button id="tFitOk">OK</button></div>';
+      box.innerHTML = '<b>写真から合わせました</b>' + (ch.length ? '：' + ch.join('、') : '（今の形とほぼ同じでした）') + lockNote + '<div class="row"><button id="tFitUndo">合わせる前に戻す</button><button id="tFitOk">OK</button></div>';
       document.getElementById('tFitUndo').onclick = () => { Object.assign(FORM, prev); POSEF.standNeck = prevNeck; POSEF.standFront = prevF; POSEF.standRear = prevR; show(); out(); build(); box.innerHTML = '合わせる前の形に戻しました'; setTimeout(() => { box.style.display = 'none'; }, 2500); };
       document.getElementById('tFitOk').onclick = () => { box.style.display = 'none'; };
       el.scrollTop = 0;
@@ -5880,7 +5884,7 @@ if (TUNE) {
     const area = () => innerWidth > 700 ? { x: 0, y: 0, w: innerWidth - 300, h: innerHeight } : { x: 0, y: 0, w: innerWidth, h: innerHeight * 0.52 };   // 柴が見えている所（つまみの欄を除く）
     const fitIn = () => { const A = area(); st2.s = Math.min(A.w / im.naturalWidth, A.h / im.naturalHeight) * 0.95; st2.x = A.x + A.w / 2; st2.y = A.y + A.h / 2; st2.r = 0; place(); };
     const box = document.getElementById('tOv'), modeBtn = document.getElementById('tOvMode');
-    const setMove = on => { ovMove = on; ovl.classList.toggle('move', on); renderer.domElement.style.pointerEvents = on ? 'none' : ''; modeBtn.textContent = on ? '写真を動かす中（押すと柴を回す）' : '柴を回す中（押すと写真を動かす）'; modeBtn.classList.toggle('on', on); };
+    const setMove = on => { if (on) faceLock = null; ovMove = on; ovl.classList.toggle('move', on); renderer.domElement.style.pointerEvents = on ? 'none' : ''; modeBtn.textContent = on ? '写真を動かす中（押すと柴を回す）' : '柴を回す中（押すと写真を動かす）'; modeBtn.classList.toggle('on', on); };
     document.querySelector('#tOvPick input').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return; if (url2) URL.revokeObjectURL(url2); url2 = URL.createObjectURL(f);
       im.onload = () => { ovOn = true; st2.fx = 1; fitIn(); box.style.display = 'block'; document.getElementById('tOvA').value = st2.a; document.getElementById('tOvR').value = 0; setMove(true); }; im.src = url2; e.target.value = '';
@@ -5890,7 +5894,8 @@ if (TUNE) {
     document.getElementById('tOvR').addEventListener('input', e => { st2.r = +e.target.value; place(); });
     document.getElementById('tOvFlip').addEventListener('click', () => { st2.fx *= -1; place(); });
     document.getElementById('tOvFit').addEventListener('click', fitIn);
-    document.getElementById('tOvOff').addEventListener('click', () => { ovOn = false; place(); im.removeAttribute('src'); if (url2) URL.revokeObjectURL(url2); url2 = null; box.style.display = 'none'; setMove(false); });
+    document.getElementById('tOvLock').addEventListener('click', () => { if (lastLock) { setMove(false); faceLock = lastLock; } });
+    document.getElementById('tOvOff').addEventListener('click', () => { faceLock = lastLock = null; document.getElementById('tOvLock').style.display = 'none'; ovOn = false; place(); im.removeAttribute('src'); if (url2) URL.revokeObjectURL(url2); url2 = null; box.style.display = 'none'; setMove(false); });
     // 写真を動かす：1本＝移動、2本＝拡大・回転・移動、ホイール＝拡大
     const P2 = new Map(); let g0 = null;
     const snap = () => { const v = [...P2.values()]; if (v.length >= 2) { const [a, b] = v; return { d: Math.hypot(a[0] - b[0], a[1] - b[1]), ang: Math.atan2(b[1] - a[1], b[0] - a[0]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], st: { ...st2 } }; } return { m: v[0], st: { ...st2 } }; };
@@ -5902,7 +5907,11 @@ if (TUNE) {
     const end = e => { P2.delete(e.pointerId); g0 = P2.size ? snap() : null; };
     ovl.addEventListener('pointerup', end); ovl.addEventListener('pointercancel', end);
     ovl.addEventListener('wheel', e => { e.preventDefault(); const k = e.deltaY > 0 ? 0.95 : 1.05; st2.x = e.clientX + (st2.x - e.clientX) * k; st2.y = e.clientY + (st2.y - e.clientY) * k; st2.s *= k; place(); }, { passive: false });
-    window.__tune.overlay = { st: st2, setMove, place };
+    // 合わせた写真を敷く（顔合わせから）：写真の2点 a1,a2 が画面の b1,b2 に来るよう、大きさ・傾き・位置を決める
+    const show = (src, cb) => { if (url2) { URL.revokeObjectURL(url2); url2 = null; } im.onload = () => { ovOn = true; st2.fx = 1; st2.a = 0.6; fitIn(); box.style.display = 'block'; document.getElementById('tOvA').value = st2.a; document.getElementById('tOvR').value = 0; document.getElementById('tOvLock').style.display = ''; setMove(false); cb(); }; im.src = src; };
+    const lockTo = (a1, a2, b1, b2) => { if (!im.naturalWidth) return; const ax = a2[0] - a1[0], ay = a2[1] - a1[1], bx = b2[0] - b1[0], by = b2[1] - b1[1], s = Math.hypot(bx, by) / (Math.hypot(ax, ay) || 1), r = Math.atan2(by, bx) - Math.atan2(ay, ax), c = Math.cos(r), sn = Math.sin(r), vx = im.naturalWidth / 2 - a1[0], vy = im.naturalHeight / 2 - a1[1];
+      st2.s = s; st2.r = r; st2.fx = 1; st2.x = b1[0] + (vx * c - vy * sn) * s; st2.y = b1[1] + (vx * sn + vy * c) * s; place(); };
+    window.__tune.overlay = { st: st2, setMove, place, show, lockTo };
   }
   tuneFrame = (dt, t) => {
     input.x = input.y = 0; st.x = home.x; st.z = home.z; st.speed = 0;   // 元の柴は隠して動かさない
@@ -5910,11 +5919,19 @@ if (TUNE) {
     plainBg(); noFog(); tFloor.position.set(ts.x, H(ts.x, ts.z) - 0.004, ts.z);   // 床は柴の足元（歩く時もついて行く）
     if (pose === 'walk') { const v = 1.3; ts.yaw += v / 3 * dt; ts.x += Math.sin(ts.yaw) * v * dt; ts.z += Math.cos(ts.yaw) * v * dt; ts.speed = v; } else ts.speed = 0;
     td.update(dt, t, ts, camera.position);
+    let lockInv = null;
+    if (faceLock && td.__parts) { const L = faceLock, hd = td.__parts.head, cp = Math.cos(L.pitch), sp = Math.sin(L.pitch), cy = Math.cos(L.yaw), sy = Math.sin(L.yaw); td.object.updateMatrixWorld(true);
+      lockInv = (x1, y1, z2) => { const y = y1 * cp + z2 * sp, z1 = -y1 * sp + z2 * cp; return hd.localToWorld(new THREE.Vector3(x1 * cy - z1 * sy, y, x1 * sy + z1 * cy)); };   // 写真の向きで見た場所→頭の中→世界
+      const hc = lockInv(0, 0.03, 0.05), dW = lockInv(0, 0.03, 1.05).sub(hc).normalize(), fac = innerWidth > 700 ? 1 : Math.max(1, 1.1 * innerHeight / innerWidth);
+      orbit = { yaw: Math.atan2(dW.x, dW.z) - ts.yaw, pitch: Math.asin(Math.max(-1, Math.min(1, dW.y))), dist: Math.max(FORM.headSize / PERSP, 0.36 / (0.4618 * Math.min(1.2, innerWidth / innerHeight))) / fac,   /* 写真と同じ近さ。ただし頭が画面からはみ出さない所まで下がる */ h: hc.y - td.object.position.y, dz: (hc.x - ts.x) * Math.sin(ts.yaw) + (hc.z - ts.z) * Math.cos(ts.yaw) }; }
     const a = ts.yaw + orbit.yaw, c = Math.cos(orbit.pitch), wide = innerWidth > 700, D = orbit.dist * (wide ? 1 : Math.max(1, 1.1 * innerHeight / innerWidth)), gy = td.object.position.y;
     const tx = ts.x + Math.sin(ts.yaw) * (orbit.dz || 0), tz = ts.z + Math.cos(ts.yaw) * (orbit.dz || 0);   // dz：見る所を体の前後へ（確認用）
     camera.position.set(tx + Math.sin(a) * c * D, gy + orbit.h + Math.sin(orbit.pitch) * D, tz + Math.cos(a) * c * D);
     camera.lookAt(tx, gy + orbit.h, tz); camera.fov = 26;
     camera.setViewOffset(innerWidth, innerHeight, wide ? 150 : 0, wide ? 0 : innerHeight * 0.24, innerWidth, innerHeight);   // つまみの列に隠れないよう、柴を空いている側へ寄せて写す
+    if (lockInv) { camera.updateMatrixWorld(true); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      const scr = v => { v.project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, ph = (x1, y1, z2) => { const k = 1 / (1 - z2 * PERSP), q = faceLock.map({ z: x1 * k, y: y1 * k }); return [q.x, q.y]; };
+      window.__tune.overlay.lockTo(ph(-0.08, 0, 0.09), ph(0.08, 0, 0.09), scr(lockInv(-0.08, 0, 0.09)), scr(lockInv(0.08, 0, 0.09))); }
   };
 }
 
