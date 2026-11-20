@@ -153,6 +153,8 @@
   #lookPad { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); width: 124px; height: 124px; border-radius: 50%;
     border: 2px solid var(--glass-edge); background: rgba(30,28,22,.28); touch-action: none; }
   #lookPad[hidden] { display: none; }
+  #lookPad.lock { box-shadow: 0 0 0 3px #e8a33a, 0 2px 10px rgba(0,0,0,.18); }
+  #lookPad.lock span { opacity: .9; }
   #lookPad span { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1.5; color: var(--ink); font: 600 11px var(--font-ui); opacity: .55; pointer-events: none; }
   #lookKnob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; background: rgba(255,250,240,.7); pointer-events: none; }
   body.pad #crouchBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }   /* 操作盤を出している時：右の列のボタンを操作盤の上へ */
@@ -227,7 +229,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v259';
+const VERSION = 'v260';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3223,7 +3225,8 @@ const hintEl = document.getElementById('hint');
 let jumpReq = false;
 const STICK_R = 70, STICK_RUN = 1.4;   // 内側の輪（半径70px）の中は歩き。散歩では、輪の外（1.4倍まで）へ押し出すと走る
 const clock = new THREE.Clock();
-const tapLook = () => { if (fpv) fpLook = 2; else camBack = true; };   // 軽くタップ：三人称は背後へ、一人称は柴の方を見る
+const tapLook = () => { if (fpv) setFpLook(!fpLook); else camBack = true; };   // 軽くタップ：三人称は背後へ、一人称は柴を画面の真ん中に捉え続ける（もう一度タップで戻す）
+const setFpLook = on => { fpLook = !!on && fpv; fpLookT = clock.elapsedTime; const tip = document.getElementById("lookTip"); if (tip) tip.innerHTML = fpv ? (fpLook ? "柴を見ています<br>タップで戻す" : "見回す<br>タップで柴を見る") : "見回す<br>タップで背後へ"; const lp = document.getElementById("lookPad"); if (lp) lp.classList.toggle("lock", fpLook); };
 
 canvas.addEventListener('pointerdown', e => {
   if (e.clientX < innerWidth * 0.55 && stickId === null) {
@@ -3231,7 +3234,7 @@ canvas.addEventListener('pointerdown', e => {
     stickEl.style.left = stickX + 'px'; stickEl.style.top = stickY + 'px';
     knobEl.style.transform = ''; stickEl.hidden = false;
   } else if (camId === null) {
-    camId = e.pointerId; camLastX = e.clientX; camLastY = e.clientY; camTapT = performance.now(); camTapX = e.clientX; camTapY = e.clientY;
+    camId = e.pointerId; camLastX = e.clientX; camLastY = e.clientY; camTapT = e.timeStamp; camTapX = e.clientX; camTapY = e.clientY;
   }
   canvas.setPointerCapture(e.pointerId);
 });
@@ -3251,7 +3254,7 @@ canvas.addEventListener('pointermove', e => {
 });
 const endPointer = e => {
   if (e.pointerId === stickId) { stickId = null; input.x = input.y = 0; stickEl.hidden = true; stickEl.classList.remove('run'); }
-  if (e.pointerId === camId) { camId = null; if (performance.now() - camTapT < 300 && Math.hypot(e.clientX - camTapX, e.clientY - camTapY) < 10) tapLook(); }   // 動かさずに軽くタップ：背後へ
+  if (e.pointerId === camId) { camId = null; if (e.timeStamp - camTapT < 350 && Math.hypot(e.clientX - camTapX, e.clientY - camTapY) < 10) tapLook(); }   // 動かさずに軽くタップ：背後へ
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -3276,7 +3279,7 @@ let fpsN = 0, fpsT = 0, hinted = false, slowN = 0;
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const fpvV = new THREE.Vector3(), camGoal = new THREE.Vector3();
 const FP_REST = -0.12;   // 一人称のふだんの目線（ほぼ水平でわずかに下。前の -0.38 は足元ばかり見えて前が確かめにくかった）
-let fpOff = 0, fpLook = 0;   // fpLook：一人称でタップした「柴を見る」の残り時間   // 一人称の横目：歩く向き（camYaw）はそのままで、目線だけ柴の方へ振る量
+let fpOff = 0, fpLook = false, fpLookT = 0;   // fpLook：一人称でタップした「柴を見る」の最中（柴を画面の真ん中に捉え続ける。もう一度タップ・自分で見回すと戻る）   // 一人称の横目：歩く向き（camYaw）はそのままで、目線だけ柴の方へ振る量
 const KEEP = true;   // 一人称で柴を画面に入れ続ける：柴が画面の内側の枠から出た分だけ、首を回して枠の中へ戻す
 const shTmpX = new THREE.Vector3(), shTmpY = new THREE.Vector3(), shTmpP = new THREE.Vector3();
 
@@ -5257,12 +5260,12 @@ function stepInner(dt, t) {
     // 横目：柴が画面の外へ出そうなら、歩く向きは変えずに目線だけ柴の方へ振る（幅の6割の内側まで・最大約80度）。柴が映っていないと歩調を合わせられないため。
     //   スティックの「前」は camYaw のままなので、横目で柴を見ても歩く向きは変わらない。真後ろ（約140度より後ろ）は振り向かないと見えないので、今の振りのまま
     let gIn = false;
-    if (fpLook > 0 && (busy || t - camDragT < 0.1)) fpLook = 0;   // 自分で見回し始めた・ほかの用で柴を見ている時はやめる
-    if (fpLook > 0) {   // タップで柴を見る：歩いている間は歩く向きのまま振り返って見る（真後ろでも）、止まっている時は体ごと柴の方を向く
-      fpLook -= dt; const lx = st.x - eye.x, lz = st.z - eye.z, ld = Math.atan2(lx, lz), lp = Math.max(-1.1, Math.atan2(gy + 0.3 - eye.y, Math.hypot(lx, lz)));
+    if (fpLook && camDragT > fpLookT + 0.05) setFpLook(false);   // タップの後で自分で見回し始めたらやめる（タップ中の指の小さなぶれ・操作盤に触れた分は camDragT が進むが、タップより前なので数えない。v259 はこれで直後に取り消されていた）（ほかの用で柴を見ている間は下の busy に任せ、終われば戻ってくる）
+    if (fpLook && !busy) {   // タップで柴を見る：歩いている間は歩く向きのまま振り返って見る（真後ろでも）、止まっている時は体ごと柴の方を向く
+      const lx = st.x - eye.x, lz = st.z - eye.z, ld = Math.atan2(lx, lz), lp = Math.max(-1.1, Math.atan2(gy + 0.3 - eye.y, Math.hypot(lx, lz)));
       if (mag >= 0.1) fpOff += angDiff(fpOff, angDiff(camYaw, ld)) * Math.min(1, dt * 7);
       else { camYaw += angDiff(camYaw, ld) * Math.min(1, dt * 7); fpOff += -fpOff * Math.min(1, dt * 7); }
-      camPitch += (lp - camPitch) * Math.min(1, dt * 6);
+      camPitch += (lp - camPitch) * Math.min(1, dt * 7);
     } else
     { let og = 0;
       if (KEEP && !busy && !W.smell && !gyro && t - camDragT > 1.0) {   // ジャイロ中はスマホの向きが目線
@@ -5275,7 +5278,7 @@ function stepInner(dt, t) {
       const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.35 - eye.y;
       camYaw += angDiff(camYaw, Math.atan2(tx, tz)) * Math.min(1, dt * 4);
       camPitch += (Math.max(-1.3, Math.atan2(ty, Math.hypot(tx, tz))) - camPitch) * Math.min(1, dt * 4);
-    } else if (fpLook > 0) { /* 上で */ } else if (KEEP && t - camDragT > 1.0) {
+    } else if (fpLook) { /* 上で */ } else if (KEEP && t - camDragT > 1.0) {
       // 左右：画面の幅の7割の枠から出た分だけ回す（枠の中なら動かさないので、少しの動きでは画面は揺れない）。
       // 歩いている間（倒している間）は柴を追わない：前を見たまま歩く（足元の左下へ回った柴を追うと、目線が左下へ落ちたまま歩くことになる）。柴が画面の外なら縁の矢印で知らせる。立ち止まったら柴を枠に入れる
       const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.3 - eye.y, d = angDiff(camYaw, Math.atan2(tx, tz));
@@ -5419,14 +5422,14 @@ padReady = true;
     lookKnob.style.transform = `translate(${dx}px, ${dy}px)`; lookIn.x = dx / R; lookIn.y = -dy / R;
   };
   let tapT = 0, tapX = 0, tapY = 0, tapFar = false;
-  lookPad.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); tapT = performance.now(); tapX = e.clientX; tapY = e.clientY; tapFar = false; lookIn.id = e.pointerId; try { lookPad.setPointerCapture(e.pointerId); } catch (err) { /* 指が離れていても動かせる */ } move(e); });
+  lookPad.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); tapT = e.timeStamp; tapX = e.clientX; tapY = e.clientY; tapFar = false; lookIn.id = e.pointerId; try { lookPad.setPointerCapture(e.pointerId); } catch (err) { /* 指が離れていても動かせる */ } move(e); });
   lookPad.addEventListener('pointermove', e => { if (e.pointerId === lookIn.id) { move(e); if (Math.hypot(e.clientX - tapX, e.clientY - tapY) > 10) { tapFar = true; camBack = false; } } });
-  const end = e => { if (e.pointerId === lookIn.id) { if (!tapFar && performance.now() - tapT < 300) tapLook(); lookIn.id = null; lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; } };
+  const end = e => { if (e.pointerId === lookIn.id) { if (!tapFar && e.timeStamp - tapT < 350) tapLook(); /* 時刻は指が触れた・離れた瞬間（e.timeStamp）で測る。重いコマで処理が遅れても軽いタップを長押しと取り違えない */ lookIn.id = null; lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; } };
   lookPad.addEventListener('pointerup', end); lookPad.addEventListener('pointercancel', end);
 }
 const fpvBtn = document.getElementById('fpvBtn'), dogArrow = document.getElementById('dogArrow');
 function setFpv(v) {
-  fpv = v; fpOff = 0; fpLook = 0; document.getElementById('lookTip').innerHTML = '見回す<br>タップで' + (fpv ? '柴を見る' : '背後へ'); document.body.classList.toggle('fpv', fpv); lookPad.hidden = !WALK; document.body.classList.toggle('pad', !!WALK); lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; camPitch = fpv ? FP_REST : -0.38; camSnap = true;
+  fpv = v; fpOff = 0; setFpLook(false); document.body.classList.toggle('fpv', fpv); lookPad.hidden = !WALK; document.body.classList.toggle('pad', !!WALK); lookIn.x = lookIn.y = 0; lookKnob.style.transform = ''; camPitch = fpv ? FP_REST : -0.38; camSnap = true;
   fpvBtn.classList.toggle('on', fpv); fpvBtn.innerHTML = (fpv ? '後ろから' : '一人称') + '<span class="key">V</span>';
   if (WALK) { WALK.me.__head.visible = WALK.me.__neck.visible = !fpv; for (const o of WALK.me.__fpvHide) o.visible = !fpv; }   // 自分の頭と首は描かない（髪や、うつむいた時に首が目の前に来ないように）
   gyroBtn.hidden = !(fpv && gyroOk);
