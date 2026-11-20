@@ -229,7 +229,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v262';
+const VERSION = 'v263';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5257,40 +5257,19 @@ function stepInner(dt, t) {
     // 歩いている間は、目を体の向きにつける（手前や横に倒すと体ごと振り向いて、その向きを見て歩く。目だけ前に残ると、自分の上着の襟の中をのぞき込んでしまう）
     if (mag > 0.08 && t - camDragT > 0.25) camYaw += angDiff(camYaw, walker.yaw) * Math.min(1, dt * 8);
     const busy = W.grab && W.grab.ph !== 'let' || W.pick || W.feed || W.crouch && dog.state.lick || W.loose && W.loose.catching;
-    // 横目：柴が画面の外へ出そうなら、歩く向きは変えずに目線だけ柴の方へ振る（幅の6割の内側まで・最大約80度）。柴が映っていないと歩調を合わせられないため。
-    //   スティックの「前」は camYaw のままなので、横目で柴を見ても歩く向きは変わらない。真後ろ（約140度より後ろ）は振り向かないと見えないので、今の振りのまま
-    let gIn = false;
     if (fpLook && camDragT > fpLookT + 0.05) setFpLook(false);   // タップの後で自分で見回し始めたらやめる（タップ中の指の小さなぶれ・操作盤に触れた分は camDragT が進むが、タップより前なので数えない。v259 はこれで直後に取り消されていた）（ほかの用で柴を見ている間は下の busy に任せ、終われば戻ってくる）
     if (fpLook && !busy) {   // タップで柴を見る：歩いている間は歩く向きのまま振り返って見る（真後ろでも）、止まっている時は体ごと柴の方を向く
       const lx = st.x - eye.x, lz = st.z - eye.z, ld = Math.atan2(lx, lz), lp = Math.max(-1.1, Math.atan2(gy + 0.3 - eye.y, Math.hypot(lx, lz)));
       if (mag >= 0.1) fpOff += angDiff(fpOff, angDiff(camYaw, ld)) * Math.min(1, dt * 7);
       else { camYaw += angDiff(camYaw, ld) * Math.min(1, dt * 7); fpOff += -fpOff * Math.min(1, dt * 7); }
       camPitch += (lp - camPitch) * Math.min(1, dt * 7);
-    } else
-    { let og = 0;
-      if (KEEP && !busy && !W.smell && !gyro && t - camDragT > 1.0) {   // ジャイロ中はスマホの向きが目線
-        const gx = st.x - eye.x, gz = st.z - eye.z, dR = angDiff(camYaw, Math.atan2(gx, gz)), he = Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect) * 0.6;   // 端の操作盤・表示に隠れないよう、幅の6割の内側へ
-        og = Math.hypot(gx, gz) < 0.8 && Math.abs(dR) > 1.0 ? fpOff : Math.sign(dR) * Math.min(1.45, Math.max(0, Math.abs(dR) - he)) * (1 - smooth(2.2, 2.8, Math.abs(dR)));   // 足元の横は、少し動くだけで向きが大きく変わるので今のまま。後ろへ回るほど前へ戻す（真後ろは振り向かないと見えない）
-        gIn = Math.abs(angDiff(camYaw + og, Math.atan2(gx, gz))) < he * 1.6;
-      }
-      fpOff += (og - fpOff) * Math.min(1, dt * 3); }
+    } else fpOff += -fpOff * Math.min(1, dt * 3);   // 柴を見るのをやめたら、目線を歩く向きへ戻す（v263 で横目＝柴の方へ自動で振るのはやめた。柴を見たい時はタップ）
     if (busy && t - camDragT > 1.5) {
       const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.35 - eye.y;
       camYaw += angDiff(camYaw, Math.atan2(tx, tz)) * Math.min(1, dt * 4);
       camPitch += (Math.max(-1.3, Math.atan2(ty, Math.hypot(tx, tz))) - camPitch) * Math.min(1, dt * 4);
-    } else if (fpLook) { /* 上で */ } else if (KEEP && t - camDragT > 1.0) {
-      // 左右：画面の幅の7割の枠から出た分だけ回す（枠の中なら動かさないので、少しの動きでは画面は揺れない）。
-      // 歩いている間（倒している間）は柴を追わない：前を見たまま歩く（足元の左下へ回った柴を追うと、目線が左下へ落ちたまま歩くことになる）。柴が画面の外なら縁の矢印で知らせる。立ち止まったら柴を枠に入れる
-      const tx = st.x - eye.x, tz = st.z - eye.z, ty = gy + 0.3 - eye.y, d = angDiff(camYaw, Math.atan2(tx, tz));
-      const hh = Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect) * 0.7, vh = camera.fov * Math.PI / 360 * 0.7, vb = camera.fov * Math.PI / 360 * 0.9;   // vb：下側は縁ぎりぎり（背中と頭が下の縁に見えていればよい。目を落としすぎない）
-      // 柴が飼い主の体のすぐそば（においを嗅いでまわりを回る・足元にいる）なら追わない：近いと少し動くだけで向きが大きく変わり、ぐるぐる回るため
-      const close = W.smell || Math.hypot(tx, tz) < 0.8 && Math.abs(d) > 1.0;   // 足元の前寄り（60度以内）なら追う
-      // 少し止まっただけでは追わない：しっかり立ち止まって（約1.5秒）から。止まるたびに柴の方へ向きが変わると、また倒した時に柴のいる方へ歩き出して、思った方へ進めない
-      W.fpStillT = mag < 0.1 && walker.speed < 0.3 ? (W.fpStillT || 0) + dt : 0; const still = W.fpStillT > 1.5;
-      if (!close && Math.abs(d) > hh && still) camYaw += (d - Math.sign(d) * hh) * Math.min(1, dt * 3);
-      // 上下：ふだんの目線（少し下向き）を基本に、足元へ来たら柴が枠に入るまで目を落とす
-      const pd = Math.atan2(ty + 0.12, Math.hypot(tx, tz)), goal = Math.max(-1.3, Math.min(0.5, W.smell ? (gyro ? camPitch : FP_REST) : !still ? (gyro ? camPitch : gIn ? Math.max(FP_REST - 0.45, Math.min(FP_REST, pd + vh * 0.75)) : FP_REST) : Math.max(pd - vh, Math.min(pd + vb, gyro ? camPitch : FP_REST))));   // ジャイロ中は、スマホで決めた目線のまま（柴が枠から出た時だけ動かす）
-      camPitch += (goal - camPitch) * Math.min(1, dt * 2.5);
+    } else if (fpLook) { /* 上で */
+    // v263：止まった時に柴の方へ向き直す・柴を枠に入れるよう目を落とす自動追従はやめた（勝手に向きが変わって思う方へ歩けない・ジャイロとけんかする）。柴が画面の外なら縁の矢印で知らせ、見たい時はタップ
     } else if (!gyro && t - camDragT > 2.5) camPitch += (FP_REST - camPitch) * Math.min(1, dt * 1.5);
     camera.lookAt(eye.x + Math.sin(camYaw + fpOff) * Math.cos(camPitch), eye.y + Math.sin(camPitch), eye.z + Math.cos(camYaw + fpOff) * Math.cos(camPitch));
     // 柴が画面の外にいる時は、画面の縁に向きを出す
