@@ -229,7 +229,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v261';
+const VERSION = 'v262';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5202,7 +5202,7 @@ function stepInner(dt, t) {
 
   // カメラ：後ろから追う（なぞって回した直後は追わない）
   const run = smooth(2.5, 4.8, st.speed);
-  if (fpv && gyro) gyroStep(dt, t);   // ジャイロ中は、カメラを自動で進む向き・相手へ向けない
+  if (fpv && gyro) gyroStep();   // ジャイロ中は、カメラを自動で進む向き・相手へ向けない
   // 首輪が抜けた後は相手へ向け直さない（倒した向きが勝手に回って、思う方へ歩けなくなる）
   else if (WALK && WALK.W.mode === 'lock' && !WALK.W.ev) { if (t - camDragT > 1.5) camYaw += angDiff(camYaw, Math.atan2(WALK.rdst.x - walker.x, WALK.rdst.z - walker.z)) * Math.min(1, dt * 1.2); }
   else if (WALK && WALK.W.ev === 'loose') { /* 首輪が抜けて柴を追う間は、カメラを勝手に回さない（細かく向きを変えて近づくので、画面が回ると思った方へ行けない） */ }
@@ -5287,9 +5287,9 @@ function stepInner(dt, t) {
       const close = W.smell || Math.hypot(tx, tz) < 0.8 && Math.abs(d) > 1.0;   // 足元の前寄り（60度以内）なら追う
       // 少し止まっただけでは追わない：しっかり立ち止まって（約1.5秒）から。止まるたびに柴の方へ向きが変わると、また倒した時に柴のいる方へ歩き出して、思った方へ進めない
       W.fpStillT = mag < 0.1 && walker.speed < 0.3 ? (W.fpStillT || 0) + dt : 0; const still = W.fpStillT > 1.5;
-      if (!gyro && !close && Math.abs(d) > hh && still) camYaw += (d - Math.sign(d) * hh) * Math.min(1, dt * 3);
+      if (!close && Math.abs(d) > hh && still) camYaw += (d - Math.sign(d) * hh) * Math.min(1, dt * 3);
       // 上下：ふだんの目線（少し下向き）を基本に、足元へ来たら柴が枠に入るまで目を落とす
-      const pd = Math.atan2(ty + 0.12, Math.hypot(tx, tz)), goal = gyro ? camPitch : Math.max(-1.3, Math.min(0.5, W.smell ? (gyro ? camPitch : FP_REST) : !still ? (gyro ? camPitch : gIn ? Math.max(FP_REST - 0.45, Math.min(FP_REST, pd + vh * 0.75)) : FP_REST) : Math.max(pd - vh, Math.min(pd + vb, gyro ? camPitch : FP_REST))));   // ジャイロ中は、スマホで決めた目線のまま（柴が枠から出た時だけ動かす）
+      const pd = Math.atan2(ty + 0.12, Math.hypot(tx, tz)), goal = Math.max(-1.3, Math.min(0.5, W.smell ? (gyro ? camPitch : FP_REST) : !still ? (gyro ? camPitch : gIn ? Math.max(FP_REST - 0.45, Math.min(FP_REST, pd + vh * 0.75)) : FP_REST) : Math.max(pd - vh, Math.min(pd + vb, gyro ? camPitch : FP_REST))));   // ジャイロ中は、スマホで決めた目線のまま（柴が枠から出た時だけ動かす）
       camPitch += (goal - camPitch) * Math.min(1, dt * 2.5);
     } else if (!gyro && t - camDragT > 2.5) camPitch += (FP_REST - camPitch) * Math.min(1, dt * 1.5);
     camera.lookAt(eye.x + Math.sin(camYaw + fpOff) * Math.cos(camPitch), eye.y + Math.sin(camPitch), eye.z + Math.cos(camYaw + fpOff) * Math.cos(camPitch));
@@ -5435,8 +5435,7 @@ function setFpv(v) {
   gyroBtn.hidden = !(fpv && gyroOk);
 }
 const gyroBtn = document.getElementById('gyroBtn'), gyroOk = 'DeviceOrientationEvent' in window && matchMedia('(pointer: coarse)').matches;
-let gyro = false, gyroQ = null, gyroPrev = null, gyroSeen = 0, gyroRef = null;   // gyroRef：ジャイロを入れた時のスマホの上下の傾き（この構え＝ふだんの目線）
-const GYRO_YAW = 2, GYRO_PITCH = 1.4;   // 手元の動きだけで真横・足元・正面へ届くよう、スマホを回した角度を何倍に効かせるか（手首は左右±45度・上下±30度くらいしか回らない）
+let gyro = false, gyroQ = null, gyroPrev = null, gyroSeen = 0;
 const gq = new THREE.Quaternion(), gq1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)), gqz = new THREE.Quaternion(), ge = new THREE.Euler(), gz = new THREE.Vector3(0, 0, 1), gf = new THREE.Vector3();
 addEventListener('deviceorientation', e => {
   if (e.alpha === null) return;
@@ -5453,19 +5452,14 @@ gyroBtn.addEventListener('click', async e => {
   if (gyro) { gyro = false; showGyro(); return; }
   try { if (typeof DeviceOrientationEvent.requestPermission === 'function' && await DeviceOrientationEvent.requestPermission() !== 'granted') { showGyro('許可されていません'); return; } }
   catch (err) { showGyro('許可されていません'); return; }
-  gyro = true; gyroPrev = null; gyroRef = null; const n0 = gyroSeen; showGyro();
+  gyro = true; gyroPrev = null; const n0 = gyroSeen; showGyro();
   setTimeout(() => { if (gyro && gyroSeen === n0) { gyro = false; showGyro('使えない端末です'); } }, 1500);
 });
-function gyroStep(dt, t) {   // 前のコマからの向きの変化を足す（なぞった分や、自動で柴へ目を落とす分とけんかしない）
+function gyroStep() {   // 前のコマからの向きの変化を足す（なぞった分や、自動で柴へ目を落とす分とけんかしない）
   if (!(fpv && gyro && gyroQ)) { gyroPrev = null; return; }
-  if (gyroRef === null) gyroRef = gyroQ.pitch;
-  // 上下：構えた角度＝ふだんの目線（FP_REST）。なぞった・柴を見た・自動で目を落とした分は、終わると少しずつこの対応へ戻す（下を向いたままになり、スマホを起こしても下寄りの正面しか見えなくなるのを防ぐ）
-  const base = q => Math.max(-1.35, Math.min(0.5, FP_REST + (q.pitch - gyroRef) * GYRO_PITCH));
   if (gyroPrev) {
-    if (Math.abs(gyroQ.pitch) < 1.35) { const d = angDiff(gyroPrev.yaw, gyroQ.yaw) * GYRO_YAW; camYaw += d; if (moveRef !== null) moveRef += d; }   // スマホを回した分は、歩く向きの基準も一緒に回す（見ている方へ歩く。目が体について回っても、けんかしない）   // 真上・真下付近は左右がふらつくので使わない
-    camPitch = Math.max(-1.35, Math.min(0.5, camPitch + base(gyroQ) - base(gyroPrev)));
-    const W = WALK && WALK.W, busy = W && (W.grab && W.grab.ph !== 'let' || W.pick || W.feed || W.crouch && dog.state.lick || W.loose && W.loose.catching);
-    if (!fpLook && !busy && t - camDragT > 1.0) camPitch += (base(gyroQ) - camPitch) * Math.min(1, dt * 1.5);
+    if (Math.abs(gyroQ.pitch) < 1.35) { const d = angDiff(gyroPrev.yaw, gyroQ.yaw); camYaw += d; if (moveRef !== null) moveRef += d; }   // スマホを回した分は、歩く向きの基準も一緒に回す（見ている方へ歩く。目が体について回っても、けんかしない）   // 真上・真下付近は左右がふらつくので使わない
+    camPitch = Math.max(-1.35, Math.min(0.5, camPitch + gyroQ.pitch - gyroPrev.pitch));
   }
   gyroPrev = gyroQ;
 }
