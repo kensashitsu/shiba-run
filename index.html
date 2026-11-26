@@ -252,7 +252,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v269';
+const VERSION = 'v270';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -4012,7 +4012,6 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
     },
     move(dt, t, dx, dz, mag) {
-      if (HOME.ph === 'enter' && HOME.tgt) { const ex = HOME.tgt.x - walker.x, ez = HOME.tgt.z - walker.z, ed = Math.hypot(ex, ez); if (ed > 0.12) { dx = ex / ed; dz = ez / ed; mag = Math.min(W.ponder && W.ponder.home ? 0.35 : 0.55, 0.2 + ed); } else mag = 0; }   // 家に入る：扉の前まで自動で歩く
       const S = dog.state;
       // --- 相手（黒柴と飼い主）：道を行き来し、端で折り返す
       OTHERS.forEach((o, i) => {
@@ -4285,7 +4284,11 @@ if (TOWN && /[?&]walk/.test(location.search)) {
               const qx = ax + ex * u, qz = az + ez * u; let nx = ez / L, nz = -ex / L;
               if ((qx - cx) * nx + (qz - cz) * nz < 0) { nx = -nx; nz = -nz; }   // 外向き
               if ((walker.x - qx) * nx + (walker.z - qz) * nz <= 0) continue;     // こちらを向いた壁だけ
-              if (townBlocked(qx + nx * 1.4, qz + nz * 1.4) || townBlocked(qx + nx * 0.6, qz + nz * 0.6)) continue;
+              {   // 扉から道の側へ 4m まっすぐ、家にも塀にも遮られない（自分で歩いて扉まで行ける）
+                let ok = !lowCross(qx + nx * 0.35, qz + nz * 0.35, qx + nx * 4, qz + nz * 4);
+                for (let k = 0.35; ok && k <= 4; k += 0.25) if (townBlocked(qx + nx * k, qz + nz * k) || [0, 1.57, 3.14, 4.71].some(a => lowHit(qx + nx * k + Math.sin(a) * 0.3, qz + nz * k + Math.cos(a) * 0.3))) ok = false;
+                if (!ok) continue;
+              }
               const d = Math.hypot(walker.x - qx, walker.z - qz);
               if (d < 30 && (!best || d < best.d)) best = { d, qx, qz, nx, nz };
             }
@@ -4340,31 +4343,28 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           HOME.refT = 3; HOME.broke = false;
         }
         HOME.pon = pon;
-        // 家に入る：門の前（2.2m 以内）で「家に入る」。柴が踏ん張っている間は入れない（崩すか、もう少し歩く）
-        HOME.canEnter = HOME.walkT > 20 && hd < 2.2 && !W.ev && !W.loose;
-        if (HOME.unReq) {
-          HOME.unReq = false;
-          if (!HOME.canEnter) { /* 門の前でない */ }
-          else if (sd > 3.2) { W.msg = '柴がそばにいない'; W.msgT = 1.6; }
+        // 家に入る（v270）：自分で歩いて扉をくぐる。扉に近づくと開き、扉の前で家の方へ歩くと暗転して玄関の中へ。
+        //   柴が踏ん張っている間は入れない（リードを引いて崩す＝無理やり。満足が下がり、外す時に唸られやすい／もう少し歩く）
+        HOME.canEnter = false;
+        const Dd = HOME.door, dd = Dd ? Math.hypot(Dd.x - walker.x, Dd.z - walker.z) : hd;
+        HOME.open = Math.max(0, Math.min(1, (HOME.open || 0) + (HOME.walkT > 20 && dd < 1.8 && !W.ev ? dt / 0.6 : -dt / 0.8)));
+        if (HOME.hinge) HOME.hinge.rotation.y = -1.35 * (1 - (1 - HOME.open) ** 2);   // 外開き
+        HOME.tellT = Math.max(0, (HOME.tellT || 0) - dt);
+        const into = walker.speed > 0.2 && (!Dd || Math.abs(angDiff(walker.yaw, HOME.f + Math.PI)) < 1.1);
+        if (HOME.walkT > 20 && dd < (Dd ? 0.75 : 1.0) && into && !W.ev && !W.loose) {
+          if (W.ponder && W.ponder.home) { if (HOME.tellT <= 0) { W.msg = '柴が踏ん張っている（リードを引いて崩せば、無理やり入れられる）'; W.msgT = 2.4; HOME.tellT = 3; } }
+          else if (sd > 2.8) { if (HOME.tellT <= 0) { W.msg = '柴がそばにいない'; W.msgT = 1.6; HOME.tellT = 2; } }
           else {
-            const drag = !!(W.ponder && W.ponder.home);   // 踏ん張っている：引きずって無理やり入れる（満足が下がり、外す時に唸られやすい）
-            if (drag) { HOME.forced = true; HOME.dragIn = true; addSat(-0.15, '無理やり帰宅'); W.msg = '踏ん張る柴を、引きずって家に入れる'; W.msgT = 2.4; }
-            HOME.ph = 'enter'; HOME.et = 0; HOME.open = 0; HOME.fadeV = 0;
+            HOME.ph = 'enter'; HOME.et = 0; HOME.fadeV = 0;
             HOME.way = HOME.forced ? '家の前で踏ん張ったのを、崩して入れた' : W.sat >= 0.6 ? (HOME.lead ? '柴が自分から家へ向かった' : '家へ導くと、素直についてきた') : '歩き足りないまま帰ってきた';
-            if (!drag) W.ponder = null; W.sniff = null; W.short = false; W.crouch = false; if (S.act === 'sniff') S.act = null;
+            W.ponder = null; W.sniff = null; W.short = false; W.crouch = false; if (S.act === 'sniff') S.act = null;
             if (fpv && typeof setFpv === 'function') setFpv(false);
           }
         }
       }
-      if (HOME.ph === 'enter') {   // 扉の前まで歩く→扉を開ける→暗転→玄関の中
-        HOME.et += dt;
-        const Dd = HOME.door, tx = Dd ? Dd.x + Dd.nx * 0.55 + Math.cos(HOME.f) * 0.18 : walker.x, tz = Dd ? Dd.z + Dd.nz * 0.55 - Math.sin(HOME.f) * 0.18 : walker.z;
-        HOME.tgt = { x: tx, z: tz };
-        const at = Math.hypot(tx - walker.x, tz - walker.z) < 0.22 || HOME.et > 7;
-        if (Dd && Math.hypot(Dd.x - walker.x, Dd.z - walker.z) < 1.7) HOME.open = Math.min(1, HOME.open + dt / 0.7);
-        if (HOME.hinge) HOME.hinge.rotation.y = -1.35 * (1 - (1 - HOME.open) ** 2);   // 外開き
-        if (at && W.ponder && W.ponder.home) { W.ponder = null; W.msg = '最後は引きずり込んだ'; W.msgT = 1.6; }
-        if (at && (HOME.open >= 1 || !Dd)) HOME.fadeV = Math.min(1, HOME.fadeV + dt / 0.35);
+      if (HOME.ph === 'enter') {   // 扉をくぐった：暗転→玄関の中
+        HOME.et += dt; HOME.tgt = null;
+        HOME.fadeV = Math.min(1, HOME.fadeV + dt / 0.35);
         if (HOME.fadeV >= 1) {
           HOME.ph = 'in'; HOME.t = 0; HOME.un = null; HOME.res = null; HOME.tgt = null;
           if (HOME.hinge) HOME.hinge.rotation.y = 0;
@@ -4819,7 +4819,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       else if (dspd > 0.05) {
         sx += Math.sin(gyaw) * dspd * dt; sz += Math.cos(gyaw) * dspd * dt;
         const toOwner = !!(W.feed || S.lick || W.smell || W.shortK > 0.5 || W.loose && (W.loose.ph === 'come' || W.loose.lure > 0));   // 飼い主のそばへ行く用事の時だけ（敷地にいる飼い主の所へは行く）
-        if (!(W.mode === 'lock' || W.ev === 'loose' && W.loose.ph === 'charge' || toOwner) && privateLand(sx, sz) && !privateLand(st.x, st.z)) {   // 敷地の手前で止まり、縁に沿って進む
+        const ownYard = HOME.door && Math.hypot(sx - HOME.door.x, sz - HOME.door.z) < 5;   // 自分の家の扉のまわりは入ってよい
+        if (!(W.mode === 'lock' || W.ev === 'loose' && W.loose.ph === 'charge' || toOwner || ownYard) && privateLand(sx, sz) && !privateLand(st.x, st.z)) {   // 敷地の手前で止まり、縁に沿って進む
           if (!privateLand(sx, st.z)) sz = st.z; else if (!privateLand(st.x, sz)) sx = st.x; else { sx = st.x; sz = st.z; }
         }
       }
