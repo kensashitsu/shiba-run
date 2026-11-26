@@ -252,7 +252,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v268';
+const VERSION = 'v269';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -4012,7 +4012,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
     },
     move(dt, t, dx, dz, mag) {
-      if (HOME.ph === 'enter' && HOME.tgt) { const ex = HOME.tgt.x - walker.x, ez = HOME.tgt.z - walker.z, ed = Math.hypot(ex, ez); if (ed > 0.12) { dx = ex / ed; dz = ez / ed; mag = Math.min(0.55, 0.2 + ed); } else mag = 0; }   // 家に入る：扉の前まで自動で歩く
+      if (HOME.ph === 'enter' && HOME.tgt) { const ex = HOME.tgt.x - walker.x, ez = HOME.tgt.z - walker.z, ed = Math.hypot(ex, ez); if (ed > 0.12) { dx = ex / ed; dz = ez / ed; mag = Math.min(W.ponder && W.ponder.home ? 0.35 : 0.55, 0.2 + ed); } else mag = 0; }   // 家に入る：扉の前まで自動で歩く
       const S = dog.state;
       // --- 相手（黒柴と飼い主）：道を行き来し、端で折り返す
       OTHERS.forEach((o, i) => {
@@ -4345,12 +4345,13 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         if (HOME.unReq) {
           HOME.unReq = false;
           if (!HOME.canEnter) { /* 門の前でない */ }
-          else if (W.ponder && W.ponder.home) { W.msg = '踏ん張って、入ろうとしない（引いて崩すか、もう少し歩く）'; W.msgT = 2.4; }
           else if (sd > 3.2) { W.msg = '柴がそばにいない'; W.msgT = 1.6; }
           else {
+            const drag = !!(W.ponder && W.ponder.home);   // 踏ん張っている：引きずって無理やり入れる（満足が下がり、外す時に唸られやすい）
+            if (drag) { HOME.forced = true; HOME.dragIn = true; addSat(-0.15, '無理やり帰宅'); W.msg = '踏ん張る柴を、引きずって家に入れる'; W.msgT = 2.4; }
             HOME.ph = 'enter'; HOME.et = 0; HOME.open = 0; HOME.fadeV = 0;
             HOME.way = HOME.forced ? '家の前で踏ん張ったのを、崩して入れた' : W.sat >= 0.6 ? (HOME.lead ? '柴が自分から家へ向かった' : '家へ導くと、素直についてきた') : '歩き足りないまま帰ってきた';
-            W.ponder = null; W.sniff = null; W.short = false; W.crouch = false; if (S.act === 'sniff') S.act = null;
+            if (!drag) W.ponder = null; W.sniff = null; W.short = false; W.crouch = false; if (S.act === 'sniff') S.act = null;
             if (fpv && typeof setFpv === 'function') setFpv(false);
           }
         }
@@ -4362,6 +4363,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         const at = Math.hypot(tx - walker.x, tz - walker.z) < 0.22 || HOME.et > 7;
         if (Dd && Math.hypot(Dd.x - walker.x, Dd.z - walker.z) < 1.7) HOME.open = Math.min(1, HOME.open + dt / 0.7);
         if (HOME.hinge) HOME.hinge.rotation.y = -1.35 * (1 - (1 - HOME.open) ** 2);   // 外開き
+        if (at && W.ponder && W.ponder.home) { W.ponder = null; W.msg = '最後は引きずり込んだ'; W.msgT = 1.6; }
         if (at && (HOME.open >= 1 || !Dd)) HOME.fadeV = Math.min(1, HOME.fadeV + dt / 0.35);
         if (HOME.fadeV >= 1) {
           HOME.ph = 'in'; HOME.t = 0; HOME.un = null; HOME.res = null; HOME.tgt = null;
@@ -4776,7 +4778,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         const hx = walker.x + lx * 0.5 + Math.sin(walker.yaw) * 0.15, hz = walker.z + lz * 0.5 + Math.cos(walker.yaw) * 0.15, hd2 = Math.hypot(hx - st.x, hz - st.z);
         gx = hx + Math.sin(walker.yaw) * walker.speed * 0.3; gz = hz + Math.cos(walker.yaw) * walker.speed * 0.3; dspd = Math.min(7, walker.speed + hd2 * 2.5); if (hd2 < 0.06 && walker.speed < 0.2) dspd = 0;
       }
-      if (HOME.ph === 'enter' && HOME.door) {   // 家に入る間：飼い主の横、少し後ろをついて歩く
+      if (HOME.ph === 'enter' && HOME.door && W.ponder && W.ponder.home) { W.ponder.t = 0; W.ponder.ph = 'refuse'; dspd = 0; gx = st.x + Math.sin(W.ponder.pref); gz = st.z + Math.cos(W.ponder.pref); }   // 無理やり：踏ん張ったまま引きずられる（崩れるまで）
+      else if (HOME.ph === 'enter' && HOME.door) {   // 家に入る間：飼い主の横、少し後ろをついて歩く
         const Dd = HOME.door, ax = walker.x + Dd.nx * 0.55 - Math.cos(HOME.f) * 0.35, az = walker.z + Dd.nz * 0.55 + Math.sin(HOME.f) * 0.35, ad = Math.hypot(ax - st.x, az - st.z);
         gx = ax; gz = az; dspd = ad > 0.15 ? Math.min(1.6, ad * 2.5) : 0; W.sniff = null; W.ponder = null; W.rush = null; W.detour = null;
       }
@@ -5211,7 +5214,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       W.canShort = !W.ev && (W.short || near);
       W.canVoice = !W.ev && (W.mode === 'stare' || W.mode === 'lock' || W.mode === 'leave'); voiceBtn.classList.toggle('off', !W.canVoice);
       unclipBtn.hidden = !(HOME.ph === 'in' || HOME.ph === 'out' && HOME.canEnter); unclipBtn.classList.toggle('off', HOME.ph === 'in' && !HOME.canUn && !HOME.un); unclipBtn.classList.toggle('on', !!(HOME.un && !HOME.un.done));
-      { const lb = HOME.ph === 'out' ? '家に<br>入る' : HOME.un && !HOME.un.done ? '手を引く' : '外す'; if (unclipBtn.dataset.l !== lb) { unclipBtn.dataset.l = lb; unclipBtn.innerHTML = lb + '<span class="key">E</span>'; } }
+      { const lb = HOME.ph === 'out' ? (W.ponder && W.ponder.home ? '無理やり<br>入れる' : '家に<br>入る') : HOME.un && !HOME.un.done ? '手を引く' : '外す'; if (unclipBtn.dataset.l !== lb) { unclipBtn.dataset.l = lb; unclipBtn.innerHTML = lb + '<span class="key">E</span>'; } }
       if (HOME.ph === 'in' || HOME.ph === 'out' && HOME.canEnter) pickBtn.hidden = true;
       fadeEl.style.opacity = HOME.fadeV || 0;
       shortBtn.classList.toggle('off', !W.canShort); shortBtn.classList.toggle('on', !!W.short);
