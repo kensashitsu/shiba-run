@@ -141,6 +141,21 @@
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: var(--glass); border: 1px solid var(--glass-edge); color: var(--ink); font: 700 15px var(--font-ui); }
   #voiceBtn:active { background: rgba(240,180,106,.8); }
   #voiceBtn.off { opacity: .32; pointer-events: none; }
+  #unclipBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 244px);
+    width: 64px; height: 64px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.9); border: 2px solid #8a6a3a; color: #4a3520;
+    font: 700 15px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+  #unclipBtn[hidden] { display: none; }
+  #unclipBtn.off { opacity: .32; pointer-events: none; box-shadow: none; }
+  #unclipBtn.on { background: rgba(240,180,106,.9); }
+  body.pad #unclipBtn { bottom: calc(env(safe-area-inset-bottom, 0px) + 304px); }
+  #walkResult { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(88vw, 380px); padding: 18px 18px 14px; border-radius: 16px;
+    background: rgba(250,247,240,.96); color: #2b2118; font: 500 14px/1.7 var(--font-ui); box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 30; }
+  #walkResult[hidden] { display: none; }
+  #walkResult h2 { margin: 0 0 8px; font: 700 18px var(--font-ui); }
+  #walkResult dl { margin: 0 0 12px; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+  #walkResult dt { color: #7a6a58; }
+  #walkResult dd { margin: 0; }
+  #walkResult button { margin: 4px 6px 0 0; padding: 8px 14px; border-radius: 18px; border: 1px solid #8a6a3a; background: #fffaf0; color: #4a3520; font: 700 14px var(--font-ui); }
   #catchBtn { right: max(14px, calc(env(safe-area-inset-right, 0px) + 14px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 244px);
     width: 64px; height: 64px; border-radius: 50%; padding: 0; background: rgba(250,248,240,.9); border: 2px solid #b0452a; color: #7a2a14;
     font: 700 14px var(--font-ui); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
@@ -204,6 +219,8 @@
 <div id="treatTray" class="ui" hidden><button type="button" id="treat0">砂肝<span class="key">1</span></button><button type="button" id="treat1">カワハギ<span class="key">2</span></button><button type="button" id="treat2">煮干し<span class="key">3</span></button><button type="button" id="treat3">水<span class="key">4</span></button></div>
 <button type="button" id="shortBtn" class="ui" hidden>短く<span class="key">R</span></button>
 <button type="button" id="voiceBtn" class="ui" hidden>声<span class="key">G</span></button>
+<button type="button" id="unclipBtn" class="ui" hidden>外す<span class="key">E</span></button>
+<div id="walkResult" class="ui" hidden></div>
 <button type="button" id="catchBtn" class="ui" hidden>捕まえる<span class="key">E</span></button>
 <div id="walkui" class="ui" hidden><div id="wl"></div><div class="bars"><span>崩し</span><i id="wbal" style="--c:#ffe08a;--v:0"></i><span>首輪</span><i id="wsl" style="--c:#8ad0ff;--v:0"></i><span>ストレス</span><i id="wst" style="--c:#ff7a5c;--v:0"></i></div></div>
 <div id="flash" class="ui"></div>
@@ -234,7 +251,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v266';
+const VERSION = 'v267';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -2957,7 +2974,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       lerpPose(P, Q, S.actW);
     }
     // ほえる（何をしていても重ねる）
-    if (S.rage !== S.rageSet) { setGrowl(S.rage > 0.3 && !S.quiet ? S.rage : 0); S.rageSet = S.rage; }
+    { const gk = S.rage > 0.3 && !S.quiet ? S.rage : (S.snarl || 0) > 0.05 ? 0.35 + 0.5 * S.snarl : 0; if (Math.abs(gk - (S.rageSet ?? -1)) > 0.02 || (gk === 0) !== (S.rageSet === 0)) { setGrowl(gk); S.rageSet = gk; } }   // 唸り：威嚇吠えの合間（rage）か、玄関で触られて唸る（snarl：立ち上がらない）
     if (S.bark >= 0) {
       S.bark += dt;
       const u = S.bark / (S.rage > 0.3 ? 0.22 : 0.75);   // 威嚇吠えは一声ずつ短く鋭く
@@ -3037,6 +3054,7 @@ const makeDog = ({ red = 0xc4692e, cream = 0xf4e8d2, earIn = 0xe9c9a8, size = 1,
       P.pitch += 0.28 * k; P.y -= 0.06 * k; P.neck += 0.25 * k; P.earsBack = Math.max(P.earsBack, 0.6 * k); P.tailDown = Math.max(P.tailDown, 0.5 * k); P.wag *= 1 - k;
       lerpPose(P, { legs: [V(0.08, 0, 0.32), V(-0.08, 0, 0.32), V(0.1, 0, -0.14), V(-0.1, 0, -0.14)] }, k);
     }
+    if (S.snarl > 0.02) { P.earsBack = Math.max(P.earsBack, 0.7 * S.snarl); P.headPitch += 0.1 * S.snarl; P.jaw = Math.max(P.jaw || 0, S.snarl > 0.6 ? 0.1 : 0.02); P.look = 0; }   // 唸る：耳を伏せ、頭を下げる。歯を見せる時は口を少し開ける
     if (S.drink) { P.neck += 0.25; P.headPitch += 0.4; P.look = 0; P.headYaw *= 0.2; P.tongue = 0.6 + 0.4 * Math.max(0, Math.sin(t * 15)); P.jaw = 0.2 + 0.15 * Math.max(0, Math.sin(t * 15)); P.earsBack = Math.max(P.earsBack, 0.1); }   // ぺちゃぺちゃ
     if (S.carry) { P.jaw = Math.max(P.jaw, 0.22); P.tongue = 0; }   // ボール・枝をくわえている：口を少し開けたまま
     if (S.airSniff > 0.01) {   // 遠くのにおいに気づく：首を伸ばして鼻先を上げ、空気をふんふん嗅ぐ
@@ -3727,6 +3745,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   ].map((man, k) => { scene.add(man.object); return { man, ped: true, persona: ['approach', 'yield', 'turner', 'avoid'][k], pace: [1.25, 1.1, 0.85, 1.2][k], route: null, rs: 0, rdir: 1, x: 0, z: 0, yaw: 0, speed: 0 }; });
   // 犬の気持ち：落ち着いて歩く(follow)／固まってじっと見る(stare)／ロックオン(lock)／崩れて立ち去る(leave)
   const W = { mode: 'follow', smell: null, smellT: 0, smellAt: 40, crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, ar: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
+  // 家（v267）：散歩は家から出て家へ帰る。帰ったら玄関でリードを外す（水の皿で飲んでいる隙なら安全）
+  const HOME = { set: false, x: 0, z: 0, f: 0, ph: 'out', walkT: 0, lead: Math.random() < 0.5, lockN: 0, refN: 0, forced: false, prevMode: 'follow' };
   const addSat = (v, why = '') => { if (v > 0) v *= 0.4 * (1 - 0.6 * W.sat);   // 満足は散歩全体（15〜20分）でゆっくり満ちる。満たされているほど上がりにくい
     if (TEST) { W.satLog = W.satLog || {}; W.satLog[why] = (W.satLog[why] || 0) + v; } const b = W.sat; W.sat = Math.max(0, Math.min(1, W.sat + v)); if (Math.abs(W.sat - b) > 0.004) { W.satFx = v > 0 ? 1.6 : -1.6; } };   // satFx：星の横に ↑／↓ を少しの間出す
   // 知らない道：道ごとに4m おきの点を8m 升目に入れておき、1秒ごとに今いる道を調べる
@@ -3864,7 +3884,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   // キーボード：E＝拾う／捕まえる、C＝しゃがむ／立つ、T＝おやつ
   addEventListener('keydown', e => {
     if (e.repeat) return;
-    if (e.code === 'KeyE') { if (W.canCatch) W.loose.catching = 0.001; else startPick(); }
+    if (e.code === 'KeyE' && HOME.ph === 'in') HOME.unReq = true;
+    else if (e.code === 'KeyE') { if (W.canCatch) W.loose.catching = 0.001; else startPick(); }
     else if (e.code === 'KeyC') { if (W.canCrouch) W.crouch = !W.crouch; }
     else if (e.code === 'KeyF') W.tugHold = true;
     else if (e.code === 'KeyT') { if (W.feed && (W.feed.ph === 'show' || W.feed.ph === 'give' || W.feed.ph === 'doubt')) W.stowReq = true; else { W.tray = !W.tray; W.trayT = 0; } }
@@ -3877,6 +3898,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const shortBtn = document.getElementById('shortBtn'); shortBtn.hidden = false;
   const voiceBtn = document.getElementById('voiceBtn'); voiceBtn.hidden = false;   // 声を掛ける（見つめる・ロックオン・立ち去る間だけ）
   voiceBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.canVoice) W.voiceReq = true; });
+  const unclipBtn = document.getElementById('unclipBtn'), resultEl = document.getElementById('walkResult');
+  unclipBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); HOME.unReq = true; });
   shortBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.canShort) W.short = !W.short; });
   catchBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (W.canCatch) W.loose.catching = 0.001; });
   // 抜けた首輪（リードの先にぶら下がる）
@@ -3957,8 +3980,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rand = Math.random;
 
   WALK = {
-    me, OTHERS, PEDS, dogSt: st, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return (W.tgt || OTHERS[0]).rst; }, get rdst() { return (W.tgt || OTHERS[0]).rdst; }, W, leashMat,
+    me, OTHERS, PEDS, dogSt: st, home: HOME, leash, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return (W.tgt || OTHERS[0]).rst; }, get rdst() { return (W.tgt || OTHERS[0]).rdst; }, W, leashMat,
     start(x, z) {
+      HOME.set = false; HOME.ph = 'out'; HOME.walkT = 0;
       walker.x = x; walker.z = z;
       st.x = x + 1; st.z = z;
       let best = null;
@@ -4242,6 +4266,132 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- リードを短く持つ：ほかの犬が近くにいる時に、自分の意志でたぐり寄せる
       W.shortK = (W.shortK || 0) + ((W.short && !W.ev ? 1 : 0) - (W.shortK || 0)) * Math.min(1, dt * (W.short ? 3 : 5));
       LEASH = LEASH_FULL - (LEASH_FULL - LEASH_SHORT) * W.shortK;
+      // --- 家（v267）
+      if (!HOME.set) {
+        HOME.set = true; HOME.x = walker.x; HOME.z = walker.z; HOME.f = walker.yaw;
+        if (!HOME.sign) {   // 家の印：表札のついた門柱
+          const g = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: 0x6b4a30, roughness: 0.8 });
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.25, 0.16), wood); post.position.y = 0.62; post.castShadow = true; g.add(post);
+          const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64; const c2 = cv.getContext('2d');
+          c2.fillStyle = '#f3ead8'; c2.fillRect(0, 0, 128, 64); c2.fillStyle = '#3a2a1a'; c2.font = 'bold 40px sans-serif'; c2.textAlign = 'center'; c2.textBaseline = 'middle'; c2.fillText('うち', 64, 34);
+          const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+          const plate = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.03), [wood, wood, wood, wood, new THREE.MeshStandardMaterial({ map: tx }), new THREE.MeshStandardMaterial({ map: tx })]);
+          plate.position.set(0, 1.0, 0.1); g.add(plate); scene.add(g); HOME.sign = g;
+        }
+        const lx0 = Math.cos(HOME.f), lz0 = -Math.sin(HOME.f);
+        HOME.sign.position.set(HOME.x + lx0 * 1.3, H(HOME.x + lx0 * 1.3, HOME.z + lz0 * 1.3), HOME.z + lz0 * 1.3); HOME.sign.rotation.y = HOME.f + Math.PI / 2;
+      }
+      if (W.mode === 'lock' && HOME.prevMode !== 'lock') HOME.lockN++;
+      HOME.prevMode = W.mode;
+      if (HOME.ph === 'out') {
+        HOME.walkT += dt;
+        HOME.refT = Math.max(0, (HOME.refT || 0) - dt); HOME.briskT = Math.max(0, (HOME.briskT || 0) - dt);
+        const hx = HOME.x - walker.x, hz = HOME.z - walker.z, hd = Math.hypot(hx, hz), sd = Math.hypot(HOME.x - st.x, HOME.z - st.z);
+        const near = hd < 7 && HOME.walkT > 20;
+        // 満足すると、自分から家の方へ向かう日（lead）と、家へ導くと素直についてくる日がある
+        if (HOME.lead && W.sat > 0.72 && !HOME.leadSaid && sd > 10 && W.mode === 'follow') { HOME.leadSaid = true; W.msg = '柴が、家の方へ歩き出した'; W.msgT = 2.2; }
+        // 家の前：満足が足りないと踏ん張って入ろうとしない。歩き出すと、すぐさま前へスタスタ
+        const toward = walker.speed > 0.3 && Math.abs(angDiff(walker.yaw, Math.atan2(hx, hz))) < 1.0;
+        if (near && W.sat < 0.6 && W.mode === 'follow' && !W.ev && !W.ponder && !W.feed && toward && HOME.refT <= 0 && sd < 6) {
+          W.ponder = { ph: 'refuse', t: 0, pref: Math.atan2(st.x - HOME.x, st.z - HOME.z), home: true }; W.sniff = null; if (S.act === 'sniff') S.act = null;
+          HOME.refN++; W.msg = '家の前で踏ん張って、入ろうとしない'; W.msgT = 2.4;
+        }
+        const pon = !!(W.ponder && W.ponder.home);
+        if (HOME.pon && !pon) {
+          const away = walker.speed > 0.3 && Math.abs(angDiff(walker.yaw, Math.atan2(-hx, -hz))) < 1.3;   // 家と反対へ歩き出した
+          if (HOME.broke) { W.msg = '踏ん張りを崩した'; W.msgT = 1.8; }
+          else if (away && !W.ev) { HOME.briskT = 5; W.msg = '歩き出したとたん、前へスタスタ'; W.msgT = 2.2; }
+          HOME.refT = 3; HOME.broke = false;
+        }
+        HOME.pon = pon;
+        // 家に入る：飼い主が家の前に着き、柴も踏ん張っていない
+        if (near && hd < 1.3 && sd < 2.6 && !W.ponder && W.mode === 'follow' && !W.ev && !W.loose) {
+          HOME.ph = 'in'; HOME.t = 0; HOME.un = null; HOME.res = null;
+          HOME.way = HOME.forced ? '家の前で踏ん張ったのを、崩して入れた' : W.sat >= 0.6 ? (HOME.lead ? '柴が自分から家へ向かった' : '家へ導くと、素直についてきた') : '歩き足りないまま帰ってきた';
+          const fx = Math.sin(HOME.f), fz = Math.cos(HOME.f), lx = Math.cos(HOME.f), lz = -Math.sin(HOME.f);
+          if (!HOME.room) {   // 玄関：板の間・壁・上がり框・水の皿（町は隠す）
+            const R = new THREE.Group(), floorM = new THREE.MeshStandardMaterial({ color: 0x9a7650, roughness: 0.75 }), wallM = new THREE.MeshStandardMaterial({ color: 0xece4d4, roughness: 0.9, side: THREE.DoubleSide });
+            const fl = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 3.0), floorM); fl.rotation.x = -Math.PI / 2; fl.position.set(0, 0.005, 1.4);
+            const doma = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 2.4), new THREE.MeshStandardMaterial({ color: 0x8f8a80, roughness: 0.95 })); doma.rotation.x = -Math.PI / 2; doma.position.set(0, 0.002, -1.2); doma.receiveShadow = true; R.add(doma); fl.receiveShadow = true; R.add(fl);   // 入口の手前（外のたたき）と板の間
+            const wall = (w, hh, x, z, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), wallM); m.position.set(x, hh / 2, z); m.rotation.y = ry; m.receiveShadow = true; R.add(m); };
+            wall(2.8, 2.4, 0, 2.9, 0); wall(3.0, 2.4, 1.4, 1.4, Math.PI / 2); wall(3.0, 2.4, -1.4, 1.4, Math.PI / 2);
+            const ceil = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 3.0), wallM); ceil.rotation.x = Math.PI / 2; ceil.position.set(0, 2.4, 1.4); R.add(ceil);
+            const step = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.18, 0.5), new THREE.MeshStandardMaterial({ color: 0x7a5a3a, roughness: 0.6 })); step.position.set(0, 0.09, 2.65); step.receiveShadow = true; R.add(step);
+            const steel = new THREE.MeshStandardMaterial({ color: 0xb9bec4, roughness: 0.3, metalness: 0.6, side: THREE.DoubleSide });
+            const dish = new THREE.Group(); dish.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.095, 0.06, 20, 1, true), steel));
+            const db = new THREE.Mesh(new THREE.CircleGeometry(0.095, 20), steel); db.rotation.x = -Math.PI / 2; db.position.y = -0.028; dish.add(db);
+            const dw = new THREE.Mesh(new THREE.CircleGeometry(0.105, 20), new THREE.MeshStandardMaterial({ color: 0x8cc4e8, roughness: 0.1, transparent: true, opacity: 0.85 })); dw.rotation.x = -Math.PI / 2; dw.position.y = 0.012; dish.add(dw);
+            dish.position.set(-0.95, 0.03, 2.15); R.add(dish);
+            scene.add(R); HOME.room = R; HOME.dishObj = dish;
+          }
+          HOME.room.position.set(HOME.x, H(HOME.x, HOME.z), HOME.z); HOME.room.rotation.y = HOME.f;
+          HOME.dish = { x: HOME.x + fx * 2.15 + lx * -0.95, z: HOME.z + fz * 2.15 + lz * -0.95 };
+          walker.x = HOME.x + fx * 0.5; walker.z = HOME.z + fz * 0.5; walker.yaw = HOME.f;
+          st.x = HOME.x + fx * 0.9 + lx * 0.45; st.z = HOME.z + fz * 0.9 + lz * 0.45; st.yaw = HOME.f;
+          HOME.drink = { ph: 'wait', t: 0, dur: 2.5 + 5 * (W.thirst || 0) + rand() * 1.5 };
+          W.short = false; W.crouch = false; W.sniff = null; W.ponder = null; W.feed = null; W.detour = null; W.trail = [];
+          if (fpv && typeof setFpv === 'function') setFpv(false);
+          W.msg = '家に着いた。リードを外す（しゃがんで／水を飲んでいる隙に）'; W.msgT = 3;
+        }
+      }
+      if (HOME.ph === 'in' || HOME.ph === 'done') {
+        HOME.t += dt;
+        // 家の中では、ほかの犬にも道ばたのにおいにも気を取られない
+        W.graceT = Math.max(W.graceT || 0, 1); if (W.mode !== 'follow') W.mode = 'follow'; W.exc = 0; W.sniff = null; W.ponder = null; W.nextSniff = Math.max(W.nextSniff ?? 0, 9);
+        const fx = Math.sin(HOME.f), fz = Math.cos(HOME.f), lx = Math.cos(HOME.f), lz = -Math.sin(HOME.f);
+        const keepIn = (P, m) => { const ux = P.x - HOME.x, uz = P.z - HOME.z; let u = ux * fx + uz * fz, v = ux * lx + uz * lz; u = Math.max(0.25, Math.min(2.3, u)); v = Math.max(-1.25 + m, Math.min(1.25 - m, v)); P.x = HOME.x + fx * u + lx * v; P.z = HOME.z + fz * u + lz * v; };
+        keepIn(walker, 0.2); keepIn(st, 0.15);
+        const say = (t, d = 2) => { W.msg = t; W.msgT = d; };
+        const drinking = HOME.drink.ph === 'drink';
+        HOME.canUn = HOME.ph === 'in' && !W.ev && Math.hypot(st.x - walker.x, st.z - walker.z) < 1.05;
+        if (HOME.unReq) {
+          HOME.unReq = false;
+          if (HOME.un) { if (!HOME.un.done) { HOME.un = null; HOME.calmT = 1.5; say('手を引いた'); } }   // 外す途中で手を引く（唸られた時）
+          else if (HOME.ph !== 'in' || W.ev) { /* 終わった後 */ }
+          else if (!HOME.canUn) say('柴に手が届かない（そばへ寄る）');
+          else if (!drinking && !W.crouch) say('立ったままでは届かない（しゃがむか、水を飲んでいる隙に）');
+          else if ((HOME.calmT || 0) > 0) say('まだ唸っている…');
+          else {
+            const standing = drinking && !W.crouch;
+            const pG = standing ? 0.03 : Math.min(0.9, 0.1 + 0.6 * Math.max(0, 0.6 - W.sat) / 0.6 + (HOME.forced ? 0.3 : 0) + 0.15 * W.ar - (drinking ? 0.05 : 0));
+            const need = standing ? 0.35 : 0.8 + rand() * 1.6;   // 金具がもたつくことがある（思い通りにならない）
+            HOME.un = { t: 0, need, standing, g: rand() < pG ? -rand() * need * 0.5 : null };
+            HOME.how = standing ? '水を飲んでいる隙に、立ったまま外した' : 'しゃがんで外した';
+          }
+        }
+        HOME.calmT = Math.max(0, (HOME.calmT || 0) - dt);
+        let snarl = 0;
+        if (HOME.un && !HOME.un.done) {
+          const U = HOME.un; U.t += dt;
+          if (U.g !== null) {
+            U.g += dt;
+            if (U.g > 0) { HOME.lvl = Math.max(HOME.lvl || 0, U.g < 1 ? 1 : 2); snarl = U.g < 1 ? 0.45 : 0.9; }
+            if (U.g > 0 && !U.said1) { U.said1 = true; say('ウゥ…と唸り始めた'); }
+            if (U.g > 1 && !U.said2) { U.said2 = true; say('唸って、歯を見せた！（手を引くなら今）', 2.4); }
+            if (U.g > 2) { U.done = true; HOME.lvl = 3; W.ev = 'bite'; W.evT = 0; flashEl.classList.add('on'); setTimeout(() => flashEl.classList.remove('on'), 350); dog.command('bark', st); say('咬まれた！'); }
+          }
+          if (!U.done && U.t >= U.need) { U.done = true; say(HOME.lvl ? 'なんとか外せた' : 'リードを外した'); }
+          if (U.done) { HOME.ph = 'done'; HOME.doneT = 0; }
+        } else if (HOME.calmT > 0) snarl = 0.45 * HOME.calmT / 1.5;
+        S.snarl = (S.snarl || 0) + (snarl - (S.snarl || 0)) * Math.min(1, dt * 8);
+        if (HOME.ph === 'done') {
+          HOME.doneT += dt;
+          if (HOME.doneT > 1.6 && resultEl.hidden) {
+            const min = Math.max(1, Math.round(HOME.walkT / 60)), lv = ['唸らなかった', '唸った', '唸って歯を見せた', '咬まれた'][HOME.lvl || 0];
+            resultEl.innerHTML = '<h2>' + (HOME.lvl >= 3 ? '咬まれてしまった' : HOME.lvl ? 'なんとか家に帰った' : W.sat >= 0.6 ? '満足して家に帰った' : '家に帰った') + '</h2><dl>' +
+              '<dt>歩いた時間</dt><dd>' + min + '分</dd>' +
+              '<dt>帰り方</dt><dd>' + HOME.way + '</dd>' +
+              (HOME.refN ? '<dt>家の前</dt><dd>' + HOME.refN + '回 踏ん張った</dd>' : '') +
+              '<dt>ロックオン</dt><dd>' + (HOME.lockN ? HOME.lockN + '回' : 'なし') + '</dd>' +
+              '<dt>外し方</dt><dd>' + (HOME.how || '') + '</dd>' +
+              '<dt>外す時</dt><dd>' + lv + '</dd></dl>' +
+              '<button type="button" id="wrAgain">もう一度散歩する</button><button type="button" id="wrClose">閉じる</button>';
+            resultEl.hidden = false;
+            document.getElementById('wrAgain').onclick = () => location.reload();
+            document.getElementById('wrClose').onclick = () => { resultEl.hidden = true; };
+          }
+        }
+      }
       // --- 柴の行きたい所
       const seq = S.act === 'mark' || S.act === 'poop' || S.act === 'shake' || !!W.pick;
       S.lick = 0; S.smell = 0;
@@ -4368,7 +4518,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           }
         } else {
           W.avoidT = Math.max(0, (W.avoidT || 0) - dt);   // 行き止まりから向き直った直後は、すぐ飼い主の向きへ戻らない
-          if (walker.speed > 0.3 && W.avoidT <= 0) W.dh += angDiff(W.dh, walker.yaw) * Math.min(1, dt * (2.5 + 4 * W.sat) * (1 - 0.6 * W.ar));   // 満足しているほど飼い主の向きにすぐ合わせる。興奮していると合わせにくい
+          if (walker.speed > 0.3 && W.avoidT <= 0) W.dh += angDiff(W.dh, walker.yaw) * Math.min(1, dt * (2.5 + 4 * W.sat) * (1 - 0.6 * W.ar));
+          if (HOME.ph === 'out' && HOME.lead && W.sat > 0.72 && Math.hypot(HOME.x - st.x, HOME.z - st.z) > 6) W.dh += angDiff(W.dh, Math.atan2(HOME.x - st.x, HOME.z - st.z)) * Math.min(1, dt * 0.9);   // 満足した日は、自分から家の方へ   // 満足しているほど飼い主の向きにすぐ合わせる。興奮していると合わせにくい
           if (W.ar > 0.3 && !W.rush && !W.heat) { W.jerkT = (W.jerkT ?? 2) - dt * W.ar; if (W.jerkT <= 0) { W.jerkT = 1 + rand() * 2.5; W.dh += (rand() - 0.5) * 1.6 * W.ar; } }   // 興奮して落ち着きがなく、ときどき急に向きを変える
           if (privateLand(st.x, st.z) && !W.smell && !W.feed) {   // よその敷地の中にいたら、いちばん近い道の方へ向かう
             let best = null; for (let r = 1; r <= 6 && best === null; r += 1) for (let i = 0; i < 16; i++) { const a = i * 0.3927, px = st.x + Math.sin(a) * r, pz = st.z + Math.cos(a) * r; if (!townBlocked(px, pz) && !privateLand(px, pz)) { best = a; break; } }
@@ -4441,7 +4592,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             }
           }
           S.nose = W.rush && W.rush.ph === 'search' ? (W.rush.sniffT > 0 || W.rush.hunch > 0.5 ? 1 : 0.35) : W.fetch && W.fetch.ph === 'grab' ? 1 : 0; S.hunch = W.rush ? W.rush.hunch : 0;
-          const pace = W.fetch && W.fetch.ph === 'grab' ? 0 : W.heat ? (W.heat.ph === 'scent' ? 0 : 3.9 + 0.5 * Math.sin(t * 3.1)) : W.rush ? (W.rush.ph === 'seek' ? 3.4 : W.rush.spd ?? 2.6) : (1.33 + 0.13 * Math.sin(t * 0.19) + 0.06 * Math.sin(t * 0.53 + 1)) * (1 + 0.8 * W.ar) * (1 - 0.35 * smooth(0.3, 0.8, S.fatigue || 0));   // 柴が自分で歩く速さ（ゆっくり揺らぐ）。興奮しているほど速く、飼い主より先へ出て引っ張る
+          const pace = W.fetch && W.fetch.ph === 'grab' ? 0 : W.heat ? (W.heat.ph === 'scent' ? 0 : 3.9 + 0.5 * Math.sin(t * 3.1)) : W.rush ? (W.rush.ph === 'seek' ? 3.4 : W.rush.spd ?? 2.6) : (1.33 + 0.13 * Math.sin(t * 0.19) + 0.06 * Math.sin(t * 0.53 + 1)) * (1 + 0.8 * W.ar) * (1 - 0.35 * smooth(0.3, 0.8, S.fatigue || 0)) * ((HOME.briskT || 0) > 0 ? 1.35 : 1);   // 家の前から歩き出したとたん、スタスタ   // 柴が自分で歩く速さ（ゆっくり揺らぐ）。興奮しているほど速く、飼い主より先へ出て引っ張る
           // 人がそれより速く歩く・走る時は、人の左前に並ぶ速さで（速さ＝人の速さ＋位置のずれの補正）
           // 飼い主が全力で走ると、柴はもっと速く先を行く：リードの端でピンと張って、飼い主は追いつけない
           const dash = smooth(3.5, 6, walker.speed), ahd = 0.9 + dash * (LEASH + 0.4 - 0.9);
@@ -4567,6 +4718,16 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         const hx = walker.x + lx * 0.5 + Math.sin(walker.yaw) * 0.15, hz = walker.z + lz * 0.5 + Math.cos(walker.yaw) * 0.15, hd2 = Math.hypot(hx - st.x, hz - st.z);
         gx = hx + Math.sin(walker.yaw) * walker.speed * 0.3; gz = hz + Math.cos(walker.yaw) * walker.speed * 0.3; dspd = Math.min(7, walker.speed + hd2 * 2.5); if (hd2 < 0.06 && walker.speed < 0.2) dspd = 0;
       }
+      if (HOME.ph === 'in' || HOME.ph === 'done') {   // 玄関：少し待ってから水の皿へ行き、ぺちゃぺちゃ飲む。飲み終えたら飼い主のそばへ
+        const D = HOME.drink; D.t += dt;
+        const ddx = HOME.dish.x - st.x, ddz = HOME.dish.z - st.z, dd = Math.hypot(ddx, ddz) || 1;
+        if (W.ev) { /* 咬んだ直後 */ }
+        else if (D.ph === 'wait') { gx = st.x; gz = st.z; dspd = 0; if (D.t > 0.9) { D.ph = 'go'; D.t = 0; } }
+        else if (D.ph === 'go') { gx = HOME.dish.x - ddx / dd * 0.26; gz = HOME.dish.z - ddz / dd * 0.26; dspd = Math.min(1.3, Math.max(0, dd - 0.26) * 3); if (dd < 0.32) { D.ph = 'drink'; D.t = 0; W.msg = '水の皿で、ぺちゃぺちゃ飲み始めた'; W.msgT = 2; } }
+        else if (D.ph === 'drink') { gx = st.x + ddx / dd * 0.02; gz = st.z + ddz / dd * 0.02; dspd = 0; if (D.t > D.dur) { D.ph = 'after'; D.t = 0; W.thirst = 0; W.msg = '水を飲み終えた'; W.msgT = 1.6; } }
+        else { const ax = walker.x + Math.sin(walker.yaw) * 0.55, az = walker.z + Math.cos(walker.yaw) * 0.55, ad = Math.hypot(ax - st.x, az - st.z); gx = ax; gz = az; dspd = ad > 0.3 ? Math.min(1.2, ad * 2) : 0; }
+        W.sniff = null; W.ponder = null; W.rush = null; W.detour = null; W.smell = null;
+      }
       const gyaw = Math.atan2(gx - st.x, gz - st.z);
       // 塀や車をはさんで飼い主と反対側に回ってしまった時：歩いてきた跡を戻り、飼い主が見通せる所まで出る
       {
@@ -4660,7 +4821,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
             sx -= ux * e * give; sz -= uz * e * give; nx += ux * e * (1 - give); nz += uz * e * (1 - give);
             if (W.sbal >= 1) {                       // 崩れた：においから離れて飼い主の方へ
               if (S.act === 'poop') W.poopT = Math.max(0, W.poopAt - 15);   // 途中でやめさせたうんちは、しばらくしてまたしたくなる
-              if (balking) { W.ponder = null; addSat(-0.15, '拒否崩し'); W.dh = Math.atan2(-ux, -uz); }   // 拒否を崩した：ついてくるが満足度は下がる
+              if (balking) { if (W.ponder.home) { HOME.forced = true; HOME.broke = true; } W.ponder = null; addSat(-0.15, '拒否崩し'); W.dh = Math.atan2(-ux, -uz); }   // 拒否を崩した：ついてくるが満足度は下がる
               W.sniff = null; W.nextSniff = 6 + rand() * 8; W.sbal = 0; if (S.act === 'sniff' || S.act === 'mark' || S.act === 'poop') S.act = null;
               dyaw = Math.atan2(-ux, -uz);
             }
@@ -4825,6 +4986,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       S.treatLook = W.feed && W.feed.ph !== 'spit' ? (W.feed.ph === 'show' ? 1 : 0.55) : 0;
       S.doubt = W.feed && W.feed.ph === 'doubt' ? W.feed.pt : 0;
       S.drink = W.feed && W.feed.water && W.feed.ph === 'eat' ? 1 : 0;
+      if ((HOME.ph === 'in' || HOME.ph === 'done') && HOME.drink.ph === 'drink') S.drink = 1;
       if (!(W.feed && W.feed.water)) { bowl.visible = false; stream.visible = false; bottle.visible = false; }
       S.refuse = (S.refuse || 0) + ((W.mode === 'follow' && W.ponder && W.ponder.ph === 'refuse' || W.mode === 'lock' && W.facePull ? 1 : 0) - (S.refuse || 0)) * Math.min(1, dt * 6);
       S.frantic = (S.frantic || 0) + (((W.sniff && W.sniff.heat || W.heat && W.heat.ph === 'trail') && W.mode === 'follow' ? 1 : 0) - (S.frantic || 0)) * Math.min(1, dt * 6);
@@ -4984,6 +5146,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       const near = OTHERS.some(o => Math.hypot(o.rdst.x - walker.x, o.rdst.z - walker.z) < 20 && visible(walker.x, walker.z, o.rdst.x, o.rdst.z));
       W.canShort = !W.ev && (W.short || near);
       W.canVoice = !W.ev && (W.mode === 'stare' || W.mode === 'lock' || W.mode === 'leave'); voiceBtn.classList.toggle('off', !W.canVoice);
+      unclipBtn.hidden = HOME.ph !== 'in'; unclipBtn.classList.toggle('off', !HOME.canUn && !HOME.un); unclipBtn.classList.toggle('on', !!(HOME.un && !HOME.un.done));
+      { const lb = HOME.un && !HOME.un.done ? '手を引く' : '外す'; if (unclipBtn.dataset.l !== lb) { unclipBtn.dataset.l = lb; unclipBtn.innerHTML = lb + '<span class="key">E</span>'; } }
+      if (HOME.ph === 'in') pickBtn.hidden = true;
       shortBtn.classList.toggle('off', !W.canShort); shortBtn.classList.toggle('on', !!W.short);
       { const lb = W.short ? 'ゆるめる' : '短く'; if (shortBtn.dataset.l !== lb) { shortBtn.dataset.l = lb; shortBtn.innerHTML = lb + '<span class="key">R</span>'; } }
       if (W.ev === 'loose') W.short = false;
@@ -5160,6 +5325,7 @@ function drawMap() {
     for (const o of WALK.PEDS) dot(o.x, o.z, 2.6, '#6f6a62');   // 犬を連れていない人は灰色の小さな点
     for (const o of WALK.OTHERS) dot(o.rdst.x, o.rdst.z, 4, '#d23a2a');
     dot(st.x, st.z, 2.6, '#f08a3c');
+    if (WALK.home && WALK.home.set) { const hm = WALK.home; c.fillStyle = '#2f6fbf'; c.fillRect(W / 2 + (hm.x - cx) * scale - 4 * u, Hh / 2 + (hm.z - cz) * scale - 4 * u, 8 * u, 8 * u); }   // 家は青い四角
   }
   const px = W / 2 + (me.x - cx) * scale, pz = Hh / 2 + (me.z - cz) * scale;
   const fovH = Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect), va = Math.atan2(Math.cos(camYaw), Math.sin(camYaw));
@@ -5360,6 +5526,11 @@ function stepInner(dt, t) {
     camera.lookAt(walker.x + vx * k, gy + 0.42, walker.z + vz * k);
   }
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
+  if (WALK && WALK.home && WALK.home.ph !== 'out' && WALK.home.room) {
+    const Hm = WALK.home, fx = Math.sin(Hm.f), fz = Math.cos(Hm.f), lx = Math.cos(Hm.f), lz = -Math.sin(Hm.f), y0 = H(Hm.x, Hm.z);
+    camera.position.set(Hm.x - fx * 1.3 - lx * 1.2, y0 + 2.3, Hm.z - fz * 1.3 - lz * 1.2);   // 入口の外の、水の皿の側の上から（飼い主の背中で柴が隠れないように）
+    camera.lookAt(Hm.x + fx * 1.75 - lx * 0.75, y0 + 0.15, Hm.z + fz * 1.75 - lz * 0.75);   // 見る中心は水の皿の手前
+  }
 
   if (titleOn) {   // タイトル：柴を斜め前の低い所から眺める（数コマ描いたら止める）
     const a = st.yaw + 0.6, hy = gy + 0.38;
@@ -6015,6 +6186,10 @@ function frame(ts) {
   if (!TEST) step(dt, t);   // 確認用（?test）は時間を手で進める
   if (tuneFrame) tuneFrame(dt, t);
   if (TOWN) { townWin(camera.position.x, camera.position.z); townCull(camera.position.x, camera.position.z); }
+  if (WALK && WALK.home && WALK.home.ph !== 'out' && WALK.home.room) {   // 玄関の中：町を隠す（家の中だけ描く）
+    const Hm = WALK.home, keep = [Hm.room, WALK.me.object, dog.object, dog.points, dog.extras, WALK.leash];
+    for (const o of scene.children) o.visible = o.isLight || keep.includes(o);
+  }
   renderer.render(scene, camera);
   if (sun.shadow.map) grassU.uShadowMap.value = sun.shadow.map.texture;
   if (fpsN % 3 === 0) drawMap();   // 地図は3コマに1回で十分
