@@ -252,7 +252,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v273';
+const VERSION = 'v274';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3736,6 +3736,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
     { name: 'ラブラドール', kind: 'lab', react: 4, pace: 0.95, persona: 'avoid', dog: makeDog({ red: 0x302a27, cream: 0x302a27, earIn: 0x3a3230, size: 1.25, long: 1.15, leg: 1.2, ears: 'drop', tail: 'otter', muzzle: 1.35, gloss: true, shibaFace: false, breed: 'lab' }), man: makeHuman({ shirt: 0xd9b3a3, pants: 0x2e3542, hair: 0x3a2618, long: true }) },
     { name: 'トイプードル', kind: 'poodle', react: 3, pace: 0.9, persona: 'turner', flexi: true, dog: makeDog({ red: 0xb9773f, cream: 0xc98a52, earIn: 0xa86a38, size: 0.62, long: 0.95, leg: 1.1, ears: 'drop', tail: 'pom', muzzle: 0.95, shibaFace: false, breed: 'poodle' }), man: makeHuman({ shirt: 0xe8e2d4, pants: 0x5a4a6a, hair: 0x4a3020, long: true }) },
     { name: 'コーギー', kind: 'corgi', react: 4, pace: 1.0, persona: 'approach', dog: makeDog({ red: 0xc0722c, cream: 0xf3ece0, earIn: 0xd9a27a, size: 1.05, long: 1.3, leg: 0.6, muzzle: 1.1, blaze: true, tail: 'plume', breed: 'corgi' }), man: makeHuman({ shirt: 0x2f3a4f, pants: 0x6b6050, hair: 0x1c1814 }) },
+    { name: '会いたくない人', kind: 'nemesis', nem: true, react: 5, pace: 1.0, persona: 'nemesis', dog: makeDog({ red: 0x6e5a48, cream: 0xcfc2b0, earIn: 0x8a7060, size: 1.15, long: 1.1, leg: 1.1, ears: 'drop', tail: 'otter', muzzle: 1.25, shibaFace: false, breed: 'lab' }), man: makeHuman({ shirt: 0x5c5f62, pants: 0x3b3a38, hair: 0x8d8a86 }) },   // 架空の1人（実在の人に似せない）
   ];
   for (const o of OTHERS) {
     scene.add(o.dog.object, o.dog.points, o.dog.extras, o.man.object);
@@ -3754,6 +3755,10 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const W = { mode: 'follow', smell: null, smellT: 0, smellAt: 40, crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, ar: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   // 家（v267）：散歩は家から出て家へ帰る。帰ったら玄関でリードを外す（水の皿で飲んでいる隙なら安全）
   const HOME = { set: false, x: 0, z: 0, f: 0, ph: 'out', walkT: 0, lead: Math.random() < 0.5, lockN: 0, refN: 0, forced: false, prevMode: 'follow' };
+  // 会いたくない犬飼い（v274）：数回に1回、散歩の途中のどこかに現れる（いつどこかは読めない）。柴は遠くから激しく反応する。
+  // 気づかれる前に見通しを切れば逃げ切れる。気づかれると追ってきて前に回り込み、道を塞いで文句を言う（その間、柴は咆哮し続ける）
+  const NEMO = OTHERS.find(o => o.nem);
+  const NEM = { plan: Math.random() < 0.4, at: 60 + Math.random() * 300, on: false, done: false, seen: false, met: false, escaped: false, hideT: 0 };
   const addSat = (v, why = '') => { if (v > 0) v *= 0.7 * (1 - 0.6 * W.sat);   // 満足は散歩全体（約10分・ルール案で決定。v272 までは 0.4＝15〜20分）でゆっくり満ちる。満たされているほど上がりにくい
     if (TEST) { W.satLog = W.satLog || {}; W.satLog[why] = (W.satLog[why] || 0) + v; } const b = W.sat; W.sat = Math.max(0, Math.min(1, W.sat + v)); if (Math.abs(W.sat - b) > 0.004) { W.satFx = v > 0 ? 1.6 : -1.6; } };   // satFx：星の横に ↑／↓ を少しの間出す
   // 知らない道：道ごとに4m おきの点を8m 升目に入れておき、1秒ごとに今いる道を調べる
@@ -3831,6 +3836,21 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         else set('cross', { latT: -edge });               // 道の向こう側へ渡ってすれ違う
       }
       if (a.mode === 'cross' && (dMe > 26 || a.modeT > 40)) set(null, { latT: null, cool: 20 });
+    }
+    if (a.persona === 'nemesis') {   // 会いたくない人：こちらに気づくと追ってきて、前に回り込んで道を塞ぐ
+      const fx = Math.sin(walker.yaw), fz = Math.cos(walker.yaw);
+      if (!a.mode && !a.gone) {
+        a.noticeT = dMe < 22 && visible(hs.x, hs.z, walker.x, walker.z) ? (a.noticeT || 0) + dt : Math.max(0, (a.noticeT || 0) - dt * 0.5);
+        if (a.noticeT > 1.2) { set('chase', { stop: true }); a.pace0 = a.pace; a.pace = 1.4; NEM.met = true; W.msg = 'あの人が、こっちへ向かってくる'; W.msgT = 2.2; }
+      }
+      if (a.mode === 'chase' || a.mode === 'block') {
+        a.goal = { x: walker.x + fx * 1.5, z: walker.z + fz * 1.5 };   // 飼い主の前へ
+        a.face = Math.atan2(walker.x - hs.x, walker.z - hs.z);
+        if (a.mode === 'chase' && Math.hypot(a.goal.x - hs.x, a.goal.z - hs.z) < 0.7) { set('block', { blockDur: 8 + rand() * 3 }); W.msg = '道を塞がれて、文句を言われている'; W.msgT = 3; }
+        else if (a.mode === 'chase' && a.modeT > 25) { set('back', { goal: null }); a.gone = true; a.pace = a.pace0 || 1; }
+        else if (a.mode === 'block' && a.modeT > a.blockDur) { set('back', { goal: null }); a.gone = true; a.pace = a.pace0 || 1; W.msg = 'やっと去っていった'; W.msgT = 2.4; }
+      }
+      if (a.mode === 'back' && a.backDone) set(null, { stop: false, backDone: false, face: null, cool: 999 });
     }
     if (a.persona === 'approach') {
       const tx = a.ped ? st.x : walker.x, tz = a.ped ? st.z : walker.z, gd = a.ped ? 0.95 : 2.0;   // 犬好きの人は柴のそばへ、犬連れの人は飼い主と立ち話できる所へ
@@ -3988,7 +4008,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const rand = Math.random;
 
   WALK = {
-    me, OTHERS, PEDS, dogSt: st, home: HOME, leash, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return (W.tgt || OTHERS[0]).rst; }, get rdst() { return (W.tgt || OTHERS[0]).rdst; }, W, leashMat,
+    me, OTHERS, PEDS, dogSt: st, home: HOME, leash, nem: NEM, nemo: NEMO, get rivalDog() { return (W.tgt || OTHERS[0]).dog; }, get rst() { return (W.tgt || OTHERS[0]).rst; }, get rdst() { return (W.tgt || OTHERS[0]).rdst; }, W, leashMat,
     start(x, z) {
       HOME.set = false; HOME.ph = 'out'; HOME.walkT = 0;
       walker.x = x; walker.z = z;
@@ -4021,7 +4041,8 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       const S = dog.state;
       // --- 相手（黒柴と飼い主）：道を行き来し、端で折り返す
       OTHERS.forEach((o, i) => {
-        const R = i ? o : W, hs = o.rst, ds = o.rdst;   // 黒柴の道は W.route（確認用スクリプトが止めたり動かしたりする）
+        const R = i ? o : W, hs = o.rst, ds = o.rdst;
+        if (o.nem && !NEM.on) { hs.x = ds.x = walker.x + 1e4; hs.z = ds.z = walker.z + 1e4; hs.init = ds.init = false; return; }   // 会いたくない人：出ていない   // 黒柴の道は W.route（確認用スクリプトが止めたり動かしたりする）
         // 気づく：こちらの柴が近くに見えている
         const dSt = Math.hypot(st.x - o.rdst.x, st.z - o.rdst.z), seesMe = o.kind !== 'shiba' && o.kind !== 'corgi' && dSt < 16 && visible(o.rdst.x, o.rdst.z, st.x, st.z);
         o.lostT = seesMe ? 0 : o.lostT + dt; o.t += dt;
@@ -4067,7 +4088,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       const fixed = W.tgt && (W.mode === 'lock' || W.mode === 'stare' || W.mode === 'leave' || W.ev === 'loose' && W.loose && W.loose.ph === 'charge');
       if (!fixed) {
         let best = null, bd = 1e9;
-        for (const o of OTHERS) { const d = Math.hypot(o.rdst.x - st.x, o.rdst.z - st.z), sc = d < 24 && visible(st.x, st.z, o.rdst.x, o.rdst.z) ? d : d + 1000; if (sc < bd) { bd = sc; best = o; } }
+        for (const o of OTHERS) { const d = Math.hypot(o.rdst.x - st.x, o.rdst.z - st.z), sc = d < (o.nem ? 45 : 24) && visible(st.x, st.z, o.rdst.x, o.rdst.z) ? (o.nem ? d * 0.3 : d) : d + 1000; if (sc < bd) { bd = sc; best = o; } }   // 会いたくない人には、ほかの犬より遠くから気づく
         W.tgt = best;
       } else if (!W.ev) {   // 夢中な相手がいても、別の犬がずっと近くに現れたら、そちらへ気を移す（すれ違った直後の2頭目も無視しない）
         const cd = Math.hypot(W.tgt.rdst.x - st.x, W.tgt.rdst.z - st.z);
@@ -4189,7 +4210,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       }
       // --- 柴の気持ち
       const rdx = rdst.x - st.x, rdz = rdst.z - st.z, rd = Math.hypot(rdx, rdz);
-      const sees = rd < 24 && visible(st.x, st.z, rdst.x, rdst.z);
+      const sees = rd < (W.tgt && W.tgt.nem ? 45 : 24) && visible(st.x, st.z, rdst.x, rdst.z);
       const toRival = Math.atan2(rdx, rdz);
       W.graceT = Math.max(0, (W.graceT || 0) - dt);
       if (W.ev === 'loose') {
@@ -4213,11 +4234,11 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           } else if (L.ph === 'come' && L.t > 10) { L.ph = 'roam'; L.t = 0; }
         }
       } else if (W.mode === 'follow') {
-        const kf = { 5: 1, 4: 0.75, 3: 0.5 }[W.tgt ? W.tgt.react : 5];   // 相手への反応の強さ
+        const kf = W.tgt && W.tgt.nem ? 2.5 : { 5: 1, 4: 0.75, 3: 0.5 }[W.tgt ? W.tgt.react : 5];   // 会いたくない人には激しく   // 相手への反応の強さ
         W.exc = Math.max(0, W.exc + (W.graceT > 0 ? -0.5 : (sees ? (rd < 14 ? 1.2 : 0.5) * kf * (1 + 0.8 * W.ar) * (1 - 0.35 * (W.shortK || 0)) * (1 - 0.6 * W.harm) * (1 - 0.4 * W.sat) : -0.4)) * dt);   // 捕まえた直後はしばらく相手に気づかないふり   // 歩調が合っていると気づいても興奮しにくい
         if (W.exc > 0.25) { W.mode = 'stare'; W.sniff = null; if (W.rush) { W.rush = null; W.poopT = Math.max(0, W.poopAt - 15); } S.nose = S.hunch = 0; if (S.act === 'mark' || S.act === 'poop') S.act = null; }
       } else if (W.mode === 'stare') {           // 固まってじっと見る（ここで離れれば間に合う）
-        W.exc += (sees ? (rd < 14 ? 0.45 : 0.2) * ({ 5: 1, 4: 0.8, 3: 0.6 }[W.tgt ? W.tgt.react : 5]) : -0.6) * dt;
+        W.exc += (sees ? (rd < 14 ? 0.45 : 0.2) * ({ 5: 1, 4: 0.8, 3: 0.6 }[W.tgt ? W.tgt.react : 5]) * (W.tgt && W.tgt.nem ? 3 : 1) : -0.6) * dt;
         if (W.exc >= 1) { W.mode = 'lock'; W.bal = 0; W.lockT = 0; W.barkT = 0; W.lostT = 0; }
         else if (W.exc <= 0) { W.mode = 'follow'; addSat(0.05, 'すれ違い'); W.msg = '落ち着いて、やり過ごせた'; W.msgT = 1.8; }
       } else if (W.mode === 'lock') {
@@ -4241,7 +4262,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
           W.lookBack = { t: 0, pull: 0, dur: 2.2 + rand() * 1.2 };   // 引かれるまで踏ん張る（張らないまま長くは続けない）
           if (!W.lbN) { W.msg = '振り返った！ 止まらずに歩き続ける'; W.msgT = 1.8; }
         }
-        const back = sees && rd < 13 && W.leaveT > 1.5 && (W.stopT > 1 || W.lookBack && W.lookBack.t > 0.5 && walker.speed < 0.3 || rand() < dt * 0.1 * (1 - rd / 13) * (W.voiceT > 0 ? 0.3 : 1));
+        const back = sees && rd < (W.tgt && W.tgt.nem ? 30 : 13) && W.leaveT > 1.5 && (W.stopT > 1 || W.lookBack && W.lookBack.t > 0.5 && walker.speed < 0.3 || rand() < dt * 0.1 * (1 - rd / 13) * (W.voiceT > 0 ? 0.3 : 1));
         if (back) { W.mode = 'lock'; W.bal = 0; W.lockT = 0; W.lostT = 0; W.lookBack = null; }
         else if (!sees || rd > 20) {
           W.lostT += dt;
@@ -4325,6 +4346,17 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         }
         const lx0 = Math.cos(HOME.f), lz0 = -Math.sin(HOME.f), sgx = HOME.door ? HOME.door.x + HOME.door.nx * 1.0 + lx0 * 0.9 : HOME.x + lx0 * 1.3, sgz = HOME.door ? HOME.door.z + HOME.door.nz * 1.0 + lz0 * 0.9 : HOME.z + lz0 * 1.3;
         HOME.sign.position.set(sgx, H(sgx, sgz), sgz); HOME.sign.rotation.y = HOME.door ? HOME.f : HOME.f + Math.PI / 2;
+      }
+      if (HOME.ph === 'out' && NEM.plan && !NEM.on && !NEM.done && HOME.walkT > NEM.at && PERSONA) {   // 会いたくない人が現れる（見えない所に）
+        const put = [W, ...OTHERS.slice(1).filter(o => o !== NEMO), ...PEDS].map(Q => at(Q.route, Q.rs));
+        placeNear(NEMO, 60, 130, put, 40, walker.x, walker.z, true); NEMO.rst.init = NEMO.rdst.init = false; NEMO.mode = null; NEMO.noticeT = 0; NEMO.gone = false; NEM.on = true;
+      }
+      if (NEM.on) {
+        const dN = Math.hypot(NEMO.rst.x - walker.x, NEMO.rst.z - walker.z), losN = dN < 60 && visible(walker.x, walker.z, NEMO.rst.x, NEMO.rst.z);
+        if (NEMO.mode === 'chase' || NEMO.mode === 'block') { W.tgt = NEMO; if (!W.ev && W.mode !== 'lock') { W.mode = 'lock'; W.bal = 0; W.lockT = 0; W.lostT = 0; W.barkT = 0; } }   // 追われている間は咆哮し続ける
+        if (W.tgt === NEMO && (W.mode === 'stare' || W.mode === 'lock')) NEM.seen = true;
+        if (NEM.seen && !NEM.met && !NEM.escaped) { NEM.hideT = !losN || dN > 46 ? NEM.hideT + dt : 0; if (NEM.hideT > 5) { NEM.escaped = true; NEMO.gone = true; } }   // 見つかる前に離れた
+        if ((NEMO.gone || HOME.ph !== 'out') && !NEMO.mode && (dN > 50 && !losN || HOME.ph !== 'out')) { NEM.on = false; NEM.done = true; }
       }
       if (W.mode === 'lock' && HOME.prevMode !== 'lock') HOME.lockN++;
       HOME.prevMode = W.mode;
@@ -4458,6 +4490,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
               '<dt>帰り方</dt><dd>' + HOME.way + '</dd>' +
               (HOME.refN ? '<dt>家の前</dt><dd>' + HOME.refN + '回 踏ん張った</dd>' : '') +
               '<dt>ロックオン</dt><dd>' + (HOME.lockN ? HOME.lockN + '回' : 'なし') + '</dd>' +
+              (NEM.met ? '<dt>あの人</dt><dd>追いかけられ、道を塞がれて文句を言われた</dd>' : NEM.escaped ? '<dt>あの人</dt><dd>柴が気づき、見つかる前に離れた</dd>' : '') +
               '<dt>外し方</dt><dd>' + (HOME.how || '') + '</dd>' +
               '<dt>外す時</dt><dd>' + lv + '</dd></dl>' +
               '<button type="button" id="wrAgain">もう一度散歩する</button><button type="button" id="wrClose">閉じる</button>';
@@ -4989,7 +5022,9 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       const tied = W.ev !== 'loose', cross0 = tied && lowCross(walker.x, walker.z, st.x, st.z);   // すでにまたいでいる時（置き直した直後など）は、それ以上は止めない
       const bodyN = (x, z) => { let n = 0; for (let i = 0; i < 8; i++) { const a = i * 0.7854; if (townBlocked(x + Math.sin(a) * 0.27, z + Math.cos(a) * 0.27)) n++; } return n; }, body0 = bodyN(walker.x, walker.z);   // 体の幅：まわり8方向のうち壁に掛かる数
       const manHits = (x, z) => townBlocked(x, z) || bodyN(x, z) > body0 || [0, 1.57, 3.14, 4.71].some(a => lowHit(x + Math.sin(a) * 0.17, z + Math.cos(a) * 0.17)) || tied && !cross0 && lowCross(x, z, st.x, st.z);   // リードが塀に掛かって、塀の向こうとこちらには分かれられない
-      if (HOME.justIn) HOME.justIn = false;   // 玄関に入ったコマ：置いた位置のまま
+      const blk = (NEMO.mode === 'block' || NEMO.mode === 'chase') && NEM.on, bd0 = Math.hypot(walker.x - NEMO.rst.x, walker.z - NEMO.rst.z), bd1 = Math.hypot(nx - NEMO.rst.x, nz - NEMO.rst.z);
+      if (blk && bd1 < 1.0 && bd1 < bd0) { /* 道を塞がれている：その人の方へは進めない */ }
+      else if (HOME.justIn) HOME.justIn = false;   // 玄関に入ったコマ：置いた位置のまま
       else if ((HOME.ph === 'in' || HOME.ph === 'done') && HOME.keepIn) { const P = { x: nx, z: nz }; HOME.keepIn(P, 0.2); walker.x = P.x; walker.z = P.z; }   // 玄関の中：部屋から出ない
       else if (!manHits(nx, nz)) { walker.x = nx; walker.z = nz; }
       else if (!manHits(nx, walker.z)) walker.x = nx;
@@ -5136,7 +5171,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
         const sz = o.dog.object.scale.x;
         const end = o.st === 'tug' ? o.dog.__head.getWorldPosition(tv).add(new THREE.Vector3(Math.sin(o.rdst.yaw) * 0.18 * sz, -0.06 * sz, Math.cos(o.rdst.yaw) * 0.18 * sz))
           : tv.set(o.rdst.x + Math.sin(o.rdst.yaw) * 0.22 * sz, H(o.rdst.x, o.rdst.z) + 0.43 * sz * (o.st === 'pounce' ? 1.5 : o.st === 'down' ? 0.45 : 1), o.rdst.z + Math.cos(o.rdst.yaw) * 0.22 * sz);
-        o.man.update(dt, o.rst.x, o.rst.z, o.rst.yaw, o.rst.speed, end.clone(), o.st === 'walk' ? 0.2 : 0.9);
+        o.man.update(dt, o.rst.x, o.rst.z, o.rst.yaw, o.rst.speed, end.clone(), o.st === 'walk' ? 0.2 : 0.9, o.nem && o.mode === 'block' ? { lean: 0.25 + 0.2 * Math.sin(t * 7) } : null);   // 会いたくない人：身を乗り出して文句を言う
         const hd = o.man.hand, taut = o.st === 'walk' ? 0 : 1, L2 = Math.hypot(end.x - hd.x, end.z - hd.z);
         for (let k = 0; k < 12; k++) { const u = k / 11; o.leashPts[k * 3] = hd.x + (end.x - hd.x) * u; o.leashPts[k * 3 + 1] = hd.y + (end.y - hd.y) * u - Math.sin(Math.PI * u) * Math.max(0, 1.6 - L2) * 0.35 * (1 - taut); o.leashPts[k * 3 + 2] = hd.z + (end.z - hd.z) * u; }
         o.leashGeo.setPositions(o.leashPts); o.leashMat.resolution.set(innerWidth, innerHeight); o.leash.visible = true;
@@ -5407,7 +5442,7 @@ function drawMap() {
   if (WALK) {   // 散歩：ほかの犬は赤い点、自分の柴は小さな橙の点
     const dot = (x, z, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(W / 2 + (x - cx) * scale, Hh / 2 + (z - cz) * scale, r * u, 0, 7); c.fill(); };
     for (const o of WALK.PEDS) dot(o.x, o.z, 2.6, '#6f6a62');   // 犬を連れていない人は灰色の小さな点
-    for (const o of WALK.OTHERS) dot(o.rdst.x, o.rdst.z, 4, '#d23a2a');
+    for (const o of WALK.OTHERS) if (!o.nem) dot(o.rdst.x, o.rdst.z, 4, '#d23a2a');   // 会いたくない人は地図に出さない（柴の反応だけが手がかり）
     dot(st.x, st.z, 2.6, '#f08a3c');
     if (WALK.home && WALK.home.set) { const hm = WALK.home; c.fillStyle = '#2f6fbf'; c.fillRect(W / 2 + (hm.x - cx) * scale - 4 * u, Hh / 2 + (hm.z - cz) * scale - 4 * u, 8 * u, 8 * u); }   // 家は青い四角
   }
