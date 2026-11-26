@@ -252,7 +252,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v274';
+const VERSION = 'v275';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -5439,10 +5439,8 @@ function drawMap() {
   }
   c.restore();
   // 見ている向き（扇）と犬
-  if (WALK) {   // 散歩：ほかの犬は赤い点、自分の柴は小さな橙の点
+  if (WALK) {   // 散歩：自分の柴は小さな橙の点、家は青い四角。ほかの人や犬は出さない（実際の散歩では、どこにだれがいるか分からない。v275）
     const dot = (x, z, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(W / 2 + (x - cx) * scale, Hh / 2 + (z - cz) * scale, r * u, 0, 7); c.fill(); };
-    for (const o of WALK.PEDS) dot(o.x, o.z, 2.6, '#6f6a62');   // 犬を連れていない人は灰色の小さな点
-    for (const o of WALK.OTHERS) if (!o.nem) dot(o.rdst.x, o.rdst.z, 4, '#d23a2a');   // 会いたくない人は地図に出さない（柴の反応だけが手がかり）
     dot(st.x, st.z, 2.6, '#f08a3c');
     if (WALK.home && WALK.home.set) { const hm = WALK.home; c.fillStyle = '#2f6fbf'; c.fillRect(W / 2 + (hm.x - cx) * scale - 4 * u, Hh / 2 + (hm.z - cz) * scale - 4 * u, 8 * u, 8 * u); }   // 家は青い四角
   }
