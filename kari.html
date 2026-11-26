@@ -219,7 +219,7 @@
   <button id="jump" type="button">ジャンプ</button>
 </div>
 <div id="stick" class="ui" hidden><div id="runRing"></div><div id="knob"></div></div>
-<div id="lookPad" class="ui" hidden><span id="lookTip">見回す<br>タップで柴を見る</span><div id="lookKnob"></div></div>
+<div id="lookPad" class="ui" hidden><span id="lookTip">見回す<br>タップ 柴・2回 前</span><div id="lookKnob"></div></div>
 <div id="err" class="ui" hidden></div>
 
 <script>
@@ -234,7 +234,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v265';
+const VERSION = 'v266';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3230,8 +3230,9 @@ const hintEl = document.getElementById('hint');
 let jumpReq = false;
 const STICK_R = 70, STICK_RUN = 1.4;   // 内側の輪（半径70px）の中は歩き。散歩では、輪の外（1.4倍まで）へ押し出すと走る
 const clock = new THREE.Clock();
-const tapLook = () => { if (fpv) setFpLook(!fpLook); else camBack = true; };   // 軽くタップ：三人称は振り返って柴を見る（散歩以外は背後へ）、一人称は柴を画面の真ん中に捉え続ける（もう一度タップで戻す）
-const setFpLook = on => { fpLook = !!on && fpv; fpLookT = clock.elapsedTime; const tip = document.getElementById("lookTip"); if (tip) tip.innerHTML = fpv ? (fpLook ? "柴を見ています<br>タップで戻す" : "見回す<br>タップで柴を見る") : (WALK ? "見回す<br>タップで柴を見る" : "見回す<br>タップで背後へ"); const lp = document.getElementById("lookPad"); if (lp) lp.classList.toggle("lock", fpLook); };
+let camFront = false, lastTapT = -9;   // camFront：2回続けてタップ＝前（飼い主の向いている方）を見る
+const tapLook = () => { if (fpv) { setFpLook(!fpLook); return; } const now = performance.now() / 1000; camFront = !!WALK && now - lastTapT < 0.4; lastTapT = camFront ? -9 : now; camBack = true; };   // 軽くタップ：三人称は振り返って柴を見る（散歩以外は背後へ）、一人称は柴を画面の真ん中に捉え続ける（もう一度タップで戻す）
+const setFpLook = on => { fpLook = !!on && fpv; fpLookT = clock.elapsedTime; const tip = document.getElementById("lookTip"); if (tip) tip.innerHTML = fpv ? (fpLook ? "柴を見ています<br>タップで戻す" : "見回す<br>タップで柴を見る") : (WALK ? "見回す<br>タップ 柴・2回 前" : "見回す<br>タップで背後へ"); const lp = document.getElementById("lookPad"); if (lp) lp.classList.toggle("lock", fpLook); };
 
 canvas.addEventListener('pointerdown', e => {
   if (e.clientX < innerWidth * 0.55 && stickId === null) {
@@ -5278,9 +5279,9 @@ function stepInner(dt, t) {
     return 1;
   };
   if (camBack) {   // 背後へ回す：0.3秒ほどで、自分の向いている方を見る
-    const dsx = st.x - walker.x, dsz = st.z - walker.z, want = WALK ? (Math.hypot(dsx, dsz) > 0.4 ? Math.atan2(dsx, dsz) : walker.yaw) : st.yaw, d = angDiff(camYaw, want);   // 散歩：振り返って柴の方を見る
+    const dsx = st.x - walker.x, dsz = st.z - walker.z, want = WALK ? (!camFront && Math.hypot(dsx, dsz) > 0.4 ? Math.atan2(dsx, dsz) : walker.yaw) : st.yaw, d = angDiff(camYaw, want);   // 散歩：振り返って柴の方を見る
     camYaw += d * Math.min(1, dt * 9); camDragT = t;
-    if (Math.abs(d) < 0.02 || padReady && (lookIn.x || lookIn.y)) camBack = false;
+    if (Math.abs(d) < 0.02 || padReady && (lookIn.x || lookIn.y)) { camBack = false; camFront = false; }
   }
   let camK = 1;
   if (TOWN && !fpv && WALK) {   // 散歩：後ろが家や塀で塞がれる狭い所でも、回り込みも持ち上げもせず、塞がれた分だけ寄せる
