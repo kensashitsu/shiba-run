@@ -219,7 +219,7 @@
   <button id="jump" type="button">ジャンプ</button>
 </div>
 <div id="stick" class="ui" hidden><div id="runRing"></div><div id="knob"></div></div>
-<div id="lookPad" class="ui" hidden><span id="lookTip">見回す<br>タップで背後へ</span><div id="lookKnob"></div></div>
+<div id="lookPad" class="ui" hidden><span id="lookTip">見回す<br>タップで柴を見る</span><div id="lookKnob"></div></div>
 <div id="err" class="ui" hidden></div>
 
 <script>
@@ -234,7 +234,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v264';
+const VERSION = 'v265';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3224,14 +3224,14 @@ scene.add(contact);
 // ---------- 入力 ----------
 const input = { x: 0, y: 0 };
 const keys = {};
-let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY = 0, camDragT = -99, fpv = false, camPitch = -0.38, camTilt = 0.578, padReady = false, camBack = false, camTapT = 0, camTapX = 0, camTapY = 0;   // camBack：カメラを自分（散歩は飼い主、ほかは柴）の背後へ回している途中   // padReady：操作盤（lookIn）の用意ができた（最初のコマはまだ）   // camTilt：三人称のカメラの見下ろす角度（0.12＝低く見上げ気味〜1.25＝真上近く）
+let stickId = null, stickX = 0, stickY = 0, camId = null, camLastX = 0, camLastY = 0, camDragT = -99, fpv = false, camPitch = -0.38, camTilt = 0.43, padReady = false, camBack = false, camTapT = 0, camTapX = 0, camTapY = 0;   // camBack：カメラを自分（散歩は飼い主、ほかは柴）の背後へ回している途中   // padReady：操作盤（lookIn）の用意ができた（最初のコマはまだ）   // camTilt：三人称のカメラの見下ろす角度（0.12＝低く見上げ気味〜1.25＝真上近く）
 const stickEl = document.getElementById('stick'), knobEl = document.getElementById('knob');
 const hintEl = document.getElementById('hint');
 let jumpReq = false;
 const STICK_R = 70, STICK_RUN = 1.4;   // 内側の輪（半径70px）の中は歩き。散歩では、輪の外（1.4倍まで）へ押し出すと走る
 const clock = new THREE.Clock();
-const tapLook = () => { if (fpv) setFpLook(!fpLook); else camBack = true; };   // 軽くタップ：三人称は背後へ、一人称は柴を画面の真ん中に捉え続ける（もう一度タップで戻す）
-const setFpLook = on => { fpLook = !!on && fpv; fpLookT = clock.elapsedTime; const tip = document.getElementById("lookTip"); if (tip) tip.innerHTML = fpv ? (fpLook ? "柴を見ています<br>タップで戻す" : "見回す<br>タップで柴を見る") : "見回す<br>タップで背後へ"; const lp = document.getElementById("lookPad"); if (lp) lp.classList.toggle("lock", fpLook); };
+const tapLook = () => { if (fpv) setFpLook(!fpLook); else camBack = true; };   // 軽くタップ：三人称は振り返って柴を見る（散歩以外は背後へ）、一人称は柴を画面の真ん中に捉え続ける（もう一度タップで戻す）
+const setFpLook = on => { fpLook = !!on && fpv; fpLookT = clock.elapsedTime; const tip = document.getElementById("lookTip"); if (tip) tip.innerHTML = fpv ? (fpLook ? "柴を見ています<br>タップで戻す" : "見回す<br>タップで柴を見る") : (WALK ? "見回す<br>タップで柴を見る" : "見回す<br>タップで背後へ"); const lp = document.getElementById("lookPad"); if (lp) lp.classList.toggle("lock", fpLook); };
 
 canvas.addEventListener('pointerdown', e => {
   if (e.clientX < innerWidth * 0.55 && stickId === null) {
@@ -4602,6 +4602,12 @@ if (TOWN && /[?&]walk/.test(location.search)) {
       // --- リード：張ったら長さを超えた分を、人と犬に振り分けて戻す
       let vx = sx - nx, vz = sz - nz, d = Math.hypot(vx, vz);
       W.tension += ((d > LEASH - 0.02 && W.ev !== 'loose' ? 1 : 0) - W.tension) * Math.min(1, dt * 6);
+      W.tugFx = Math.max(0, (W.tugFx || 0) - dt);
+      if (W.tension > 0.8 && !W.wasTaut && walker.speed > 0.5 && !W.ev) { W.tugFx = 0.22; W.tugCool = 1.5; W.tugDir = Math.atan2(st.x - walker.x, st.z - walker.z); try { navigator.vibrate && navigator.vibrate(35); } catch (err) { /* 振動できない端末 */ } }
+      W.wasTaut = W.tension > 0.8 ? true : W.tension < 0.4 ? false : W.wasTaut;
+      W.tugCool = Math.max(0, (W.tugCool || 0) - dt);
+      if (walker.speed > 0.5 && (W.dspd ?? 0) > 0.8 && st.speed < 0.4 && W.tugCool <= 0 && !W.ev) { W.tugFx = 0.22; W.tugCool = 1.5; W.tugDir = Math.atan2(st.x - walker.x, st.z - walker.z); try { navigator.vibrate && navigator.vibrate(35); } catch (err) { /* 振動できない端末 */ } }   // 一緒に歩いていた柴が急に立ち止まった
+      W.dspd = (W.dspd ?? 0) + (st.speed - (W.dspd ?? 0)) * Math.min(1, dt * 3);   // 柴の速さ（0.3秒ほどならした値）
       if (W.ev) { /* 出来事の間はリードの綱引きをしない */ }
       else if (W.mode === 'lock') {
         // ① 犬の突進：柴の体重では人は引きずられない。リードが張ったらその場で踏ん張る
@@ -5260,7 +5266,7 @@ function stepInner(dt, t) {
   const dash = smooth(5.5, 8.5, st.speed);
   camera.fov += ((innerWidth < innerHeight ? (fpv ? 74 : 62) : (fpv ? 62 : 50)) + (AB.includes('a') ? 0 : dash * 9) - camera.fov) * Math.min(1, dt * 3);   // 速いほど視野を広げる
   camera.updateProjectionMatrix();
-  const CAM_R = 5.49;   // 散歩のカメラ：飼い主からの距離（高さと奥行きは camTilt で分ける。ふだんは高さ3.0m・奥4.6m）
+  const CAM_R = 3.2;   // 散歩のカメラ：飼い主からの距離（高さと奥行きは camTilt で分ける。ふだんは高さ1.3m・奥2.9m＝柴寄りの低い三人称。v264 までは 5.49）
   let dist = WALK ? CAM_R * Math.cos(camTilt) : 2.7 + run * 0.5 + (AB.includes('a') ? 0 : dash * 0.4) - Math.min(settled, 1) * 0.4;
   let ch = WALK ? CAM_R * Math.sin(camTilt) : 1.0 + run * 0.15;   // 散歩は人の肩越しに、犬まで入るよう高めから
   let side = WALK ? -1.1 : 0;   // 散歩は左肩越し（犬は左前を歩くので、人の体で隠れないように）
@@ -5272,7 +5278,7 @@ function stepInner(dt, t) {
     return 1;
   };
   if (camBack) {   // 背後へ回す：0.3秒ほどで、自分の向いている方を見る
-    const want = WALK ? walker.yaw : st.yaw, d = angDiff(camYaw, want);
+    const dsx = st.x - walker.x, dsz = st.z - walker.z, want = WALK ? (Math.hypot(dsx, dsz) > 0.4 ? Math.atan2(dsx, dsz) : walker.yaw) : st.yaw, d = angDiff(camYaw, want);   // 散歩：振り返って柴の方を見る
     camYaw += d * Math.min(1, dt * 9); camDragT = t;
     if (Math.abs(d) < 0.02 || padReady && (lookIn.x || lookIn.y)) camBack = false;
   }
@@ -5293,6 +5299,7 @@ function stepInner(dt, t) {
   const cy = Math.max(gy + ch, H(cx, cz) + 0.45);
   camera.position.lerp(camGoal.set(cx, cy, cz), camSnap ? 1 : Math.min(1, dt * 6));
   if (TOWN && townHigh(camera.position.x, camera.position.z)) camera.position.copy(camGoal);   // 追いかける途中で家の中に入ったら目標へ跳ぶ
+  if (WALK && !fpv && WALK.W.tugFx > 0) { const k = Math.sin(Math.PI * WALK.W.tugFx / 0.22) * 0.09; camera.position.x += Math.sin(WALK.W.tugDir) * k; camera.position.z += Math.cos(WALK.W.tugDir) * k; }   // 手応え：柴の方へ一瞬引かれる
   if (padReady && WALK && !fpv && (lookIn.x || lookIn.y)) {   // 三人称の操作盤：左右で飼い主のまわりを回り、上下で高さ（上へ倒すと低く・見上げ気味）
     const cv = v => Math.sign(v) * Math.abs(v) ** 1.6;
     camYaw -= cv(lookIn.x) * 1.8 * dt; camTilt = Math.max(0.12, Math.min(1.25, camTilt - cv(lookIn.y) * 1.0 * dt)); camDragT = t;
@@ -5348,8 +5355,8 @@ function stepInner(dt, t) {
   }
   if (fpv) { /* 上で */ }
   else if (WALK) {   // 飼い主から柴の方へ少し寄った所を見る（離れても 0.9m まで：飼い主はいつも画面に入れる。柴は画面の外へ出てもよい）
-    const vx = (st.x - walker.x) / 2, vz = (st.z - walker.z) / 2, L = Math.hypot(vx, vz), k = L > 0.9 ? 0.9 / L : 1;
-    camera.lookAt(walker.x + vx * k, gy + 0.5, walker.z + vz * k);
+    const vx = (st.x - walker.x) * 0.7, vz = (st.z - walker.z) * 0.7, L = Math.hypot(vx, vz), k = L > 2.2 ? 2.2 / L : 1;   // v265：見る中心は柴の方（飼い主から柴へ7割・最大2.2m）、高さは柴の頭のあたり
+    camera.lookAt(walker.x + vx * k, gy + 0.42, walker.z + vz * k);
   }
   else camera.lookAt(st.x, gy + 0.42 + st.jumpY * 0.5, st.z);
 
