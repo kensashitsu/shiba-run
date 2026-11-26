@@ -252,7 +252,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v272';
+const VERSION = 'v273';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3754,7 +3754,7 @@ if (TOWN && /[?&]walk/.test(location.search)) {
   const W = { mode: 'follow', smell: null, smellT: 0, smellAt: 40, crouch: false, feed: null, treats: 0, msg: null, msgT: 0, begT: 0, begAt: 70, ponder: null, ponderAt: 60, ponderT: 0, stam: 1, spent: false, tired: 0, pick: null, heat: null, after: null, calmT: 0, shakeT: 2, prevAct: null, sat: 0.2, harm: 0, glanceT: 3, exc: 0, ar: 0, bal: 0, stress: 0, slip: 0, ev: null, evT: 0, barkT: 0, lockT: 0, leaveT: 0, lostT: 0, side: 1, twist: 0, tension: 0, route: null, rs: 0, rdir: 1 };
   // 家（v267）：散歩は家から出て家へ帰る。帰ったら玄関でリードを外す（水の皿で飲んでいる隙なら安全）
   const HOME = { set: false, x: 0, z: 0, f: 0, ph: 'out', walkT: 0, lead: Math.random() < 0.5, lockN: 0, refN: 0, forced: false, prevMode: 'follow' };
-  const addSat = (v, why = '') => { if (v > 0) v *= 0.4 * (1 - 0.6 * W.sat);   // 満足は散歩全体（15〜20分）でゆっくり満ちる。満たされているほど上がりにくい
+  const addSat = (v, why = '') => { if (v > 0) v *= 0.7 * (1 - 0.6 * W.sat);   // 満足は散歩全体（約10分・ルール案で決定。v272 までは 0.4＝15〜20分）でゆっくり満ちる。満たされているほど上がりにくい
     if (TEST) { W.satLog = W.satLog || {}; W.satLog[why] = (W.satLog[why] || 0) + v; } const b = W.sat; W.sat = Math.max(0, Math.min(1, W.sat + v)); if (Math.abs(W.sat - b) > 0.004) { W.satFx = v > 0 ? 1.6 : -1.6; } };   // satFx：星の横に ↑／↓ を少しの間出す
   // 知らない道：道ごとに4m おきの点を8m 升目に入れておき、1秒ごとに今いる道を調べる
   let roadPts = null; const seenRoad = new Set();
