@@ -252,7 +252,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 
-const VERSION = 'v271';
+const VERSION = 'v272';
 // 空と地面の写真素材：Poly Haven（CC0）kloofendal_38d_partly_cloudy_puresky / sparse_grass / stony_dirt_path / river_small_rocks / aerial_grass_rock
 const low = /[?&]q=low/.test(location.search);
 // 見え方の切り分け用（実機で比べる）：?a=ダッシュで視野を広げない ?b=地面の遠近の質感切り替えなし ?c=影なし ?d=草の層を色分け
@@ -3300,6 +3300,7 @@ const TEST = /[?&]test/.test(location.search);
 let camSnap = false, simT = 0, titleOn = !TEST && !TUNE && !/[?&]go(&|$)/.test(location.search), titleFrames = 0;
 let camYaw = 0;
 const fpsEl = document.getElementById('fps');
+let ENV_OK = null;   // 空の写真からの光が使えるか（fps の行に「空光×」と出す）
 let fpsN = 0, fpsT = 0, hinted = false, slowN = 0;
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const fpvV = new THREE.Vector3(), camGoal = new THREE.Vector3();
@@ -3374,10 +3375,15 @@ new RGBELoader().load('assets/sky.hdr', tex => {
   envTex.flipY = tex.flipY;
   envTex.magFilter = envTex.minFilter = THREE.LinearFilter;
   envTex.needsUpdate = true;
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromEquirectangular(envTex).texture;
-  pmrem.dispose();
-  hemi.intensity = 0;                                     // 半球ライトの代わりに空の写真が照らす
+  // 空の写真からの光は、半精度の画像へ描ける端末だけ（描けない端末では真っ黒になり、日の当たらない壁や道が黒く潰れる→元の半球ライトのまま）
+  const glx = renderer.getContext(), hasX = n => !!glx.getExtension(n);
+  ENV_OK = renderer.capabilities.isWebGL2 ? hasX('EXT_color_buffer_float') || hasX('EXT_color_buffer_half_float') : hasX('OES_texture_half_float') && hasX('EXT_color_buffer_half_float');
+  if (ENV_OK) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromEquirectangular(envTex).texture;
+    pmrem.dispose();
+    hemi.intensity = 0;                                     // 半球ライトの代わりに空の写真が照らす
+  } else hemi.intensity = 3.4;   // 空の写真の光が無い分、半球ライトを強めて補う（1.9 では日の当たらない壁が暗すぎた）
 
   grassU.uSkyCol.value.copy(skyC).multiplyScalar(0.85);
   waterU.uSkyCol.value.copy(skyC);
@@ -6281,7 +6287,7 @@ function frame(ts) {
     if (slowN >= 4 && pixelRatio > 1.15) { pixelRatio = Math.max(1.1, pixelRatio - 0.1); renderer.setPixelRatio(pixelRatio); resize(); slowN = 0;
       renderer.render(scene, camera);   // 大きさを変えると画面が空になるので、その場で描き直す（しないと背景色が一瞬白く光る）
     }
-    fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + ' · ' + fps + ' fps' + (pixelRatio < PR_FULL ? ' ×' + pixelRatio.toFixed(1) : '') + (TOWN ? ' · ' + Math.round(st.x) + ',' + Math.round(st.z) : '');   // 町では柴の位置（m）も（場所を伝えてもらう用）
+    fpsEl.textContent = VERSION + (AB ? ' ' + AB.toUpperCase() : '') + (ENV_OK === false ? ' 空光×' : '') + ' · ' + fps + ' fps' + (pixelRatio < PR_FULL ? ' ×' + pixelRatio.toFixed(1) : '') + (TOWN ? ' · ' + Math.round(st.x) + ',' + Math.round(st.z) : '');   // 町では柴の位置（m）も（場所を伝えてもらう用）
     fpsN = 0; fpsT = now;
   }
 }
